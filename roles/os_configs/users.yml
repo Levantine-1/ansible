@@ -1,0 +1,16 @@
+---
+- name: Setup users and configure sudoers
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - debug:
+        msg: "Hello World!"
+
+    - name: Execute remote shell command
+      shell: echo "Hello World!"
+      register: result
+
+    - debug:
+        var: result.stdout_lines
