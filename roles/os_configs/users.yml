@@ -33,10 +33,3 @@
         state: absent
         shell: /bin/bash
       with_items: "{{ disabled_users }}"
-
-    - name: Remove authorized key for disabled users
-      authorized_key:
-        user: "{{ item.name }}"
-        state: absent
-        key: "{{ item.authorized_key }}"
-      with_items: "{{ disabled_users }}"
