@@ -20,14 +20,14 @@
         name: "{{ item.name }}"
         state: present
         shell: /bin/bash
-      with_items: "{{ users }}"
+      with_items: "{{ enabled_users }}"
 
     - name: Ensure authorized keys exist for users
       authorized_key:
         user: "{{ item.name }}"
         state: present
         key: "{{ item.authorized_keys }}"
-      with_items: "{{ users }}"
+      with_items: "{{ enabled_users }}"
 
     - name: Remove users
       user:
