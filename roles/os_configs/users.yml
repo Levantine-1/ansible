@@ -3,14 +3,42 @@
   hosts: all
   become: true
   gather_facts: false
+  vars:
+    enabled_users:
+      - name: automation
+        authorized_keys:
+          - "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAlK9SYgHttisI9NMozvE0HNroEK2bBG406szUfIGz1Xq+CGTdW1x197nBh36zqa5gYbhQCM/uGKOaGCPB+6R6gW0CpaHjPvcKW+pKAUaEWkQzeRYaS1yEJjD4Fh+DFqgaYKh+VTCH7RC2c6N+YdKKJkaSan2iaI9Z5nLjAxJloepbJBTDnhPQVasqNUykh6ZbYyYM5p3EEhYPrw5bMZJJkyHV44UexfqBmroSgbA87PtyUw/+9T9aG3yYwtAafUZJlZpWbeHdMRW/SVYmt/wCze5x+IAxqjk+48b8HeltR5Nys33VSQybuKNrcnumDNzthLFMQvF4ABO66yCTQ5NaBQ== automation"
+    disabled_users:
+      - name: example
+        authorized_keys:
+          - "example"
+
 
   tasks:
-    - debug:
-        msg: "Hello World!"
+    - name: Create users
+      user:
+        name: "{{ item.name }}"
+        state: present
+        shell: /bin/bash
+      with_items: "{{ users }}"
 
-    - name: Execute remote shell command
-      shell: echo "Hello World!"
-      register: result
+    - name: Ensure authorized keys exist for users
+      authorized_key:
+        user: "{{ item.name }}"
+        state: present
+        key: "{{ item.authorized_keys }}"
+      with_items: "{{ users }}"
 
-    - debug:
-        var: result.stdout_lines
+    - name: Remove users
+      user:
+        name: "{{ item.name }}"
+        state: present
+        shell: /bin/bash
+      with_items: "{{ disabled_users }}"
+
+    - name: Remove authorized keys for disabled users
+      authorized_key:
+        user: "{{ item.name }}"
+        state: present
+        key: "{{ item.authorized_keys }}"
+      with_items: "{{ disabled_users }}"'
