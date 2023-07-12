@@ -6,13 +6,11 @@
   vars:
     enabled_users:
       - name: automation
-        authorized_keys:
-          - ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAlK9SYgHttisI9NMozvE0HNroEK2bBG406szUfIGz1Xq+CGTdW1x197nBh36zqa5gYbhQCM/uGKOaGCPB+6R6gW0CpaHjPvcKW+pKAUaEWkQzeRYaS1yEJjD4Fh+DFqgaYKh+VTCH7RC2c6N+YdKKJkaSan2iaI9Z5nLjAxJloepbJBTDnhPQVasqNUykh6ZbYyYM5p3EEhYPrw5bMZJJkyHV44UexfqBmroSgbA87PtyUw/+9T9aG3yYwtAafUZJlZpWbeHdMRW/SVYmt/wCze5x+IAxqjk+48b8HeltR5Nys33VSQybuKNrcnumDNzthLFMQvF4ABO66yCTQ5NaBQ== automation
+        authorized_key: ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAlK9SYgHttisI9NMozvE0HNroEK2bBG406szUfIGz1Xq+CGTdW1x197nBh36zqa5gYbhQCM/uGKOaGCPB+6R6gW0CpaHjPvcKW+pKAUaEWkQzeRYaS1yEJjD4Fh+DFqgaYKh+VTCH7RC2c6N+YdKKJkaSan2iaI9Z5nLjAxJloepbJBTDnhPQVasqNUykh6ZbYyYM5p3EEhYPrw5bMZJJkyHV44UexfqBmroSgbA87PtyUw/+9T9aG3yYwtAafUZJlZpWbeHdMRW/SVYmt/wCze5x+IAxqjk+48b8HeltR5Nys33VSQybuKNrcnumDNzthLFMQvF4ABO66yCTQ5NaBQ== automation
+
     disabled_users:
       - name: example
-        authorized_keys:
-          - "example"
-
+        authorized_key: example
 
   tasks:
     - name: Create users
@@ -22,23 +20,23 @@
         shell: /bin/bash
       with_items: "{{ enabled_users }}"
 
-    - name: Ensure authorized keys exist for users
+    - name: Ensure authorized key exist for users
       authorized_key:
         user: "{{ item.name }}"
         state: present
-        key: "{{ item.authorized_keys }}"
+        key: "{{ item.authorized_key }}"
       with_items: "{{ enabled_users }}"
 
     - name: Remove users
       user:
         name: "{{ item.name }}"
-        state: present
+        state: absent
         shell: /bin/bash
       with_items: "{{ disabled_users }}"
 
-    - name: Remove authorized keys for disabled users
+    - name: Remove authorized key for disabled users
       authorized_key:
         user: "{{ item.name }}"
-        state: present
-        key: "{{ item.authorized_keys }}"
+        state: absent
+        key: "{{ item.authorized_key }}"
       with_items: "{{ disabled_users }}"
