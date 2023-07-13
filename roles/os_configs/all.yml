@@ -1,7 +1,2 @@
----
-- name: System Baseline
-  hosts: all
-
-  tasks:
-    - name: Configure Users
-      include_playbook: users.yml
+--- # This is a wrapper playbook to run the bootstrap playbooks
+- import_playbook: users.yml
