@@ -1,6 +1,6 @@
 ---
 - name: Start Theia Services
-  hosts: theia
+  hosts: Theia
   become: true
   become_user: ubuntu
   become_method: sudo
