@@ -2,8 +2,6 @@
 - name: Start Theia Services
   hosts: Theia
   become: true
-  become_user: ubuntu
-  become_method: sudo
 
   tasks:
     - name: Start Theia Front End Service

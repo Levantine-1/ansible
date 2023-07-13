@@ -2,8 +2,6 @@
 - name: Stop Theia Services
   hosts: Theia
   become: true
-  become_user: ubuntu
-  become_method: sudo
 
   tasks:
     - name: Stop all Theia services
