@@ -1,0 +1,11 @@
+---
+- name: Deploy Theia Services
+  hosts: theia
+  become: true
+  become_user: ubuntu
+  become_method: sudo
+  gather_facts: true
+
+  tasks:
+    - debug:
+        msg: "Deploying Theia Services"

@@ -1,0 +1,10 @@
+---
+- name: Stop Theia Services
+  hosts: theia
+  become: true
+  become_user: ubuntu
+  become_method: sudo
+
+  tasks:
+    - name: Stop all Theia services
+      shell: pm2 stop app rbt tailon
