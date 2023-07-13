@@ -1,5 +1,5 @@
 [VMWareDockerHosts]
-192.168.0.31 # Alpine Docker Host 1
+192.168.1.31 # Alpine Docker Host 1
 
 [BastionHosts]
 10.0.0.1 # AWS EC2 Nginx/WireGuard Instance
