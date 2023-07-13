@@ -1,7 +1,6 @@
 ---
 - name: Start Theia Services
   hosts: Theia
-  become: true
 
   tasks:
     - name: Start Theia Front End Service

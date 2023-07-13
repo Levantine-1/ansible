@@ -1,8 +1,6 @@
 ---
 - name: Deploy Theia Services
   hosts: Theia
-  become: true
-  gather_facts: true
 
   tasks:
     - debug:

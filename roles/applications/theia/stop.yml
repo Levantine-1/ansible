@@ -1,7 +1,6 @@
 ---
 - name: Stop Theia Services
   hosts: Theia
-  become: true
 
   tasks:
     - name: Stop all Theia services
