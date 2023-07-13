@@ -1,0 +1,7 @@
+---
+- name: System Baseline
+  hosts: all
+
+  tasks:
+    - name: Configure Users
+      include_playbook: users.yml
