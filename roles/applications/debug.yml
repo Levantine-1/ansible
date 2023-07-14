@@ -12,7 +12,7 @@
       loop: "{{ container_names }}"
       loop_control: # Think of this like a for loop "For item in container_names"
         loop_var: item_name
-      failed_when: item_name not in supported_containers
+      failed_when: item_name != 'nginx-proxy' and item_name not in supported_containers
       register: unsupported_containers
 
     - name: Test Start Containers

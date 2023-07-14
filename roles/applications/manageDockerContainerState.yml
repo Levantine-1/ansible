@@ -14,21 +14,35 @@
       loop: "{{ container_names }}"
       loop_control: # Think of this like a for loop "For item in container_names"
         loop_var: item_name
-      failed_when: item_name not in supported_containers
+      failed_when: item_name != 'nginx-proxy' and item_name not in supported_containers
       register: unsupported_containers
 
 # It's assumed anything after the validate step should work
+
+      # This is a special container that needs to be started before any other containers, it also needs special treatment
+    - name: Start nginx-proxy container
+      docker_container:
+        name: nginx-proxy
+        image: jwilder/nginx-proxy
+        state: started
+        detach: yes
+        volumes:
+          - /var/run/docker.sock:/tmp/docker.sock:ro
+        ports:
+          - "80:80"
+      when:
+        - container_action == 'start'
+        - item_name == 'nginx-proxy'
+
     - name: Start Docker containers
       docker_container:
         name: "{{ item }}"
         state: started
-        command: "{{ supported_containers[item].cli_params }}"
         env: "{{ supported_containers[item].env_vars | default([]) }}"
       loop: "{{ container_names }}"
-      when: container_action == 'start'
-
-
-
+      when:
+        - container_action == 'start'
+        - item != 'nginx-proxy'
 
     - name: Stop Docker containers
       docker_container:
@@ -36,4 +50,3 @@
         state: stopped
       with_items: "{{ container_names }}"
       when: container_action == 'stop'
-
