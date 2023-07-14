@@ -23,11 +23,11 @@
         name: "{{ item }}"
         state: started
         env:
-          - "{{ supported_containers[item].env_vars | combine }}"
+          - "{{ supported_containers[item].env_vars | default([]) | combine }}"
         command: "{{ supported_containers[item].cli_params }}"
-      with_items: "{{ container_names }}"
-      when:
-        - container_action == 'start'
+      loop: "{{ container_names }}"
+      when: container_action == 'start'
+
 
 
     - name: Stop Docker containers
