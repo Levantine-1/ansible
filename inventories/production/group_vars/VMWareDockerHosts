@@ -1,16 +1,12 @@
 supported_containers:
   nginx-proxy:
-    env_vars:
-    cli_params: "-d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro"
+    DOCKER_OPTS:-d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro
   booking-movie-ticket:
     env_vars:
       VIRTUAL_HOST: bmt.nhitruong.com
-    cli_params: ""
   real-estate:
     env_vars:
       VIRTUAL_HOST: real-estate.nhitruong.com
-    cli_params: ""
   thisper:
     env_vars:
       VIRTUAL_HOST: thisper.levantine.io
-    cli_params: ""
