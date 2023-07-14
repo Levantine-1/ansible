@@ -5,7 +5,7 @@
   vars:
     container_names: "{{ container_names_string.split(',') }}"
     container_action: "{{ container_action_string }}"
-    supported_containers: "{{ lookup('file', 'group_vars/your_group_vars_file.yml') | from_yaml }}"
+    supported_containers: "{{ lookup('file', 'inventories/production/group_vars/container_settings.yml') | from_yaml }}"
 
   tasks:
     - name: Validate container names
