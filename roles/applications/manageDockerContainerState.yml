@@ -13,7 +13,9 @@
       debug:
         msg: "Container '{{ item }}' is not a supported container. Skipping."
       loop: "{{ container_names }}"
-      when: item not in supported_containers | map(attribute='name') | list
+      loop_control: # Think of this like a for loop "For item in container_names"
+        loop_var: item_name
+      when: item_name not in supported_containers | map(attribute='name') | list
       register: unsupported_containers
       changed_when: false
 
@@ -26,7 +28,7 @@
       loop: "{{ container_names }}"
       when:
         - container_action == 'start'
-        - item not in unsupported_containers.results | map(attribute='item') | list
+        - item not in unsupported_containers.results | map(attribute='item_name') | list
 
     - name: Stop Docker containers
       docker_container:
@@ -35,4 +37,4 @@
       loop: "{{ container_names }}"
       when:
         - container_action == 'stop'
-        - item not in unsupported_containers.results | map(attribute='item') | list
+        - item not in unsupported_containers.results | map(attribute='item_name') | list
