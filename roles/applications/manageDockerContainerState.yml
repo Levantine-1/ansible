@@ -3,7 +3,7 @@
   hosts: VMWareDockerHosts
   become: true
   vars:
-    container_names: "{{ container_names_string | default('') | split(',') }}"
+    container_names: "{{ container_names_string | default('') | regex_replace(',', ' ').split() }}"
     container_action: "{{ container_action_string | default('') }}"
 
   tasks:
