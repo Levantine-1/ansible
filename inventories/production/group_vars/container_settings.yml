@@ -4,14 +4,14 @@ supported_containers:
     env_vars:
     cli_params: "-d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro"
 
-  - name: container1
+  - name: booking-movie-ticket
     env_vars:
-      - VIRTUAL_HOST=foo.bar.com
+      - VIRTUAL_HOST=bmt.nhitruong.com
 
-  - name: container2
+  - name: real-estate
     env_vars:
-      - VIRTUAL_HOST=foo.bar.com
+      - VIRTUAL_HOST=real-estate.nhitruong.com
 
-  - name: container3
+  - name: thisper
     env_vars:
-      - VIRTUAL_HOST=foo.bar.com
+      - VIRTUAL_HOST=thisper.levantine.io
