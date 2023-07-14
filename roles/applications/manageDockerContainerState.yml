@@ -1,0 +1,22 @@
+---
+- name: Manage Docker Containers
+  hosts: VMWareDockerHosts
+  become: true
+  vars:
+    container_names: "{{ container_names_string | default('') | split(',') }}"
+    container_action: "{{ container_action_string | default('') }}"
+
+  tasks:
+    - name: Start Docker containers
+      docker_container:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ container_names }}"
+      when: container_action == 'start'
+
+    - name: Stop Docker containers
+      docker_container:
+        name: "{{ item }}"
+        state: stopped
+      loop: "{{ container_names }}"
+      when: container_action == 'stop'
