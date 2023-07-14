@@ -5,12 +5,15 @@
   vars:
     container_names: "{{ container_names_string.split(',') }}"
     container_action: "{{ container_action_string }}"
+    supported_containers: "{{ lookup('file', 'inventories/production/group_vars/container_settings.yml') | from_yaml }}"
 
   tasks:
     - name: Start Docker containers
       docker_container:
         name: "{{ item }}"
         state: started
+        env:
+          - "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='env_vars') | list | flatten }}"
       loop: "{{ container_names }}"
       when: container_action == 'start'
 

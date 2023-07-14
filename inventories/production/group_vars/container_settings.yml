@@ -1,0 +1,17 @@
+---
+supported_containers:
+  - name: nginx-proxy
+    env_vars:
+    cli_params: "-d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro"
+
+  - name: container1
+    env_vars:
+      - VIRTUAL_HOST=foo.bar.com
+
+  - name: container2
+    env_vars:
+      - VIRTUAL_HOST=foo.bar.com
+
+  - name: container3
+    env_vars:
+      - VIRTUAL_HOST=foo.bar.com
