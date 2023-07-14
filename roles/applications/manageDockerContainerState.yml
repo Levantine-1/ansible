@@ -24,8 +24,8 @@
         name: "{{ item }}"
         state: started
         env:
-          - "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='env_vars') | list | flatten }}"
-        command: "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='cli_params') | list }}"
+          - "{{ supported_containers.item.env_vars }}"
+        command: "{{ supported_containers.item.cli_params }}"
       with_items: "{{ container_names }}"
       when:
         - container_action == 'start'
