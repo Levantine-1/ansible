@@ -23,8 +23,13 @@
       docker_container:
         name: "{{ item }}"
         state: started
+        env:
+          - "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='env_vars') | list | flatten }}"
+        command: "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='cli_params') | list }}"
       with_items: "{{ container_names }}"
-      when: container_action == 'start'
+      when:
+        - container_action == 'start'
+
 
     - name: Stop Docker containers
       docker_container:
