@@ -6,12 +6,11 @@
   vars:
     container_names: "{{ container_names_string.split(',') }}"
     container_action: "{{ container_action_string }}"
-    supported_containers: "{{ supported_containers }}"
 
   tasks:
     - name: Validate Supported Containers
       debug:
-        msg: 'Validating: {{ item_name }}'
+        msg: 'Validating {{ item_name }}'
       loop: "{{ container_names }}"
       loop_control: # Think of this like a for loop "For item in container_names"
         loop_var: item_name
