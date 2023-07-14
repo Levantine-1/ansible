@@ -9,32 +9,28 @@
     supported_containers: "{{ supported_containers }}"
 
   tasks:
-    - name: Validate container names
+    - name: Validate Supported Containers
       debug:
-        msg: "Container '{{ item }}' is not a supported container. Skipping."
+        msg: 'Validating: {{ item_name }}'
       loop: "{{ container_names }}"
       loop_control: # Think of this like a for loop "For item in container_names"
         loop_var: item_name
-      when: item_name not in supported_containers | map(attribute='name') | list
+      failed_when: item_name not in supported_containers
       register: unsupported_containers
-      changed_when: false
+
+# It's assumed anything after the validate step should work
 
     - name: Start Docker containers
       docker_container:
         name: "{{ item }}"
         state: started
-        env:
-          - "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='env_vars') | list | flatten }}"
-      loop: "{{ container_names }}"
-      when:
-        - container_action == 'start'
-        - item not in unsupported_containers.results | map(attribute='item_name') | list
+      with_items: "{{ container_names }}"
+      when: container_action == 'start'
 
     - name: Stop Docker containers
       docker_container:
         name: "{{ item }}"
         state: stopped
-      loop: "{{ container_names }}"
-      when:
-        - container_action == 'stop'
-        - item not in unsupported_containers.results | map(attribute='item_name') | list
+      with_items: "{{ container_names }}"
+      when: container_action == 'stop'
+
