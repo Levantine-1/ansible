@@ -23,7 +23,7 @@
         name: "{{ item }}"
         state: started
         env:
-          - "{{ supported_containers[item].env_vars }}"
+          - "{{ supported_containers[item].env_vars | combine }}"
         command: "{{ supported_containers[item].cli_params }}"
       with_items: "{{ container_names }}"
       when:
