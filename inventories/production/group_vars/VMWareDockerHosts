@@ -2,7 +2,7 @@ supported_containers:
   nginx-proxy:
     env_vars:
         foo: bar
-    cli_params: "-d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro"
+    cli_params: "-d --name nginx-proxy -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy"
   booking-movie-ticket:
     env_vars:
       VIRTUAL_HOST: bmt.nhitruong.com
