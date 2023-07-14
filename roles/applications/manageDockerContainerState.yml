@@ -5,9 +5,17 @@
   vars:
     container_names: "{{ container_names_string.split(',') }}"
     container_action: "{{ container_action_string }}"
-    supported_containers: "{{ lookup('file', 'inventories/production/group_vars/container_settings.yml') | from_yaml }}"
+    supported_containers: "{{ lookup('file', 'group_vars/your_group_vars_file.yml') | from_yaml }}"
 
   tasks:
+    - name: Validate container names
+      debug:
+        msg: "Container '{{ item }}' is not a supported container. Skipping."
+      loop: "{{ container_names }}"
+      when: item not in supported_containers | map(attribute='name') | list
+      register: unsupported_containers
+      changed_when: false
+
     - name: Start Docker containers
       docker_container:
         name: "{{ item }}"
@@ -15,11 +23,15 @@
         env:
           - "{{ supported_containers | selectattr('name', 'in', container_names) | map(attribute='env_vars') | list | flatten }}"
       loop: "{{ container_names }}"
-      when: container_action == 'start'
+      when:
+        - container_action == 'start'
+        - item not in unsupported_containers.results | map(attribute='item') | list
 
     - name: Stop Docker containers
       docker_container:
         name: "{{ item }}"
         state: stopped
       loop: "{{ container_names }}"
-      when: container_action == 'stop'
+      when:
+        - container_action == 'stop'
+        - item not in unsupported_containers.results | map(attribute='item') | list
