@@ -22,6 +22,7 @@
       docker_container:
         name: "{{ item }}"
         state: started
+        command: "{{ supported_containers[item].cli_params }}"
         env: "{{ supported_containers[item].env_vars | default([]) }}"
       loop: "{{ container_names }}"
       when: container_action == 'start'
