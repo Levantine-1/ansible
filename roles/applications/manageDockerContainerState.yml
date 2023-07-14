@@ -2,10 +2,11 @@
 - name: Manage Docker Containers
   hosts: VMWareDockerHosts
   become: true
+
   vars:
     container_names: "{{ container_names_string.split(',') }}"
     container_action: "{{ container_action_string }}"
-    supported_containers: "{{ lookup('file', 'inventories/production/group_vars/container_settings.yml') | from_yaml }}"
+    supported_containers: "{{ supported_containers }}"
 
   tasks:
     - name: Validate container names
