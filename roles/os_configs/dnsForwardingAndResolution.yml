@@ -1,6 +1,6 @@
 ---
 - name: Configure DNS Forwarding and Resolution
-  hosts: none # Fix this later
+  hosts: all
   become: true
   vars:
     wireguard_vpn_ip: "<in ansible vault>"
