@@ -25,7 +25,6 @@
         block: "{{ host_entries }}"
         marker: "# {mark} ANSIBLE MANAGED BLOCK"
         state: present
-      when: "'{} {}'.format(item.ip, item.hostname) not in hosts_content"
 
   handlers:
     - name: Reload the hosts file
