@@ -40,6 +40,10 @@
       check_mode: false
       ignore_errors: yes
 
+    - name: Show updated /etc/hosts content
+      debug:
+        var: updated_hosts.stdout
+
     - name: Remove outdated host entries
       lineinfile:
         path: /etc/hosts
@@ -48,7 +52,7 @@
       loop: "{{ host_entries }}"
       loop_control:
         loop_var: entry
-      when: "'{} '.format(entry.hostname) not in hosts_content"
+      when: "'{} '.format(entry.hostname) not in updated_hosts.stdout"
 
   handlers:
     - name: Reload the hosts file
