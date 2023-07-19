@@ -1,0 +1,46 @@
+---
+- name: Manage entries in the /etc/hosts file
+  hosts: all
+  become: yes
+  # Note: In the future we'll be using DNS forwards instead of /etc/hosts, I just need something to work for now
+
+  tasks:
+    - name: Read the existing /etc/hosts file
+      shell: cat /etc/hosts
+      register: current_hosts
+      changed_when: false
+
+    - name: Set the content of the /etc/hosts file
+      set_fact:
+        hosts_content: "{{ current_hosts.stdout }}"
+
+    - name: Add or update host entries
+      block:
+        - name: Add host entries
+          lineinfile:
+            path: /etc/hosts
+            line: "{{ item.ip }} {{ item.hostname }}"
+            state: present
+          loop: "{{ host_entries }}"
+          when: "'{{ item.ip }} {{ item.hostname }}' not in hosts_content"
+
+        - name: Update host entries if IP changed
+          lineinfile:
+            path: /etc/hosts
+            regexp: "^{{ item.ip }}\\s+"
+            line: "{{ item.ip }} {{ item.hostname }}"
+            state: present
+          loop: "{{ host_entries }}"
+          when: "'{{ item.ip }} {{ item.hostname }}' in hosts_content and item.ip != get_host_ip(item.hostname)"
+
+    - name: Remove outdated host entries
+      lineinfile:
+        path: /etc/hosts
+        state: absent
+        regex: "^{{ item.ip }}\\s+{{ item.hostname }}$"
+      loop: "{{ host_entries }}"
+      when: "'{{ item.ip }} {{ item.hostname }}' not in host_entries"
+
+  handlers:
+    - name: Reload the hosts file
+      shell: "cat /etc/hosts > /dev/null"  # Touch the file to trigger the reload

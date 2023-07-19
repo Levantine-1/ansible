@@ -1,0 +1,33 @@
+host_entries:
+  - ip: "10.0.0.1"
+    hostname: "ec2bastion.vpn.levantine.io"
+
+  - ip: "10.0.0.2"
+    hostname: "vmwarebastion.vpn.levantine.io"
+  - ip: "192.168.1.2"
+    hostname: "vmwarebastion.internal.levantine.io"
+  - ip: "10.69.69.10"
+    hostname: "vmwarebastion.home.levantine.io"
+
+  - ip: "192.168.1.20"
+    hostname: "jenkins.internal.levantine.io"
+  - ip: "10.69.69.126"
+    hostname: "jenkins.home.levantine.io"
+  - ip: "10.0.0.3"
+    hostname: "jenkins.vpn.levantine.io"
+
+  - ip: "192.168.1.30"
+    hostname: "theia.internal.levantine.io"
+  - ip: "10.69.69.147"
+    hostname: "theia.home.levantine.io"
+
+  - ip: "192.168.1.31"
+    hostname: "alpine1.internal.levantine.io"
+  - ip: "10.69.69.110"
+    hostname: "alpine1.home.levantine.io"
+
+  - ip: "192.168.1.50"
+    hostname: "db1rw.internal.levantine.io"
+
+  - ip: "192.168.1.51"
+    hostname: "db1ro.internal.levantine.io"
