@@ -15,8 +15,16 @@
       set_fact:
         hosts_content: "{{ current_hosts.stdout }}"
 
+    - name: Show current /etc/hosts content
+      debug:
+        var: hosts_content
+
     - name: Add or update host entries
       block:
+        - name: Show list of host_entries
+          debug:
+            var: host_entries
+
         - name: Add host entries
           lineinfile:
             path: /etc/hosts
@@ -33,6 +41,14 @@
             state: present
           loop: "{{ host_entries }}"
           when: "'{} '.format(item.hostname) in hosts_content and item.ip != host_entries | get_host_ip(item.hostname)"
+
+    - name: Show updated /etc/hosts content
+      shell: cat /etc/hosts
+      register: updated_hosts
+      changed_when: false
+      check_mode: false
+      when: hosts_content != updated_hosts.stdout
+      ignore_errors: yes
 
     - name: Remove outdated host entries
       lineinfile:
