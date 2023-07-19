@@ -1,24 +1,11 @@
 ---
-- name: Manage Docker Containers
+- name: Debug Test
   hosts: localhost
 
   vars:
-    container_names: "{{ container_names_string.split(',') }}"
+    foo: "bar"
 
   tasks:
-    - name: Validate Supported Containers
+    - name: host_entry
       debug:
-        msg: 'Validating {{ item_name }}'
-      loop: "{{ container_names }}"
-      loop_control: # Think of this like a for loop "For item in container_names"
-        loop_var: item_name
-      failed_when: item_name != 'nginx-proxy' and item_name not in supported_containers
-      register: unsupported_containers
-
-    - name: Test Start Containers
-      debug:
-        msg: "Check Value: {{supported_containers[item_name].cli_params}}"
-        #msg: 'Check Value: {{ item_name }}'
-      loop: "{{ container_names }}"
-      loop_control: # Think of this like a for loop "For item in container_names"
-        loop_var: item_name
+        msg: "{{host_entries}}"
