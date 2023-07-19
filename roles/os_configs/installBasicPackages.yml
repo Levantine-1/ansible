@@ -6,7 +6,6 @@
 
   vars:
     basic_packages:
-      - ifconfig
       - htop
       - openssh-server
       - net-tools
