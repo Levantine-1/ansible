@@ -22,6 +22,7 @@
         path: "/etc/letsencrypt/{{ item }}"
         state: directory
         mode: 0700
+      with_items: "{{ domains }}"
 
     - name: Generate Let's Encrypt Wildcard Certificates
       command: certbot certonly --non-interactive --agree-tos --email "{{ certbot_email }}" --manual --preferred-challenges=dns --manual-public-ip-logging-ok --domain "*.{{ item }}"
