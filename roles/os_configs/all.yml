@@ -1,2 +1,4 @@
 --- # This is a wrapper playbook to run the bootstrap playbooks
 - import_playbook: users.yml
+- import_playbook: installBasicPackages.yml
+- import_playbook: dnsForwardingAndResolution.yml

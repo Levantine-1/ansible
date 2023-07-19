@@ -1,0 +1,32 @@
+---
+- name: Install/update basic packages
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  vars:
+    basic_packages:
+      - ifconfig
+      - htop
+      - openssh-server
+      - net-tools
+
+  tasks:
+    - name: Update package cache
+      package:
+        name: '*'
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: Install packages
+      package:
+        name: "{{ basic_packages }}"
+        state: present
+      when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+
+    - name: Install packages on Alpine Linux
+      apk:
+        name: "{{ basic_packages }}"
+        state: present
+      when: ansible_os_family == "Alpine"

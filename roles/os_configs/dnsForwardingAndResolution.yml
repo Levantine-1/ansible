@@ -1,0 +1,36 @@
+---
+- name: Configure DNS Forwarding and Resolution
+  hosts: none # Fix this later
+  become: true
+  vars:
+    wireguard_vpn_ip: "<in ansible vault>"
+    route53_private_zone_id: "<in ansible vault>"
+
+  tasks:
+    - name: Install required packages (Bind9 as DNS resolver)
+      apt:
+        name: bind9 bind9utils dnsutils  # Install Bind9 as the DNS resolver and dnsutils for nslookup
+        state: present
+      when: ansible_nodename == 'EC2_HOSTNAME'
+
+    - name: Configure DNS Forwarding (Bind9)
+      template:
+        src: named.conf.options.j2
+        dest: /etc/bind/named.conf.options
+      when: ansible_nodename == 'EC2_HOSTNAME'
+
+    - name: Start DNS Resolver (Bind9)
+      service:
+        name: bind9
+        state: started
+        enabled: yes
+      when: ansible_nodename == 'EC2_HOSTNAME'
+
+    - name: Configure DNS Resolution on VMware Host
+      # Define the nameserver
+      lineinfile:
+        path: /etc/resolv.conf
+        line: "nameserver {{ wireguard_vpn_ip }}"
+        state: present
+        create: yes
+      when: ansible_nodename == 'VMWARE_HOSTNAME'
