@@ -33,21 +33,11 @@
           loop: "{{ host_entries }}"
           when: "'{} '.format(item.hostname) not in hosts_content"
 
-        - name: Update host entries if IP changed
-          lineinfile:
-            path: /etc/hosts
-            regexp: "^{{ item.ip }}\\s+"
-            line: "{{ item.ip }} {{ item.hostname }}"
-            state: present
-          loop: "{{ host_entries }}"
-          when: "'{} '.format(item.hostname) in hosts_content and item.ip != host_entries | get_host_ip(item.hostname)"
-
     - name: Show updated /etc/hosts content
       shell: cat /etc/hosts
       register: updated_hosts
       changed_when: false
       check_mode: false
-      when: hosts_content != updated_hosts.stdout
       ignore_errors: yes
 
     - name: Remove outdated host entries
