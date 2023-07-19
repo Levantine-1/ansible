@@ -38,9 +38,11 @@
       lineinfile:
         path: /etc/hosts
         state: absent
-        regex: "^{{ item.ip }}\\s+{{ item.hostname }}$"
+        regex: "^{{ entry.ip }}\\s+{{ entry.hostname }}$"
       loop: "{{ host_entries }}"
-      when: "'{{ item.ip }} {{ item.hostname }}' not in host_entries"
+      loop_control:
+        loop_var: entry
+      when: "'{{ entry.ip }} {{ entry.hostname }}' not in hosts_content"
 
   handlers:
     - name: Reload the hosts file
