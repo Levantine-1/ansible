@@ -2,7 +2,7 @@
 - name: Manage entries in the /etc/hosts file
   hosts: all
   become: yes
-  # Note: In the future we'll be using DNS forwards instead of /etc/hosts, I just need something to work for now
+  # Note: In the future, we'll be using DNS forwards instead of /etc/hosts; this is just a temporary solution
 
   tasks:
     - name: Read the existing /etc/hosts file
@@ -32,7 +32,7 @@
             line: "{{ item.ip }} {{ item.hostname }}"
             state: present
           loop: "{{ host_entries }}"
-          when: "'{{ item.ip }} {{ item.hostname }}' in hosts_content and item.ip != get_host_ip(item.hostname)"
+          when: "'{{ item.ip }} {{ item.hostname }}' in hosts_content and item.ip != host_entries | get_host_ip(item.hostname)"
 
     - name: Remove outdated host entries
       lineinfile:
