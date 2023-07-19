@@ -1,3 +1,7 @@
+domains:
+    - levantine.io
+    - nhitruong.com
+
 host_entries: |
     10.0.0.1 ec2bastion.vpn.levantine.io
 

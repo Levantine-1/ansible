@@ -1,0 +1,39 @@
+---
+- name: Generate Let's Encrypt Wildcard SSL certificate
+  hosts: jenkins.internal.levantine.io
+  become: yes
+
+  tasks:
+    - name: Install required packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - certbot
+        - python3-certbot-dns-route53
+
+    - name: Create directories for Let's Encrypt certificates
+      file:
+        path: "/etc/letsencrypt/{{ item }}"
+        state: directory
+        mode: 0700
+      loop: "{{ domains }}"
+
+    - name: Generate Let's Encrypt wildcard SSL certificates
+      acme_certificate:
+        acme_account_email: "letsencrypt@{{ item }}"
+        acme_directory: "https://acme-v02.api.letsencrypt.org/directory"  # Production directory
+        account_key_path: "/etc/letsencrypt/{{ item }}/account.key"
+        fullchain_path: "/etc/letsencrypt/{{ item }}/fullchain.pem"
+        key_path: "/etc/letsencrypt/{{ item }}/privkey.pem"
+        csr: "/etc/letsencrypt/{{ item }}/domain.csr"
+        cert_domains:
+          - "*.{{ item }}"
+        challenge: dns-01
+        dns_plugin: route53
+      loop: "{{ domains }}"
+
+    - name: Display Let's Encrypt certificate results
+      debug:
+        var: item
+      with_items: "{{ domains }}"
