@@ -23,7 +23,7 @@
             line: "{{ item.ip }} {{ item.hostname }}"
             state: present
           loop: "{{ host_entries }}"
-          when: "'{{ item.ip }} {{ item.hostname }}' not in hosts_content"
+          when: "'{} {}'.format(item.ip, item.hostname) not in hosts_content"
 
         - name: Update host entries if IP changed
           lineinfile:
@@ -32,7 +32,7 @@
             line: "{{ item.ip }} {{ item.hostname }}"
             state: present
           loop: "{{ host_entries }}"
-          when: "'{{ item.ip }} {{ item.hostname }}' in hosts_content and item.ip != host_entries | get_host_ip(item.hostname)"
+          when: "'{} {}'.format(item.ip, item.hostname) in hosts_content and item.ip != host_entries | get_host_ip(item.hostname)"
 
     - name: Remove outdated host entries
       lineinfile:
@@ -42,7 +42,7 @@
       loop: "{{ host_entries }}"
       loop_control:
         loop_var: entry
-      when: "'{{ entry.ip }} {{ entry.hostname }}' not in hosts_content"
+      when: "'{} {}'.format(entry.ip, entry.hostname) not in hosts_content"
 
   handlers:
     - name: Reload the hosts file
