@@ -25,15 +25,9 @@
       with_items: "{{ domains }}"
 
     - name: Generate Let's Encrypt Wildcard Certificates
-      command: certbot certonly --non-interactive --agree-tos --email "{{ certbot_email }}" --manual --preferred-challenges=dns --manual-public-ip-logging-ok --domain "*.{{ item }}"
+      command: certbot certonly --non-interactive --agree-tos --email "{{ certbot_email }}" --manual --preferred-challenges=dns --domain "*.{{ item }}"
       loop: "{{ domains }}"
       register: cert_generation
 
-    - name: Print DNS records for manual update (Will automate later)
-      debug:
-        msg: |
-          To complete the DNS challenge, you need to add the following DNS records for _acme-challenge.{{ item.item }}:
-          - Type: TXT
-          - Name: _acme-challenge.{{ item.item }}
-          - Value: "{{ item.item_validation.stdout }}"
-      loop: "{{ cert_generation.results }}"
+# NOTE: For further automation, this will need access to R53 to read/create/modify DNS records
+# For now, just take the generate command and run it manually since it will prompt for DNS changes and that's not something we can do automatically at this time
