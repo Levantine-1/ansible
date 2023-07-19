@@ -20,39 +20,12 @@
         var: hosts_content
 
     - name: Add or update host entries
-      block:
-        - name: Show list of host_entries
-          debug:
-            var: host_entries
-
-        - name: Add host entries
-          lineinfile:
-            path: /etc/hosts
-            line: "{{ item.ip }} {{ item.hostname }}"
-            state: present
-          loop: "{{ host_entries }}"
-          when: "'{} '.format(item.hostname) not in hosts_content"
-
-    - name: Show updated /etc/hosts content
-      shell: cat /etc/hosts
-      register: updated_hosts
-      changed_when: false
-      check_mode: false
-      ignore_errors: yes
-
-    - name: Show updated /etc/hosts content
-      debug:
-        var: updated_hosts.stdout
-
-    - name: Remove outdated host entries
-      lineinfile:
+      blockinfile:
         path: /etc/hosts
-        state: absent
-        regex: "^{{ entry.ip }}\\s+{{ entry.hostname }}$"
-      loop: "{{ host_entries }}"
-      loop_control:
-        loop_var: entry
-      when: "'{} '.format(entry.hostname) not in updated_hosts.stdout"
+        block: "{{ host_entries }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+        state: present
+      when: "'{} {}'.format(item.ip, item.hostname) not in hosts_content"
 
   handlers:
     - name: Reload the hosts file
