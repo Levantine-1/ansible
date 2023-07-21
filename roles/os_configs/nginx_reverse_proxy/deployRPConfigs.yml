@@ -12,7 +12,7 @@
     - name: Configure Nginx Reverse Proxies
       template:
         src: "templates/reverse_proxy.j2"
-        dest: "/etc/nginx/conf.d/{{ domains }}.conf"
+        dest: "/etc/nginx/conf.d/{{ item }}.conf"
         owner: root
         group: root
         mode: '0644'

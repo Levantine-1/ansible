@@ -1,14 +1,14 @@
 server {
   listen 80;
-  server_name *.{{ domain }};
+  server_name *.{{ item }};
   return 301 https://$host$request_uri;
 }
 
 server {
   listen 443 ssl;
-  server_name *.{{ domain }};
-  ssl_certificate /etc/nginx/certs/{{ domain }}/fullchain.pem;
-  ssl_certificate_key /etc/nginx/certs/{{ domain }}/privkey.pem;
+  server_name *.{{ item }};
+  ssl_certificate /etc/nginx/certs/{{ item }}/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/{{ item }}/privkey.pem;
 
   location / {
     proxy_pass {{ reverse_proxy_configs[rp_flow].proxy_pass_location }};
