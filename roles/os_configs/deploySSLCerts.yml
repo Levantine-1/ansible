@@ -6,13 +6,13 @@
   tasks:
     - name: Ensure Cert Directory Exists
       file:
-        path: /etc/nginx/certs/{{ item }}/
+        path: "/etc/nginx/certs/{{ item }}/"
         state: directory
       loop: "{{ domains }}"
 
     - name: Copy SSL Certs
       copy:
         src: "/etc/letsencrypt/live/{{ item }}"
-        dest: /etc/nginx/certs/{{ item }}
+        dest: "/etc/nginx/certs/{{ item }}"
       loop: "{{ domains }}"
       remote_src: no
