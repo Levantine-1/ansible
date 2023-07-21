@@ -5,10 +5,9 @@
 
   tasks:
     - name: Install Nginx
-      apt:
+      package:
         name: nginx
         state: present
-      become: yes
 
     - name: Configure Nginx Reverse Proxies
       template:
