@@ -14,5 +14,5 @@
       copy:
         src: "/etc/letsencrypt/live/{{ item }}"
         dest: "/etc/nginx/certs/{{ item }}"
-        remote_src: no
+        remote_src: yes
       loop: "{{ domains }}"
