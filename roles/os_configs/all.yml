@@ -1,8 +1,8 @@
 --- # This is a wrapper playbook to run the bootstrap playbooks
-- import_playbook: users.yml
-- import_playbook: installBasicPackages.yml
-- import_playbook: configure_time.yml
+# - import_playbook: users.yml
+# - import_playbook: installBasicPackages.yml
+# - import_playbook: configure_time.yml
 # - import_playbook: dnsForwardingAndResolution.yml
-- import_playbook: configureHostFile.yml
+# - import_playbook: configureHostFile.yml
 - import_playbook: deploySSLCerts.yml
-- import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
+# - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
