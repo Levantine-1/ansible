@@ -1,0 +1,30 @@
+---
+- name: Deploy Theia Configs
+  hosts: Theia
+  become: yes
+
+  tasks:
+    - name: Ensure Cert Directory Exists
+      file:
+        path: "/etc/apache2/certs/"
+        state: directory
+      loop: "{{ domains }}"
+
+    - name: Copy SSL Certs
+      copy:
+        src: "/home/jenkins/certs/{{ item }}"
+        dest: "/etc/nginx/certs/"
+        remote_src: no
+      loop: "{{ domains }}"
+
+    - name: Copy apache configs
+      copy:
+        src: "../theia/files/000-default.conf"
+        dest: "/etc/apache2/sites-available"
+        remote_src: no
+      loop: "{{ domains }}"
+
+    - name: restart apache
+      service:
+        name: apache2
+        state: restarted

@@ -6,7 +6,7 @@
   tasks:
     - name: Ensure Cert Directory Exists
       file:
-        path: "/etc/nginx/certs/{{ item }}/"
+        path: "/etc/nginx/certs/"
         state: directory
       loop: "{{ domains }}"
 
