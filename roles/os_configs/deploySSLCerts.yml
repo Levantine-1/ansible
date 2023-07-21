@@ -12,7 +12,7 @@
 
     - name: Copy SSL Certs
       copy:
-        src: "/etc/letsencrypt/live/{{ item }}"
-        dest: "/etc/nginx/certs/{{ item }}"
+        src: "/etc/letsencrypt/live/{{ item }}/fullchain.pem"
+        dest: "/etc/nginx/certs/{{ item }}/fullchain.pem"
         remote_src: yes
       loop: "{{ domains }}"
