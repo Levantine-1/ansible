@@ -4,17 +4,25 @@
   become: yes
 
   tasks:
-#    - name: Ensure Cert Directory Exists
-#      file:
-#        path: "/etc/nginx/certs/{{ item }}/"
-#        state: directory
+    - name: Ensure Cert Directory Exists
+      file:
+        path: "/etc/nginx/certs/{{ item }}/"
+        state: directory
+      loop: "{{ domains }}"
+
+#    - name: Copy SSL Certs
+#      copy:
+#        src: "/etc/letsencrypt/live/{{ item }}"
+#        dest: "/etc/nginx/certs/{{ item }}"
+#        remote_src: no
 #      loop: "{{ domains }}"
+
+# The above stanza doesn't work because ansible is a total idiot and cannot find a path that's right in front of it, even with sudo permissions
+# So we copied the certs to home dir copy from that instead.
 
     - name: Copy SSL Certs
       copy:
-        src: "/etc/letsencrypt/live/levantine.io/fullchain.pem"
-        dest: "/etc/nginx/certs/levantine.io/fullchain.pem"
+        src: "/home/automation/certs/{{ item }}"
+        dest: "/etc/nginx/certs/{{ item }}"
         remote_src: no
       loop: "{{ domains }}"
-      become: yes
-      become_user: root
