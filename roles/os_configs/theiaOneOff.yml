@@ -41,4 +41,4 @@
         minute: "0"
         hour: "0"
         job: "/bin/bash /home/automation/nightly_restart.sh"
-        state: present
+        state: absent
