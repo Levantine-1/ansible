@@ -4,15 +4,15 @@
   become: yes
 
   tasks:
-    - name: Ensure Cert Directory Exists
-      file:
-        path: "/etc/nginx/certs/{{ item }}/"
-        state: directory
-      loop: "{{ domains }}"
+#    - name: Ensure Cert Directory Exists
+#      file:
+#        path: "/etc/nginx/certs/{{ item }}/"
+#        state: directory
+#      loop: "{{ domains }}"
 
     - name: Copy SSL Certs
       copy:
-        src: "/etc/letsencrypt/live/{{ item }}/fullchain.pem"
-        dest: "/etc/nginx/certs/{{ item }}/fullchain.pem"
+        src: "/etc/letsencrypt/live/{{ item }}/fuck.you.ansible"
+        dest: "/etc/nginx/certs/{{ item }}/fuck.you.ansible"
         remote_src: no
       loop: "{{ domains }}"
