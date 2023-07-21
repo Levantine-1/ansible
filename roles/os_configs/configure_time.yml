@@ -4,28 +4,6 @@
   become: yes
 
   tasks:
-    - name: Install NTP package
-      package:
-        name: "{{ ntp_package }}"
-        state: present
-      vars:
-        ntp_package:
-          - ntp   # For Debian/Ubuntu-based systems
-          - ntp   # For RedHat-based systems
-          - chrony # For Alpine-based systems
-
-    - name: Enable and start NTP service
-      service:
-        name: "{{ ntp_service }}"
-        state: started
-        enabled: yes
-      vars:
-        ntp_service:
-          Debian: ntp
-          Ubuntu: ntp
-          RedHat: ntpd
-          Alpine: chronyd
-
     - name: Set Timezone to UTC
       timezone:
         name: UTC
