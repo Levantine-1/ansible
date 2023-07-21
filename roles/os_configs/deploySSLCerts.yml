@@ -1,0 +1,17 @@
+---
+- name: Deploy Nginx Reverse Certs
+  hosts: Nginx
+  become: yes
+
+  tasks:
+    - name: Ensure Cert Directory Exists
+      file:
+        path: /etc/nginx/certs/
+        state: directory
+
+    - name: Copy SSL Certs
+      copy:
+        src: "/etc/letsencrypt/live/{{ item }}"   # This is on the Ansible control node
+        dest: /path/to/remote/destination/directory   # This is on the remote host
+        remote_src: yes
+      loop: "{{ domains }}"

@@ -4,4 +4,5 @@
 - import_playbook: configure_time.yml
 # - import_playbook: dnsForwardingAndResolution.yml
 - import_playbook: configureHostFile.yml
+- import_playbook: deploySSLCerts.yml
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
