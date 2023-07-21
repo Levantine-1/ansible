@@ -1,0 +1,20 @@
+---
+- name: Configure NTP and Set Time Zone to UTC
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Install NTP package
+      package:
+        name: ntp
+        state: present
+
+    - name: Enable and start NTP service
+      service:
+        name: ntp
+        state: started
+        enabled: yes
+
+    - name: Set Timezone to UTC
+      timezone:
+        name: UTC
