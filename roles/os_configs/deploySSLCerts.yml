@@ -11,7 +11,6 @@
 
     - name: Copy SSL Certs
       copy:
-        src: "/etc/letsencrypt/live/{{ item }}"   # This is on the Ansible control node
-        dest: /path/to/remote/destination/directory   # This is on the remote host
-        remote_src: yes
+        src: "/etc/letsencrypt/live/{{ item }}"
+        dest: /etc/nginx/certs/
       loop: "{{ domains }}"
