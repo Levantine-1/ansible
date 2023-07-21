@@ -22,7 +22,7 @@
 
     - name: Copy SSL Certs
       copy:
-        src: "/home/automation/certs/{{ item }}"
+        src: "/home/jenkins/certs/{{ item }}"
         dest: "/etc/nginx/certs/{{ item }}"
         remote_src: no
       loop: "{{ domains }}"
