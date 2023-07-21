@@ -1,6 +1,6 @@
 ---
 - name: Deploy Nginx Reverse Proxy Configuration Files
-  hosts: nginx_server
+  hosts: Nginx
   become: yes
 
   tasks:
