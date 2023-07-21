@@ -20,7 +20,7 @@
     - name: Copy apache configs
       copy:
         src: "../applications/theia/files/000-default.conf"
-        dest: "/etc/apache2/sites-available"
+        dest: "/etc/apache2/sites-available/"
         remote_src: no
       loop: "{{ domains }}"
 
@@ -28,3 +28,17 @@
       service:
         name: apache2
         state: restarted
+
+    - name: Copy nightly restart script
+      copy:
+        src: "../applications/theia/files/nightly_restart.sh"
+        dest: "/home/automation/"
+        remote_src: no
+
+    - name: Set up nightly restart cron job
+      cron: # This is so that the memory doesn't eventually run out. There's a leak somewhere.
+        name: "Nightly Restart Job"
+        minute: "0"
+        hour: "0"
+        job: "/bin/bash /home/automation/nightly_restart.sh"
+        state: present
