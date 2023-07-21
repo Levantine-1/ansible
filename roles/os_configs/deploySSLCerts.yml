@@ -12,7 +12,7 @@
 
     - name: Copy SSL Certs
       copy:
-        src: "/etc/letsencrypt/live/levantine.io/fuck.you.ansible"
+        src: "/home/jenkins/fucking_ansible"
         dest: "/etc/nginx/certs/levantine.io/fuck.you.ansible"
         remote_src: no
       loop: "{{ domains }}"
