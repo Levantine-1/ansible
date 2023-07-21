@@ -17,3 +17,4 @@
         remote_src: no
       loop: "{{ domains }}"
       become: yes
+      become_user: root
