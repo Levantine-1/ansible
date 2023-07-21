@@ -6,6 +6,12 @@
     foo: "bar"
 
   tasks:
-    - name: host_entry
+    - name: rp_flow
       debug:
-        msg: "{{host_entries}}"
+        msg: "{{ rp_flow }}"
+      loop: "{{ domains }}"
+
+    - name: pplocation
+      debug:
+        msg: "{{ reverse_proxy_configs[rp_flow].proxy_pass_location }}"
+      loop: "{{ domains }}"

@@ -1,0 +1,25 @@
+---
+- name: Deploy Nginx Reverse Proxy Configuration Files
+  hosts: nginx_server
+  become: yes
+
+  tasks:
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+      become: yes
+
+    - name: Configure Nginx Reverse Proxies
+      template:
+        src: "templates/reverse_proxy.j2"
+        dest: "/etc/nginx/conf.d/{{ domains }}.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ domains }}"
+
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
