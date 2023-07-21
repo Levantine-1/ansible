@@ -16,3 +16,4 @@
         dest: "/etc/nginx/certs/levantine.io/fuck.you.ansible"
         remote_src: no
       loop: "{{ domains }}"
+      become: yes
