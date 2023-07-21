@@ -10,9 +10,9 @@
         state: present
       vars:
         ntp_package:
-          Debian: ntp
-          RedHat: ntp
-          Alpine: chrony
+          - ntp   # For Debian/Ubuntu-based systems
+          - ntp   # For RedHat-based systems
+          - chrony # For Alpine-based systems
 
     - name: Enable and start NTP service
       service:
@@ -22,6 +22,7 @@
       vars:
         ntp_service:
           Debian: ntp
+          Ubuntu: ntp
           RedHat: ntpd
           Alpine: chronyd
 
