@@ -18,6 +18,12 @@
         mode: '0644'
       loop: "{{ domains }}"
 
+    - name: Configure Theia One Off Reverse Proxy
+      copy:
+        src: "downstream/files/theia_reverse_proxy.conf"
+        dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
+        remote_src: no
+
     - name: Restart Nginx
       service:
         name: nginx
