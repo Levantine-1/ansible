@@ -22,3 +22,7 @@ host_entries: |
     192.168.1.50 db1rw.internal.levantine.io
 
     192.168.1.51 db1ro.internal.levantine.io
+
+
+aws:
+    default_region: us-west-2

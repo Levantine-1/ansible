@@ -18,9 +18,15 @@
         mode: '0644'
       loop: "{{ domains }}"
 
-    - name: Configure Theia One Off Reverse Proxy
+    - name: Configure Theia One Off Reverse Proxy DownStream
       copy:
-        src: "downstream/files/theia_reverse_proxy_nonSSL.conf"
+        src: "downstream/files/theia_reverse_proxy.conf"
+        dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
+        remote_src: no
+
+    - name: Configure Theia One Off Reverse Proxy UpStream
+      copy:
+        src: "upstream/files/theia_reverse_proxy.conf"
         dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
         remote_src: no
 
