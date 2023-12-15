@@ -20,13 +20,13 @@
 
     - name: Configure Theia One Off Reverse Proxy DownStream
       copy:
-        src: "downstream/files/theia_reverse_proxy.conf"
+        src: "downstream/files/theia_reverse_proxy_downstream.conf"
         dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
         remote_src: no
 
     - name: Configure Theia One Off Reverse Proxy UpStream
       copy:
-        src: "upstream/files/theia_reverse_proxy.conf"
+        src: "upstream/files/theia_reverse_proxy_upstream.conf"
         dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
         remote_src: no
 
