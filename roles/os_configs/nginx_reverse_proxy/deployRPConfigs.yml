@@ -23,14 +23,14 @@
         src: "downstream/files/theia_reverse_proxy_downstream.conf"
         dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
         remote_src: no
-      when: rp_flow is defined && rp_flow == "downstream"
+      when: rp_flow is defined and rp_flow == "downstream"
 
     - name: Configure Theia One Off Reverse Proxy UpStream
       copy:
         src: "upstream/files/theia_reverse_proxy_upstream.conf"
         dest: "/etc/nginx/conf.d/theia_reverse_proxy.conf"
         remote_src: no
-      when: rp_flow is defined && rp_flow == "upstream"
+      when: rp_flow is defined and rp_flow == "upstream"
 
     - name: Restart Nginx
       service:
