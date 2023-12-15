@@ -3,6 +3,7 @@
   hosts: all
   become: yes
   # Note: In the future, we'll be using DNS forwards instead of /etc/hosts; this is just a temporary solution
+  # NOTE: 2023-12-14 This will soon be deprecated by PF sense
 
   tasks:
     - name: Read the existing /etc/hosts file

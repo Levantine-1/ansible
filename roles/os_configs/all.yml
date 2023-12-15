@@ -1,9 +1,9 @@
 --- # This is a wrapper playbook to run the bootstrap playbooks
 - import_playbook: users.yml
-- import_playbook: installBasicPackages.yml
+# - import_playbook: installBasicPackages.yml # This is going to be called manually instead of every time due to jenkins restarting and a few weird unexpected stuff happening
 - import_playbook: configure_time.yml
-# - import_playbook: dnsForwardingAndResolution.yml
-- import_playbook: configureHostFile.yml
+# - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by PF Sense
+- import_playbook: configureHostFile.yml # NOTE: This will soon be deprecated by PF Sense
 - import_playbook: deploySSLCerts.yml
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: theiaOneOff.yml

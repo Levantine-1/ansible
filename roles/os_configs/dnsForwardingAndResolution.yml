@@ -1,3 +1,4 @@
+# NOTE: As of 2023-12-14 this is deprecated by PF Sense
 ---
 - name: Configure DNS Forwarding and Resolution
   hosts: all
