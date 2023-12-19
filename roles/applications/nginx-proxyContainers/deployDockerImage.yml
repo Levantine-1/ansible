@@ -35,7 +35,6 @@
         name: "{{ loaded_image_name.stdout }}"
         load_path: "/tmp/{{ container_name }}_latest.tar"
         source: load
-        push: true
 
     - name: Run Docker Container
       docker_container:
