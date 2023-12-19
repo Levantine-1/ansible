@@ -30,6 +30,10 @@
       shell: "docker load --input /tmp/{{ container_name }}_latest.tar | awk '{print $3}'"
       register: loaded_image_name
 
+    - name: Loaded docker iamge name
+      debug:
+        msg: "{{ loaded_image_name.stdout }}"
+
     - name: Load Docker Image from Tarball
       docker_image:
         name: "{{ loaded_image_name.stdout }}"
@@ -39,7 +43,7 @@
     - name: Run Docker Container
       docker_container:
         name: thisper
-        image: "{{ loaded_image_name }}"
+        image: "{{ loaded_image_name.stdout }}"
         env:
           VIRTUAL_HOST: "{{ supported_containers[container_name]['env_vars']['VIRTUAL_HOST'] }}"
 
