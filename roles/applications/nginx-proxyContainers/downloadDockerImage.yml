@@ -40,7 +40,7 @@
     - name: Set read permissions on the file
       file:
         path: "/tmp/{{ container_name }}_latest.tar"
-        mode: "u+r"
+        mode: "a+r"
 
     - name: Prune Docker
       command: docker system prune -af
