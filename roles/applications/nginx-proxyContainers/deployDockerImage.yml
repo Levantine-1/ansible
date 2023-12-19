@@ -17,7 +17,7 @@
       copy:
         src: "/tmp/{{ container_name }}_latest.tar"
         dest: "/tmp/{{ container_name }}_latest.tar"
-        remote_src: no
+      become_user: automation
 
     - name: Stop the old Docker container (if exists)
       docker_container:
