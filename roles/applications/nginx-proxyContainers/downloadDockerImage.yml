@@ -8,7 +8,6 @@
     # variable container_name is defined as an extra var
     account_id: "{{ aws.account_id }}"
     default_region: "{{ aws.default_region }}"
-    ecr_repo: "{{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}"
 
   tasks:
     - name: Validate Supported Container
@@ -20,7 +19,7 @@
       shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
 
     - name: Get the latest Docker image from ECR
-      shell: "aws ecr describe-images --repository-name {{ ecr_repo }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageDigest' --output text --region {{ default_region }}"
+      shell: "aws ecr describe-images --repository-name {{ container_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageDigest' --output text --region {{ default_region }}"
       register: latest_image
 
 #    - name: Pull Docker Image from ECR
