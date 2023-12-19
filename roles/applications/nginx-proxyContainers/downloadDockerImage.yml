@@ -26,9 +26,13 @@
       debug:
         msg: "{{ latest_image.stdout }}"
 
-#    - name: Pull Docker Image from ECR
-#      shell: "docker pull{{ ecr_repo }}:{{ latest_image.stdout }}"
-#      register: pull_image
+    - name: Pull Docker Image from ECR
+      shell: "docker pull {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}:{{ latest_image.stdout }}"
+      register: pulled_image
+
+    - name: Docker Image Pulled
+      debug:
+        msg: "{{ pulled_image.stdout }}"
 
     - name: Save Docker Image to Tarball
       shell: "docker save {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}:{{ latest_image.stdout }} -o /tmp/{{ container_name }}_latest.tar"
