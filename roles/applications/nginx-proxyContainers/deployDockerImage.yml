@@ -26,8 +26,13 @@
         container_default_behavior: no_defaults
       ignore_errors: yes
 
+    - name: Extract image name and tag from tarball
+      shell: "docker load --input /tmp/{{ container_name }}_latest.tar | awk '{print $3}'"
+      register: loaded_image_name
+
     - name: Load Docker Image from Tarball
       docker_image:
+        name: "{{ loaded_image_name.stdout }}"
         load_path: "/tmp/{{ container_name }}_latest.tar"
         source: load
         push: true
