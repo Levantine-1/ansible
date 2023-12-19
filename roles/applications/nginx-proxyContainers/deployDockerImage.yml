@@ -38,8 +38,5 @@
         env:
           VIRTUAL_HOST: "{{ supported_containers[container_name]['VIRTUAL_HOST'] }}"
 
-    - name: Prune Docker images
-      command: docker image prune -a -f
-
-    - name: Prune Docker containers
-      command: docker container prune -a -f
+    - name: Prune Docker
+      command: docker system prune -af
