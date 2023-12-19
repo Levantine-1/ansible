@@ -29,10 +29,8 @@
     - name: Load Docker Image from Tarball
       docker_image:
         load_path: "/tmp/{{ container_name }}_latest.tar"
-        name: "{{ container_name }}"
         source: load
         push: true
-        tag: latest
 
     - name: Run Docker Container
       docker_container:
