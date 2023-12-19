@@ -13,7 +13,7 @@
     - name: Validate Supported Container
       debug:
         msg: "Checking to see if container is supported"
-      failed_when: "container_name == 'nginx-proxy' or container_name not in hostvars['VMWareDockerHosts']['supported_containers']"
+      failed_when: "container_name == 'nginx-proxy' or container_name not in hostvars[groups['VMWareDockerHosts'][0]]['supported_containers']"
 
     - name: Log in to AWS ECR
       shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
