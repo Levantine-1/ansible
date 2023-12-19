@@ -23,6 +23,7 @@
         name: "{{ container_name }}"
         state: stopped
         timeout: 30
+        container_default_behavior: no_defaults
       ignore_errors: yes
 
     - name: Load Docker Image from Tarball
