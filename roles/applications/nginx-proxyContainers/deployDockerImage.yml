@@ -1,0 +1,14 @@
+---
+- name: Deploy Docker Image
+  hosts: VMWareDockerHosts
+  gather_facts: true
+  become: true
+
+  # vars:
+    # variable container_name is defined as an extra var
+
+  tasks:
+    - name: Validate Supported Container
+      debug:
+        msg: "Checking to see if container is supported"
+      failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
