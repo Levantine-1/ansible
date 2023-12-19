@@ -12,3 +12,34 @@
       debug:
         msg: "Checking to see if container is supported"
       failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
+
+    - name: Copy docker image tarball from ansible host to remote host
+      copy:
+        src: "/tmp/{{ container_name }}_latest.tar"
+        dest: "/tmp/{{ container_name }}_latest.tar"
+
+    - name: Stop the old Docker container (if exists)
+      docker_container:
+        name: container_name
+        state: stopped
+        timeout: 30
+      ignore_errors: yes
+
+    - name: Load Docker Image from Tarball
+      docker_image:
+        path: "/tmp/{{ container_name }}_latest.tar"
+        name: {{ container_name }}
+        source: local
+
+    - name: Run Docker Container
+      docker_container:
+        name: thisper-container
+        image: thisper-image:latest
+        env:
+          VIRTUAL_HOST: "{{ supported_containers[container_name]['VIRTUAL_HOST'] }}"
+
+    - name: Prune Docker images
+      command: docker image prune -a -f
+
+    - name: Prune Docker containers
+      command: docker container prune -a -f

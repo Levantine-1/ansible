@@ -36,8 +36,9 @@
 
     - name: Save Docker Image to Tarball
       shell: "docker save {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}:{{ latest_image.stdout }} -o /tmp/{{ container_name }}_latest.tar"
-      register: saved_image
 
-    - name: Docker Image Saved
-      debug:
-        msg: "{{ saved_image.stdout }}"
+    - name: Prune Docker images
+      command: docker image prune -a -f
+
+    - name: Prune Docker containers
+      command: docker container prune -a -f
