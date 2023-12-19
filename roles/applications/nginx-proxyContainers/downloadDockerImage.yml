@@ -2,6 +2,7 @@
 - name: Download Docker Image
   hosts: localhost
   gather_facts: true
+  become: true
 
   vars:
     # variable container_name is defined as an extra var
