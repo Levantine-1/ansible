@@ -1,0 +1,30 @@
+---
+- name: Download Docker Image
+  hosts: localhost
+  gather_facts: true
+
+  vars:
+    # variable container_name is defined as an extra var
+    account_id: "{{ aws.account_id }}"
+    default_region: "{{ aws.default_region }}"
+    ecr_repo: "{{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}"
+
+  tasks:
+    - name: Validate Supported Container
+      debug:
+        msg: "Checking to see if container is supported"
+      failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
+
+    - name: Log in to AWS ECR
+      shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
+
+    - name: Get the latest Docker image from ECR
+      shell: "aws ecr describe-images --repository-name {{ ecr_repo }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageDigest' --output text --region {{ default_region }}"
+      register: latest_image
+
+#    - name: Pull Docker Image from ECR
+#      shell: "docker pull{{ ecr_repo }}:{{ latest_image.stdout }}"
+#      register: pull_image
+
+    - name: Save Docker Image to Tarball
+      shell: "docker save {{ ecr_repo }}:{{ latest_image.stdout }} -o /tmp/{{ container_name }}_latest.tar"

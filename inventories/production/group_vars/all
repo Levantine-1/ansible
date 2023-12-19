@@ -26,3 +26,4 @@ host_entries: |
 
 aws:
     default_region: us-west-2
+    account_id: 361127977446

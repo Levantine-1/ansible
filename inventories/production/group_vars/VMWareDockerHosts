@@ -4,16 +4,13 @@ supported_containers:
       foo: bar
 
   booking-movie-ticket:
-    ecr_repo: 361127977446.dkr.ecr.us-west-2.amazonaws.com/booking-movie-ticket
     env_vars:
       VIRTUAL_HOST: bmt.nhitruong.com
 
   real-estate:
-    ecr_repo: 361127977446.dkr.ecr.us-west-2.amazonaws.com/booking-movie-ticket
     env_vars:
       VIRTUAL_HOST: real-estate.nhitruong.com
 
   thisper:
-    ecr_repo: 361127977446.dkr.ecr.us-west-2.amazonaws.com/booking-movie-ticket
     env_vars:
       VIRTUAL_HOST: thisper.levantine.io
