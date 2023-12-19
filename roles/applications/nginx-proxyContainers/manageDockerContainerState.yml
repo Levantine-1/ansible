@@ -19,6 +19,13 @@
 
 # It's assumed anything after the validate step should work
 
+    - name: Stop Docker containers
+      docker_container:
+        name: "{{ item }}"
+        state: stopped
+      with_items: "{{ container_names }}"
+      when: container_action in ['stop', 'restart']
+
       # This is a special container that needs to be started before any other containers, it also needs special treatment
     - name: Start nginx-proxy container
       docker_container:
@@ -31,7 +38,7 @@
         ports:
           - "80:80"
       when:
-        - container_action == 'start'
+        - container_action in ['start', 'restart']
         - "'nginx-proxy' in container_names"
 
     - name: Start Docker containers
@@ -41,12 +48,6 @@
         env: "{{ supported_containers[item].env_vars | default([]) }}"
       loop: "{{ container_names }}"
       when:
-        - container_action == 'start'
+        - container_action in ['start', 'restart']
         - item != 'nginx-proxy'
 
-    - name: Stop Docker containers
-      docker_container:
-        name: "{{ item }}"
-        state: stopped
-      with_items: "{{ container_names }}"
-      when: container_action == 'stop'

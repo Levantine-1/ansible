@@ -30,7 +30,7 @@
       shell: "docker load --input /tmp/{{ container_name }}_latest.tar | awk '{print $3}'"
       register: loaded_image_name
 
-    - name: Loaded docker iamge name
+    - name: Loaded docker image name
       debug:
         msg: "{{ loaded_image_name.stdout }}"
 
