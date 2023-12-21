@@ -3,11 +3,12 @@
   hosts: VMWareDockerHosts
   become: true
   tasks:
-    - name: Install required packages for Docker
-      apk:
-        name: docker
-        state: present
-        update_cache: yes
+# NOTE: 2023-12-21 Alpine boxes do not have internet at this time, this is to be re-enabled when they do
+#    - name: Install required packages for Docker
+#      apk:
+#        name: docker
+#        state: present
+#        update_cache: yes
 
     - name: Enable and start Docker service
       service:

@@ -3,11 +3,12 @@
   hosts: VMWareDockerHosts
   become: true
   tasks:
-    - name: Ensure dhclient package is installed
-      apk:
-        name: dhclient
-        state: present
-        update_cache: yes
+  # NOTE: 2023-12-21 Alpine boxes do not have internet at this time, this is to be re-enabled when they do
+#    - name: Ensure dhclient package is installed
+#      apk:
+#        name: dhclient
+#        state: present
+#        update_cache: yes
 
     - name: Enable and start dhclient service
       service:
