@@ -1,0 +1,24 @@
+---
+- name: Deploy Nginx Reverse Proxy Configuration Files
+  hosts: Jenkins
+  become: yes
+
+  tasks:
+    - name: Install Nginx
+      package:
+        name: nginx
+        state: present
+
+    - name: Configure Nginx Reverse Proxies
+      template:
+        src: "files/jenkins.conf"
+        dest: "/etc/nginx/conf.d/jenkins.conf.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ domains }}"
+
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
