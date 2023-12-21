@@ -1,0 +1,15 @@
+---
+- name: Ensure DHCP client service is enabled and started (Debian/Ubuntu)
+  hosts: all
+  become: true
+  tasks:
+    - name: Install ISC DHCP client package
+      apt:
+        name: isc-dhcp-client
+        state: present
+
+    - name: Ensure DHCP client service is enabled and started
+      service:
+        name: isc-dhcp-client
+        enabled: yes
+        state: started
