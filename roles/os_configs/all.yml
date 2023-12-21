@@ -8,7 +8,9 @@
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: theiaOneOff.yml
 - import_playbook: ../applications/jenkins/deployReverseProxy.yml
-- import_playbook: alpineSpecific/configureDHCP.yml
-- import_playbook: alpineSpecific/installDocker.yml
-- import_playbook: installDocker.yml
-- import_playbook: configureDHCP.yml
+
+# NOTE: 2023-12-21 Package installs are busted atm, fix this later
+# - import_playbook: alpineSpecific/configureDHCP.yml
+# - import_playbook: alpineSpecific/installDocker.yml
+# - import_playbook: installDocker.yml
+# - import_playbook: configureDHCP.yml

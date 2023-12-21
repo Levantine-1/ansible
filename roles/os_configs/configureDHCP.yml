@@ -3,10 +3,12 @@
   hosts: all:!VMWareDockerHosts
   become: true
   tasks:
-    - name: Install ISC DHCP client package
-      apt:
-        name: isc-dhcp-client
-        state: present
+
+  # NOTE: 2023-12-21 This package isn't available, but not critical so will investigate later
+#    - name: Install ISC DHCP client package
+#      apt:
+#        name: isc-dhcp-client
+#        state: present
 
     - name: Ensure DHCP client service is enabled and started
       service:
