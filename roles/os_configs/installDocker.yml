@@ -3,24 +3,22 @@
   hosts: Jenkins:!VMWareDockerHosts
   become: true
   tasks:
-    - name: Add Docker GPG key
+- name: Add Docker GPG apt Key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
 
-    - name: Add Docker APT repository
+    - name: Add Docker Repository
       apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
         state: present
 
-    - name: Update APT package cache
-      apt:
-        update_cache: yes
-
-    - name: Install Docker
+    - name: Update apt and install docker-ce
       apt:
         name: docker-ce
-        state: present
+        state: latest
+        update_cache: true
+
 
     - name: Ensure Docker service is enabled and started
       service:
