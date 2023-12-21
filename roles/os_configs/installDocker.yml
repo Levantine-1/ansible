@@ -4,6 +4,7 @@
   become: true
   tasks:
 
+# NOTE: 2023-12-21 DockerCE package is not available, since this is not critical, gonna investigate later
 #    - name: Add Docker GPG apt Key
 #      apt_key:
 #        url: https://download.docker.com/linux/ubuntu/gpg
