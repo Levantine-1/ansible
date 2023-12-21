@@ -12,7 +12,7 @@
     - name: Configure Nginx Reverse Proxies
       template:
         src: "files/jenkins.conf"
-        dest: "/etc/nginx/conf.d/jenkins.conf.conf"
+        dest: "/etc/nginx/conf.d/jenkins.conf"
         owner: root
         group: root
         mode: '0644'
