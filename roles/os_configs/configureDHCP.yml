@@ -1,6 +1,6 @@
 ---
-- name: Ensure DHCP client service is enabled and started (Debian/Ubuntu)
-  hosts: all
+- name: Ensure DHCP client service is enabled and started
+  hosts: all:!VMWareDockerHosts
   become: true
   tasks:
     - name: Install ISC DHCP client package
