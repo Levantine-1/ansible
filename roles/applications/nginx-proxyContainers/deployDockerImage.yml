@@ -42,7 +42,7 @@
 
     - name: Run Docker Container
       docker_container:
-        name: thisper
+        name: "{{ container_name }}"
         image: "{{ loaded_image_name.stdout }}"
         env:
           VIRTUAL_HOST: "{{ supported_containers[container_name]['env_vars']['VIRTUAL_HOST'] }}"
