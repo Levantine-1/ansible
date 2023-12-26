@@ -14,3 +14,7 @@ supported_containers:
   thisper:
     env_vars:
       VIRTUAL_HOST: thisper.levantine.io
+
+  education-platform:
+    env_vars:
+      VIRTUAL_HOST: education-platform.nhitruong.com
