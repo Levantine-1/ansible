@@ -21,7 +21,7 @@
     # and after that the default user will be removed. Subsequent runs will use the new users to login.
     - name: Attempt Login with default user
       ansible.builtin.expect:
-        command: "sshpass -p '{{ default_password }}' ssh {{ default_user }}@{{ inventory_hostname }}"
+        command: "sshpass -p '{{ default_password }}' ssh -o StrictHostKeyChecking=no {{ default_user }}@{{ inventory_hostname }}"
         responses:
           "password": "{{ default_password }}"
           "yes/no": "yes"
