@@ -12,7 +12,24 @@
       - name: example
         authorized_key: example
 
+# NOTE: This default user is only used once to initialize the users on a new VM, after that it will be removed.
+    default_user: debian
+    default_password: password
+
   tasks:
+    # The golden image only has a default user, so we need to login with the default user to create the new users
+    # and after that the default user will be removed. Subsequent runs will use the new users to login.
+    - name: Attempt Login with default user
+      ansible.builtin.expect:
+        command: "sshpass -p '{{ default_password }}' ssh {{ default_user }}@{{ inventory_hostname }}"
+        responses:
+          "password": "{{ default_password }}"
+          "yes/no": "yes"
+          "continue connecting": "yes"
+      delegate_to: localhost
+      register: ssh_result
+      ignore_errors: yes
+
     - name: Create users
       user:
         name: "{{ item.name }}"
