@@ -1,0 +1,9 @@
+---
+- name: Modify Hostname
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Set hostname to subdomain
+      hostname:
+        name: "{{ inventory_hostname.split('.')[0] }}"

@@ -1,26 +1,36 @@
 ---
-- name: Ensure Docker is installed and runs on startup (Ubuntu excluding group2)
-  hosts: Jenkins:!VMWareDockerHosts
+- name: Install Docker
+  hosts: Jenkins:VMWareDockerHosts
   become: true
+
   tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
 
-# NOTE: 2023-12-21 DockerCE package is not available, since this is not critical, gonna investigate later
-#    - name: Add Docker GPG apt Key
-#      apt_key:
-#        url: https://download.docker.com/linux/ubuntu/gpg
-#        state: present
-#
-#    - name: Add Docker Repository
-#      apt_repository:
-#        repo: deb https://download.docker.com/linux/ubuntu focal stable
-#        state: present
-#
-#    - name: Update apt and install docker-ce
-#      apt:
-#        name: docker-ce
-#        state: latest
-#        update_cache: true
+    - name: Install packages required for Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - software-properties-common
 
+    - name: Add Docker's official GPG key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: docker-ce docker-ce-cli containerd.io
+        state: present
 
     - name: Ensure Docker service is enabled and started
       service:
