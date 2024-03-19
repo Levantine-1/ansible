@@ -42,6 +42,7 @@
         state: latest
         update_cache: true
 
-    - name: Install Docker Module for Python
-      pip:
-        name: docker
+# NOTE: 2024-03-19 We probably don't need the python docker module since we're not developing on this machine
+#    - name: Install Docker Module for Python
+#      pip:
+#        name: docker
