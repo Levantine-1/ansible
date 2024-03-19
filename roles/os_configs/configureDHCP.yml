@@ -1,14 +1,20 @@
 ---
 - name: Ensure DHCP client service is enabled and started
-  hosts: all:!VMWareDockerHosts
+  hosts: all
   become: true
   tasks:
 
-  # NOTE: 2023-12-21 This package isn't available, but not critical so will investigate later
-#    - name: Install ISC DHCP client package
-#      apt:
-#        name: isc-dhcp-client
-#        state: present
+    - name: Install dhclient package
+      apt:
+        name: isc-dhcp-client
+        state: present
+      register: dhcp_client_installed
+
+    - name: Restart networking service
+      service:
+        name: networking
+        state: restarted
+      when: dhcp_client_installed.changed
 
     - name: Ensure DHCP client service is enabled and started
       service:

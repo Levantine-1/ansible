@@ -5,13 +5,9 @@
 # - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by PF Sense
 - import_playbook: configureHostFile.yml # NOTE: This will soon be deprecated by PF Sense
 - import_playbook: configureHostname.yml
+- import_playbook: configureDHCP.yml
 - import_playbook: deploySSLCerts.yml
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: theiaOneOff.yml
 - import_playbook: ../applications/jenkins/deployReverseProxy.yml
-
-# NOTE: 2023-12-21 Package installs are busted atm, fix this later
-# - import_playbook: alpineSpecific/configureDHCP.yml
-# - import_playbook: alpineSpecific/installDocker.yml
-# - import_playbook: installDocker.yml
-# - import_playbook: configureDHCP.yml
+- import_playbook: installDocker.yml
