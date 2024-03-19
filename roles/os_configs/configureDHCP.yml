@@ -16,8 +16,11 @@
         state: restarted
       when: dhcp_client_installed.changed
 
-    - name: Ensure DHCP client service is enabled and started
-      service:
-        name: dhclient
-        enabled: yes
-        state: started
+# NOTE: As of 2024-03-19 dhclient isn't set up as a systemd service but the package
+# is installed and should work by default, so disabling this for now unless there's a problem.
+
+#    - name: Ensure DHCP client service is enabled and started
+#      service:
+#        name: dhclient
+#        enabled: yes
+#        state: started

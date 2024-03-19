@@ -7,3 +7,9 @@
     - name: Set hostname to subdomain
       hostname:
         name: "{{ inventory_hostname.split('.')[0] }}"
+
+    - name: Update /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1.*'
+        line: "127.0.1.1 {{ inventory_hostname.split('.')[0] }}"
