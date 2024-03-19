@@ -4,11 +4,6 @@
   become: yes
 
   tasks:
-    - name: Set Timezone to UTC on Red Hat/CentOS
+    - name: Set Timezone to UTC
       timezone:
         name: UTC
-      when: ansible_distribution != 'Alpine'
-
-    - name: Set Timezone to UTC on Alpine Linux
-      command: ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-      when: ansible_distribution == 'Alpine'
