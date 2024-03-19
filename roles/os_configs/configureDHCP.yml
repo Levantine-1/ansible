@@ -18,6 +18,6 @@
 
     - name: Ensure DHCP client service is enabled and started
       service:
-        name: isc-dhcp-client
+        name: dhclient
         enabled: yes
         state: started
