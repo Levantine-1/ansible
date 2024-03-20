@@ -1,6 +1,6 @@
 ---
 - name: Install/update basic packages
-  hosts: all:!Jenkins
+  hosts: all
   gather_facts: yes
   become: yes
 
