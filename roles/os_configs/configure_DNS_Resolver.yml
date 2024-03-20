@@ -1,0 +1,14 @@
+---
+- name: Configure DNS resolver
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Create DNS resolver configuration file
+      copy:
+        content: |
+          nameserver 192.168.1.1
+        dest: /etc/resolvconf/resolv.conf.d/pf-sense-router
+
+    - name: Update resolvconf
+      command: resolvconf -u

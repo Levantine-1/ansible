@@ -7,6 +7,7 @@
 - import_playbook: configureHostFile.yml # NOTE: This will soon be deprecated by PF Sense
 - import_playbook: configureHostname.yml
 - import_playbook: configureDHCP.yml
+- import_playbook: configure_DNS_Resolver.yml
 - import_playbook: deploySSLCerts.yml
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: theiaOneOff.yml
