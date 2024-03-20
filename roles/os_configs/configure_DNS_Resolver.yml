@@ -4,6 +4,11 @@
   become: yes
 
   tasks:
+    - name: Create resolvconf directory
+      file:
+        path: /etc/resolvconf/resolv.conf.d
+        state: directory
+
     - name: Create DNS resolver configuration file
       copy:
         content: |
