@@ -1,0 +1,32 @@
+- name: Create groups and configure group permissions
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Create group with default sudo permissions
+      group:
+        name: sudo_all
+        state: present
+
+    - name: Configure sudoers file for sudo_all group
+      copy:
+        content: "%sudo_all ALL=(ALL) NOPASSWD: ALL"
+        dest: /etc/sudoers.d/sudo_all
+        owner: root
+        group: root
+        mode: '0440'
+      become: yes
+
+    - name: Create group with restricted permissions
+      group:
+        name: limited_group
+        state: present
+
+    - name: Ensure limited_group can only access their own home directory
+      copy:
+        content: "%limited_group ALL=(ALL) NOPASSWD: /bin/ls"
+        dest: /etc/sudoers.d/limited_group
+        owner: root
+        group: root
+        mode: '0440'
+      become: yes

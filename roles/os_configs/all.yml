@@ -1,4 +1,5 @@
 --- # This is a wrapper playbook to run the bootstrap playbooks
+- import_playbook: user_groups.yml
 - import_playbook: users.yml
 - import_playbook: installBasicPackages.yml # This is going to be called manually instead of every time due to jenkins restarting and a few weird unexpected stuff happening
 - import_playbook: configure_time.yml
