@@ -7,7 +7,6 @@
   vars:
     basic_packages:
       - htop
-      - openssh-server
       - net-tools
 
   tasks:
