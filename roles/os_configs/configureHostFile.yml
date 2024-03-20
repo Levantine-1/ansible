@@ -10,15 +10,10 @@
       shell: cat /etc/hosts
       register: current_hosts
       changed_when: false
-      check_mode: false
 
     - name: Set the content of the /etc/hosts file
       set_fact:
         hosts_content: "{{ current_hosts.stdout }}"
-
-    - name: Show current /etc/hosts content
-      debug:
-        var: hosts_content
 
     - name: Add or update host entries
       blockinfile:
