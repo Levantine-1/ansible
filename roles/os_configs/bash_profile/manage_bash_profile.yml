@@ -1,0 +1,15 @@
+---
+- name: Manage /etc/profile
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Copy profile template
+      template:
+        src: profile.j2
+        dest: /etc/profile
+      notify: Reload profile
+
+  handlers:
+    - name: Reload profile
+      command: ". /etc/profile"
