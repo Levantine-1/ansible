@@ -13,3 +13,4 @@
   handlers:
     - name: Reload profile
       command: ". /etc/profile"
+      become: yes
