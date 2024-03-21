@@ -10,15 +10,15 @@
         state: present
 
     - name: Get the disk name of the main disk
-      command: "df --output=source / | tail -n 1 | cut -d '/' -f3"
+      shell: "df --output=source / | tail -n 1 | cut -d '/' -f3"
       register: disk_name
       changed_when: false
 
     - name: Get unallocated space on the disk
-      command: "parted -s /dev/{{ disk_name.stdout }} print free | grep 'Free Space' | awk '{print $3}'"
+      shell: "parted -s /dev/{{ disk_name.stdout }} print free | grep 'Free Space' | awk '{print $3}'"
       register: unallocated_space
       changed_when: false
 
     - name: Resize the main partition if unallocated space is available
-      command: "parted -s /dev/{{ disk_name.stdout }} resizepart 1 {{ unallocated_space.stdout }}B"
+      shell: "parted -s /dev/{{ disk_name.stdout }} resizepart 1 {{ unallocated_space.stdout }}B"
       when: unallocated_space.stdout != ""
