@@ -12,5 +12,5 @@
 
   handlers:
     - name: Reload profile
-      command: "sudo . /etc/profile"
+      command: "sudo bash /etc/profile"
       become: yes
