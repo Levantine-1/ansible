@@ -103,7 +103,7 @@
           - "{{start_of_swap_space_bytes}}"
           - "{{start_of_swap_space_bytes.stdout}}"
           - "{{disk_size_bytes}}"
-          - "{{disk_size_bytes.stdout}}"
+          #- "{{disk_size_bytes.stdout}}"
 
     - name: Get disk swap partition start percentage
       ansible.builtin.set_fact:
