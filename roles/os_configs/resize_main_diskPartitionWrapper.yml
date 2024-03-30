@@ -1,6 +1,8 @@
 ---
 - name: Wrapper Playbook for resizing main disk partition
   hosts: all
+  become: yes
+  gather_facts: yes
 
   # WARNING! This playbook ASSUMES that the host it's targeting is built from the known base image
   # Meaning it assumes the following:
