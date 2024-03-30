@@ -113,7 +113,7 @@
         msg: "disk_swap_partition_start_p: {{ disk_swap_partition_start_percent.stdout }}"
 
     - name: Create a swap partition using remaining free space
-      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 linux-swap --align optimal"
+      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
 
     - name: Format the swap partition
       ansible.builtin.command: "sudo mkswap /dev/sda2"
