@@ -19,6 +19,8 @@
     # NOTE: Moved to the wrapper playbook and the below will be executed as a list of tasks.
 #  tasks:
 
+# NOTE TO FUTURE SELF: Consider replacing the parted shell commands with the parted module for better.
+# https://docs.ansible.com/ansible/latest/collections/community/general/parted_module.html
   ################### DELETING SWAP PARTITION ###################
 
     - name: Turn off swap
