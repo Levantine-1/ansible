@@ -55,12 +55,12 @@
         - 5 # Swap Partition
       ignore_errors: yes # Assuming the partitions may not exist
 
-#    - name: Update initramfs
-#      ansible.builtin.command: "sudo update-initramfs -u"
-#
-#    - name: Reboot to apply changes
-#      ansible.builtin.reboot:
-#        reboot_timeout: 300
+    - name: Update initramfs
+      ansible.builtin.command: "sudo update-initramfs -u"
+
+    - name: Reboot to apply changes
+      ansible.builtin.reboot:
+        reboot_timeout: 300
 
     - name: Get total size of disk
       ansible.builtin.shell: lsblk -b --output SIZE -n -d /dev/sda
@@ -116,7 +116,7 @@
       register: start_of_swap_space
 
     - name: Get end of swap space
-      ansible.builtin.shell: "sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | awk '{print $2}' | tr -d 'B'"
+      ansible.builtin.shell: "sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | awk '{print $2}'"
       register: end_of_swap_space
 
     - name: Debug intermediate values for disk_percent_free_for_swap calculation
