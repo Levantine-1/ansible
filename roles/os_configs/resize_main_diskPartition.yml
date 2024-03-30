@@ -37,15 +37,11 @@
     - name: Turn off swap
       ansible.builtin.command: "sudo swapoff -a"
 
-    - name: Comment out swap entry in /etc/fstab
-      ansible.builtin.lineinfile:
-        path: /etc/fstab
-        insertafter: previous
-        line: "# {{ item }}"
-        insertbefore: next
-      with_lines: cat /etc/fstab | grep 'UUID.*swap' | grep -v '#'
-      vars:
-        comment: "This was commented out by the ansible resize_main_diskPartition.yml playbook"
+    - name: Comment out UUID swap entries in /etc/fstab
+      replace:
+        dest: /etc/fstab
+        regexp: '^(?!#).*UUID.*swap'
+        replace: '#&'
 
     - name: Delete extended and swap partitions
       ansible.builtin.parted:
