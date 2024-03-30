@@ -40,10 +40,12 @@
     - name: Comment out swap entry in /etc/fstab
       ansible.builtin.lineinfile:
         path: /etc/fstab
-        regexp: '^UUID=[a-f0-9\-]+\s+swap\s+swap\s+.*$'
+        insertafter: previous
         line: "# {{ item }}"
-      with_lines: cat /etc/fstab | grep '^UUID=[a-f0-9\-]+\s+swap\s+swap\s+.*$'
-      ignore_errors: yes
+        insertbefore: next
+      with_lines: cat /etc/fstab | grep 'UUID.*swap' | grep -v '#'
+      vars:
+        comment: "This was commented out by the ansible resize_main_diskPartition.yml playbook"
 
     - name: Delete extended and swap partitions
       ansible.builtin.parted:
