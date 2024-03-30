@@ -1,5 +1,5 @@
 ---
-- name: Check available disk space and resize if unallocated space is available
+# - name: Resize partitions and swap space
 #  hosts: all
 #  become: yes
 #  gather_facts: yes
