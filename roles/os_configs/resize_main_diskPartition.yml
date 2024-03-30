@@ -105,7 +105,7 @@
 
     # Turns out neither ansible nor bash can handle math with large floating point numbers, so I'm going to have to do it in python.
     - name: Get disk swap partition start percentage
-      ansible.builtin.shell: python3 -c "print(round(({{start_of_swap_space_bytes.stdout}}/{{disk_size_bytes}})*100))"
+      ansible.builtin.shell: python3 -c "print(str(round(({{start_of_swap_space_bytes.stdout}}/{{disk_size_bytes}})*100))+'%')"
       register: disk_swap_partition_start_percent
 
     - name: Debug disk swap partition start percentage
