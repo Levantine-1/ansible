@@ -71,7 +71,6 @@
       ansible.builtin.set_fact: # Convert memory to bytes, then calculate ratio. I'm trying to ensure the swap is the same size as the physical memory.
         disk_percent_free_for_swap: "{{ ((ansible_memtotal_mb | int * 1024) / (disk_size_bytes | int)) * 100 | round(0, 'ceil') }}"
 
-
     - name: Grow the main partition leaving some space for swap
       ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ memory_disk_ratio }}"
 
