@@ -76,12 +76,12 @@
         msg:
           - "ansible_memtotal_mb: {{ ansible_memtotal_mb }}"
           - "disk_size_bytes: {{ disk_size_bytes }}"
-          - "Calculated disk_percent_free_for_swap: { { ((ansible_memtotal_mb | int * 1024) / (disk_size_bytes | int)) * 100 | int } }"
+          - "Calculated disk_percent_free_for_swap: {{ ((ansible_memtotal_mb * 1024 * 1024) / disk_size_bytes) * 100 | round(0, 'ceil') }}"
 
 
     - name: Calculate memory-to-disk ratio
       ansible.builtin.set_fact: # Convert memory to bytes, then calculate ratio. I'm trying to ensure the swap is the same size as the physical memory.
-       disk_percent_free_for_swap: "{ { ((ansible_memtotal_mb | int * 1024) / (disk_size_bytes | int)) * 100 | int } }"
+       disk_percent_free_for_swap: "{{ ((ansible_memtotal_mb * 1024 * 1024) / disk_size_bytes) * 100 | round(0, 'ceil') }}"
 
     - name: Debug disk percent free for swap
       ansible.builtin.debug:
