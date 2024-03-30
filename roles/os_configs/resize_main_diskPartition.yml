@@ -12,6 +12,9 @@
 # 3. Main partition at /dev/sda1
 # 4. Extended Partition at /dev/sda2
 # 5. Swap Partition at /dev/sda5
+# 6. This playbook may not work for VMs with very large disks due to the way the disk_percent_free_for_swap is calculated.
+#     The growpart tool only has --free-percent parameter instead of a fixed amount of space to leave for swap.
+#     As such it should be used on VMs with disks between 7-100 GB in size.
 
 # NOTE: The below is moved to wrapper playbook.
 #  vars:
@@ -70,6 +73,13 @@
     - name: Parse disk size
       ansible.builtin.set_fact:
         disk_size_bytes: "{{ disk_size.stdout_lines[0] | int }}"
+
+    - name: Debug data types for calculation
+      debug:
+        msg: "{{ item }} is of type {{ item | type_debug }}"
+      loop:
+        - ansible_memtotal_mb
+        - disk_size_bytes
 
     - name: Debug intermediate values for disk_percent_free_for_swap calculation
       ansible.builtin.debug:
