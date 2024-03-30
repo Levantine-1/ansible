@@ -97,12 +97,36 @@
       ansible.builtin.shell: "printf '%.f\n' $( expr $(sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $1}'))"
       register: start_of_swap_space_bytes
 
+    - name: Debug some values
+      ansible.builtin.debug:
+          msg:
+          - "start_of_swap_space_bytes"
+          - "start_of_swap_space_bytes.stdout"
+          - "disk_size_bytes"
+          - "disk_size_bytes.stdout"
+
     - name: Get disk swap partition start percentage
       ansible.builtin.set_fact:
         disk_swap_partition_start_p: "{{ (start_of_swap_space_bytes | int / disk_size_bytes | int) * 100 }}"
 
+    - name: Debug disk swap partition start percentage
+      ansible.builtin.debug:
+        msg: "disk_swap_partition_start_p: {{ disk_swap_partition_start_p }}"
+
+    - name: Get disk swap partition start percentage 2
+      ansible.builtin.set_fact:
+        disk_swap_partition_start_p2: "{{ (start_of_swap_space_bytes / disk_size_bytes) * 100 }}"
+
+    - name: Debug disk swap partition start percentage 2
+      ansible.builtin.debug:
+        msg: "disk_swap_partition_start_p: {{ disk_swap_partition_start_p2 }}"
+
     - name: Round the freakin number FFS 2
       ansible.builtin.shell: printf "%.f\n" "{{ disk_swap_partition_start_p }}"
+      register: disk_swap_partition_start_percent
+
+    - name: Round the freakin number FFS 2
+      ansible.builtin.shell: printf "%.f\n" "{{ disk_swap_partition_start_p2 }}"
       register: disk_swap_partition_start_percent
 
     - name: Debug intermediate values for disk_percent_free_for_swap calculation
