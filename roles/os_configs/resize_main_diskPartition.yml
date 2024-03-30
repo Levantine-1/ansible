@@ -45,7 +45,7 @@
 
     - name: Reboot to apply changes
       ansible.builtin.reboot:
-        reboot_timeout: 300
+        reboot_timeout: 600
 
     ################### EXPANDING PRIMARY PARTITION ###################
 
@@ -117,7 +117,7 @@
       ignore_errors: yes # For some reason it exits code 1, but the partition is created
 
     - name: Verify the swap partition was created
-      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep linux-swap"
+      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep swap"
       # If there are no matches, the swap partition was not created and will return exit code 1, failing the task
 
     - name: Format the swap partition
