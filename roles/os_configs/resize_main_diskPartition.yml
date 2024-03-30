@@ -37,11 +37,11 @@
     - name: Turn off swap
       ansible.builtin.command: "sudo swapoff -a"
 
-    - name: Comment out UUID swap entries in /etc/fstab
-      replace:
-        dest: /etc/fstab
-        regexp: '^(?!#).*UUID.*swap'
-        replace: '#&'
+    - name: Remove lines containing UUID swap entries in /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        state: absent
+        regexp: '^.*UUID.*\sswap\s\w+'
 
     - name: Delete extended and swap partitions
       ansible.builtin.parted:
@@ -124,7 +124,7 @@
           - "end_of_swap_space: {{ end_of_swap_space.stdout }}"
 
     - name: Create a swap partition using remaining free space
-      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{start_of_swap_space.stdout}} {{end_of_swap_space.stdout}} set 2 linux-swap on align-check optimal 1"
+      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{start_of_swap_space.stdout}} {{end_of_swap_space.stdout}} set 2 linux-swap on --align optimal"
 
     - name: Get UUID of the newly created swap partition
       ansible.builtin.command: "sudo blkid -o value -s UUID /dev/sda2"
