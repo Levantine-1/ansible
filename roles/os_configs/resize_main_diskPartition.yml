@@ -112,7 +112,7 @@
 
     - name: Get start of swap space
       # Get space from the start of the unallocated space to the end of the disk
-      ansible.builtin.shell: "sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | awk '{print $1}' | tr -d 'B'"
+      ansible.builtin.shell: "sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | awk '{print $1}'"
       register: start_of_swap_space
 
     - name: Get end of swap space
