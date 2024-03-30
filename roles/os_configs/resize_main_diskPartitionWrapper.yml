@@ -35,7 +35,7 @@
       when: not lock_file_stat.stat.exists
 
     - name: Run resize partition playbook if lock file does not exist and if more than 1GB unallocated space is available
-      ansible.builtin.import_playbook: resize_main_diskPartition.yaml
+      include_tasks: "resize_main_diskPartition.yaml"
       when:
         - not lock_file_stat.stat.exists
-        - unallocated_space.stdout > 0
+        - unallocated_space.stdout | int > 1  # Check if unallocated space is greater than 1GB
