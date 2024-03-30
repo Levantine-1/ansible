@@ -19,8 +19,8 @@
 #      - cloud-guest-utils # This includes the growpart utility
 #      - parted
 
+    # NOTE: Moved to the wrapper playbook and the below will be executed as a list of tasks.
 #  tasks:
-    # NOTE: Moved to the wrapper playbook.
 #    - name: Install Required Packages
 #      package:
 #        name: "{{ required_packages }}"
@@ -40,6 +40,7 @@
         regexp: '^UUID=[a-f0-9\-]+\s+swap\s+swap\s+.*$'
         line: "# {{ item }}"
       with_lines: cat /etc/fstab | grep '^UUID=[a-f0-9\-]+\s+swap\s+swap\s+.*$'
+      ignore_errors: yes
 
     - name: Delete extended and swap partitions
       ansible.builtin.parted:
