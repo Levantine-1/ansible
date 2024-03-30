@@ -133,8 +133,9 @@
         line: "UUID={{ swap_uuid.stdout.strip() }}   none   swap   sw   0   0"
         state: present
 
-    - name: Re-enable swap
-      ansible.builtin.command: "sudo swapon -a"
+# For some reason it's refering to the old UUID but a reboot in the next steps should fix it and re-enable this
+#    - name: Re-enable swap
+#      ansible.builtin.command: "sudo swapon -a"
 
   ################### CLEAN UP STEPS ###################
 
