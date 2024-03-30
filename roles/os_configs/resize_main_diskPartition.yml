@@ -126,7 +126,7 @@
           - "end_of_swap_space: {{ end_of_swap_space.stdout }}"
 
     - name: Create a swap partition using remaining free space
-      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{ start_of_swap_space.stdout }} {{ end_of_swap_space.stdout }}
+      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{ start_of_swap_space.stdout }} {{ end_of_swap_space.stdout }}"
 
     - name: Get UUID of the newly created swap partition
       ansible.builtin.command: "sudo blkid -o value -s UUID /dev/sda2"
