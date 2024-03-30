@@ -1,8 +1,9 @@
 ---
 - name: Check available disk space and resize if unallocated space is available
-  hosts: all
-  become: yes
-  gather_facts: yes
+#  hosts: all
+#  become: yes
+#  gather_facts: yes
+  #NOTE: The above are assumed from the wrapper as we cannot have conflicting actions, so they're commented out here.
 
 # WARNING! This playbook ASSUMES that the host it's targeting is built from the known base image
 # Meaning it assumes the following:
