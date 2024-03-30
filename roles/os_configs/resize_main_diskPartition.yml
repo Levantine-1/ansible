@@ -19,7 +19,7 @@
 #      - cloud-guest-utils # This includes the growpart utility
 #      - parted
 
-  tasks:
+#  tasks:
     # NOTE: Moved to the wrapper playbook.
 #    - name: Install Required Packages
 #      package:
