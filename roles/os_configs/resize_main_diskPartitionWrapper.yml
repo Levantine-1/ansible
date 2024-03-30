@@ -1,0 +1,41 @@
+---
+- name: Wrapper Playbook for resizing main disk partition
+  hosts: all
+
+  # WARNING! This playbook ASSUMES that the host it's targeting is built from the known base image
+  # Meaning it assumes the following:
+  # 1. All partitions listed are in order on disk from "Start of Disk" to "End of Disk"
+  # 2. Only 1 Disk mounted on /dev/sda
+  # 3. Main partition at /dev/sda1
+  # 4. Extended Partition at /dev/sda2
+  # 5. Swap Partition at /dev/sda5
+
+  tasks:
+    - name: Check if lock file exists
+      ansible.builtin.stat:
+        path: /var/tmp/resize_partition_playbook_lock.txt
+      register: lock_file_stat
+
+    - name: Install Parted Package
+      ansible.builtin.package:
+        name: parted
+        state: present
+      when: not lock_file_stat.stat.exists
+
+    - name: Get unallocated space on the disk
+      #
+      ansible.builtin.shell: "sudo parted -s /dev/sda unit GiB print free | grep 'Free Space' | tail -1 | awk '{print $3}' | tr -d 'GiB' |  awk '{print int($1+0.5)}'"
+      register: unallocated_space
+      changed_when: false
+      when: not lock_file_stat.stat.exists
+
+    - name: Debug unallocated space
+      ansible.builtin.debug:
+        msg: "Unallocated Disk Space: {{ unallocated_space.stdout }}"
+      when: not lock_file_stat.stat.exists
+
+    - name: Run resize partition playbook if lock file does not exist and if more than 1GB unallocated space is available
+      ansible.builtin.import_playbook: resize_main_diskPartition.yaml
+      when:
+        - not lock_file_stat.stat.exists
+        - unallocated_space.stdout > 0

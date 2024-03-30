@@ -2,23 +2,103 @@
 - name: Check available disk space and resize if unallocated space is available
   hosts: all
   become: yes
+  gather_facts: yes
+
+# WARNING! This playbook ASSUMES that the host it's targeting is built from the known base image
+# Meaning it assumes the following:
+# 1. All partitions listed are in order on disk from "Start of Disk" to "End of Disk"
+# 2. Only 1 Disk mounted on /dev/sda
+# 3. Main partition at /dev/sda1
+# 4. Extended Partition at /dev/sda2
+# 5. Swap Partition at /dev/sda5
+
+  vars:
+    required_packages:
+      - cloud-guest-utils # This includes the growpart utility
+      - parted
 
   tasks:
-    - name: Install parted disk utility tool
+    - name: Install Required Packages
       package:
-        name: parted
+        name: "{{ required_packages }}"
         state: present
 
-    - name: Get the disk name of the main disk
-      shell: "df --output=source / | tail -n 1 | cut -d '/' -f3"
-      register: disk_name
-      changed_when: false
+#    - name: Get the disk name of the main disk partiton
+#      shell: "df --output=source / | tail -n 1 | cut -d '/' -f3"
+#      register: main_disk_partition
+#      changed_when: false
 
-    - name: Get unallocated space on the disk
-      shell: "parted -s /dev/{{ disk_name.stdout }} print free | grep 'Free Space' | awk '{print $3}'"
-      register: unallocated_space
-      changed_when: false
+    - name: Turn off swap
+      ansible.builtin.command: "sudo swapoff -a"
 
-    - name: Resize the main partition if unallocated space is available
-      shell: "parted -s /dev/{{ disk_name.stdout }} resizepart 1 {{ unallocated_space.stdout }}B"
-      when: unallocated_space.stdout != ""
+    - name: Comment out swap entry in /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^UUID=[a-f0-9\-]+\s+swap\s+swap\s+.*$'
+        line: "# {{ item }}"
+      with_lines: cat /etc/fstab | grep '^UUID=[a-f0-9\-]+\s+swap\s+swap\s+.*$'
+
+    - name: Delete extended and swap partitions
+      ansible.builtin.parted:
+        device: /dev/sda
+        number: "{{ item }}"
+        state: absent
+      loop:
+        - 2 # Extended Partition
+        - 5 # Swap Partition
+
+    - name: Update initramfs
+      ansible.builtin.command: "sudo update-initramfs -u"
+
+    - name: Reboot to apply changes
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+
+    - name: Get total size of disk
+      ansible.builtin.shell: lsblk -b --output SIZE -n -d /dev/sda
+      register: disk_size
+
+    - name: Parse disk size
+      ansible.builtin.set_fact:
+        disk_size_bytes: "{{ disk_size.stdout_lines[0] | int }}"
+
+    - name: Calculate memory-to-disk ratio
+      ansible.builtin.set_fact: # Convert memory to bytes, then calculate ratio. I'm trying to ensure the swap is the same size as the physical memory.
+        disk_percent_free_for_swap: "{{ ((ansible_memtotal_mb * 1024) / disk_size_bytes) * 100 | round(0, 'ceil') }}"
+
+    - name: Grow the main partition leaving some space for swap
+      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ memory_disk_ratio }}"
+
+    - name: Resize the main filesystem
+      ansible.builtin.command: "sudo resize2fs /dev/sda1"
+
+    - name: Create a swap partition using remaining free space
+      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap -1 100%"
+
+    - name: Get UUID of the newly created swap partition
+      ansible.builtin.command: "sudo blkid -o value -s UUID /dev/sda2"
+      register: swap_uuid
+
+    - name: Add swap entry to /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "UUID={{ swap_uuid.stdout.strip() }}   none   swap   sw   0   0"
+        state: present
+
+    - name: Re-enable swap
+      ansible.builtin.command: "sudo swapon -a"
+
+    - name: Update initramfs
+      ansible.builtin.command: "sudo update-initramfs -u"
+
+    - name: Reboot to apply changes
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+
+    - name: Create lock file
+      ansible.builtin.copy:
+        content: |
+          This is a lock file to prevent multiple runs of the resize partition task
+          from the ansible playbook "roles/os_configs/resize_main_diskPartition.yml"
+          This is meant to be run only once when the VM is created and bootstrapped.
+        dest: /var/tmp/resize_partition_playbook_lock.txt

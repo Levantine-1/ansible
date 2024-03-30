@@ -2,7 +2,7 @@
 - import_playbook: user_groups.yml
 - import_playbook: users.yml
 - import_playbook: bash_profile/manage_bash_profile.yml
-- import_playbook: resize_main_diskPartition.yml
+- import_playbook: resize_main_diskPartitionWrapper.yml
 - import_playbook: installBasicPackages.yml
 - import_playbook: configure_time.yml
 # - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by PF Sense
