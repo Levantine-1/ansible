@@ -42,4 +42,4 @@
       include_tasks: "resize_main_diskPartition.yml"
       when:
         - not lock_file_stat.stat.exists
-        - unallocated_space.stdout | int > 1  # Check if unallocated space is greater than 1GB
+        - unallocated_space.stdout | int > 0  # Check if unallocated space is greater than 1GB

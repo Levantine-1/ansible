@@ -40,12 +40,12 @@
         - 5 # Swap Partition
       ignore_errors: yes # Assuming the partitions may not exist
 
-    - name: Update initramfs
-      ansible.builtin.command: "sudo update-initramfs -u"
-
-    - name: Reboot to apply changes
-      ansible.builtin.reboot:
-        reboot_timeout: 300
+#    - name: Update initramfs
+#      ansible.builtin.command: "sudo update-initramfs -u"
+#
+#    - name: Reboot to apply changes
+#      ansible.builtin.reboot:
+#        reboot_timeout: 300
 
     ################### EXPANDING PRIMARY PARTITION ###################
 
