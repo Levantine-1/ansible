@@ -13,16 +13,18 @@
 # 4. Extended Partition at /dev/sda2
 # 5. Swap Partition at /dev/sda5
 
-  vars:
-    required_packages:
-      - cloud-guest-utils # This includes the growpart utility
-      - parted
+# NOTE: The below is moved to wrapper playbook.
+#  vars:
+#    required_packages:
+#      - cloud-guest-utils # This includes the growpart utility
+#      - parted
 
   tasks:
-    - name: Install Required Packages
-      package:
-        name: "{{ required_packages }}"
-        state: present
+    # NOTE: Moved to the wrapper playbook.
+#    - name: Install Required Packages
+#      package:
+#        name: "{{ required_packages }}"
+#        state: present
 
 #    - name: Get the disk name of the main disk partiton
 #      shell: "df --output=source / | tail -n 1 | cut -d '/' -f3"

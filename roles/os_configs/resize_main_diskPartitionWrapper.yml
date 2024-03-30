@@ -11,6 +11,10 @@
   # 3. Main partition at /dev/sda1
   # 4. Extended Partition at /dev/sda2
   # 5. Swap Partition at /dev/sda5
+  vars:
+    required_packages:
+      - cloud-guest-utils # This includes the growpart utility
+      - parted
 
   tasks:
     - name: Check if lock file exists
@@ -18,14 +22,12 @@
         path: /var/tmp/resize_partition_playbook_lock.txt
       register: lock_file_stat
 
-    - name: Install Parted Package
-      ansible.builtin.package:
-        name: parted
+    - name: Install Required Packages
+      package:
+        name: "{{ required_packages }}"
         state: present
-      when: not lock_file_stat.stat.exists
 
     - name: Get unallocated space on the disk
-      #
       ansible.builtin.shell: "sudo parted -s /dev/sda unit GiB print free | grep 'Free Space' | tail -1 | awk '{print $3}' | tr -d 'GiB' |  awk '{print int($1+0.5)}'"
       register: unallocated_space
       changed_when: false
