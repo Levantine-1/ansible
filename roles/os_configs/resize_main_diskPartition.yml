@@ -110,11 +110,11 @@
 
     - name: Get start of swap space with a 1MB Buffer between last partition and swap
       # Get space from the start of the unallocated space to the end of the disk
-      ansible.builtin.shell: "printf '%.fB\n' $( expr $(sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $1}') + 1024000)"
+      ansible.builtin.shell: "printf '%.fB\n' $( expr $(sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $1}') + 10240000)"
       register: start_of_swap_space
 
     - name: Get end of swap space at end of disk with a 1MB Buffer
-      ansible.builtin.shell: "printf '%.fB\n' $( expr $(sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $2}') - 1024000)"
+      ansible.builtin.shell: "printf '%.fB\n' $( expr $(sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $2}') - 10240000)"
       register: end_of_swap_space
 
     - name: Debug intermediate values for disk_percent_free_for_swap calculation
