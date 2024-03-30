@@ -96,8 +96,12 @@
       ansible.builtin.debug:
         msg: "Disk Percent Free for Swap: {{ disk_percent_free_for_swap }}%"
 
+    - name: Round the freakin number FFS
+      ansible.builtin.shell: printf "%.f\n" "{{ disk_percent_free_for_swap }}"
+      register: rounded_disk_percent_free_for_swap
+
     - name: Grow the main partition leaving some space for swap
-      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ disk_percent_free_for_swap }}"
+      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
 
     - name: Resize the main filesystem
       ansible.builtin.command: "sudo resize2fs /dev/sda1"
