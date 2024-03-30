@@ -40,12 +40,12 @@
         - 5 # Swap Partition
       ignore_errors: yes # Assuming the partitions may not exist
 
-#    - name: Update initramfs
-#      ansible.builtin.command: "sudo update-initramfs -u"
-#
-#    - name: Reboot to apply changes
-#      ansible.builtin.reboot:
-#        reboot_timeout: 300
+    - name: Update initramfs
+      ansible.builtin.command: "sudo update-initramfs -u"
+
+    - name: Reboot to apply changes
+      ansible.builtin.reboot:
+        reboot_timeout: 300
 
     ################### EXPANDING PRIMARY PARTITION ###################
 
@@ -84,11 +84,11 @@
       ansible.builtin.debug:
         msg: "Rounded Disk Percent Free for Swap: {{ rounded_disk_percent_free_for_swap.stdout }}%"
 
-#    - name: Grow the main partition leaving some space for swap
-#      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
-#
-#    - name: Resize the main filesystem
-#      ansible.builtin.command: "sudo resize2fs /dev/sda1"
+    - name: Grow the main partition leaving some space for swap
+      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
+
+    - name: Resize the main filesystem
+      ansible.builtin.command: "sudo resize2fs /dev/sda1"
 
 ################### CREATING SWAP PARTITION ###################
 
