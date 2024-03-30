@@ -72,7 +72,7 @@
         disk_percent_free_for_swap: "{{ ((ansible_memtotal_mb | int * 1024) / (disk_size_bytes | int)) * 100 | round(0, 'ceil') }}"
 
     - name: Grow the main partition leaving some space for swap
-      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ memory_disk_ratio }}"
+      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ disk_percent_free_for_swap }}"
 
     - name: Resize the main filesystem
       ansible.builtin.command: "sudo resize2fs /dev/sda1"
