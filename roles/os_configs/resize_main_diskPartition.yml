@@ -24,7 +24,7 @@
   ################### DELETING SWAP PARTITION ###################
 
     - name: Turn off swap
-      ansible.builtin.command: "sudo swapoff -a"
+      ansible.builtin.command: "swapoff -a"
 
     - name: Remove lines containing UUID swap entries in /etc/fstab
       ansible.builtin.lineinfile:
@@ -43,7 +43,7 @@
       ignore_errors: yes # Assuming the partitions may not exist
 
     - name: Update initramfs
-      ansible.builtin.command: "sudo update-initramfs -u"
+      ansible.builtin.command: "update-initramfs -u"
 
     - name: Reboot to apply changes
       ansible.builtin.reboot:
@@ -93,16 +93,16 @@
 #        align: "optimal"
 
     - name: Grow the main partition leaving some space for swap
-      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}%"
+      ansible.builtin.command: "growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
 
     - name: Resize the main filesystem
-      ansible.builtin.command: "sudo resize2fs /dev/sda1"
+      ansible.builtin.command: "resize2fs /dev/sda1"
 
 ################### CREATING SWAP PARTITION ###################
 
     - name: Get start of swap space between last partition and swap
       # Get space from the start of the unallocated space to the end of the disk
-      ansible.builtin.shell: "printf '%.f\n' $( expr $(sudo parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $1}'))"
+      ansible.builtin.shell: "printf '%.f\n' $( expr $(parted -s /dev/sda unit B print free | grep 'Free Space' | tail -1 | tr -d 'B' | awk '{print $1}'))"
       register: start_of_swap_space_bytes
 
     - name: Debug start of start and end of swap space
@@ -136,18 +136,18 @@
 #        align: "optimal"
 
     - name: Create a swap partition using remaining free space
-      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
+      ansible.builtin.command: "parted --script /dev/sda mkpart primary linux-swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
       ignore_errors: yes # For some reason it exits code 1, but the partition is created
 
     - name: Verify the swap partition was created
-      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep swap"
+      ansible.builtin.shell: "parted -s /dev/sda print free | grep swap"
       # If there are no matches, the swap partition was not created and will return exit code 1, failing the task
 
     - name: Format the swap partition
-      ansible.builtin.command: "sudo mkswap /dev/sda2"
+      ansible.builtin.command: "mkswap /dev/sda2"
 
     - name: Get UUID of the newly created swap partition
-      ansible.builtin.command: "sudo blkid -o value -s UUID /dev/sda2"
+      ansible.builtin.command: "blkid -o value -s UUID /dev/sda2"
       register: swap_uuid
 
     - name: Add swap entry to /etc/fstab
@@ -157,12 +157,12 @@
         state: present
 
     - name: Re-enable swap
-      ansible.builtin.command: "sudo swapon -a"
+      ansible.builtin.command: "swapon -a"
 
   ################### CLEAN UP STEPS ###################
 
     - name: Update initramfs
-      ansible.builtin.command: "sudo update-initramfs -u"
+      ansible.builtin.command: "update-initramfs -u"
 
     - name: Reboot to apply changes
       ansible.builtin.reboot:
