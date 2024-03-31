@@ -9,7 +9,8 @@
       - htop
       - net-tools
     service_host_packages:
-      - snap # This is needed to install firefox
+      - snap # The snap packages for needed to install firefox on service host
+      - snapd
 
   tasks:
     - name: Update package cache
