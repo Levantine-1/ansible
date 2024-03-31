@@ -82,7 +82,7 @@
 
 #   NOTE: As of 2024-03-31 the parted community module is unable to override the prompt when resizing a mounted partition, so we'll go back to using a shell command
         # https://stackoverflow.com/questions/73407684/ansible-community-parted-module-asking-are-you-sure-you-want-to-continue-is-t
-        # NOTE TO FUTURE SELF: This could be an opportunity to particiapte in something opensource by modifying the underlying python.
+        # NOTE TO FUTURE SELF: This could be an opportunity to participate in something opensource by modifying the underlying python.
 #    - name: Extend /dev/sda1 partition to fill all available space leaving some space for swap partition
 #      community.general.parted:
 #        device: /dev/sda
@@ -125,8 +125,11 @@
         device: /dev/sda
         number: 2
         state: present
-        fs_type: swap
+        label: swap
+        name: swap
+        part_type: primary
         part_start: "{{disk_swap_partition_start_percent.stdout}}%"
+        unit: "%"
         part_end: "100%"
         align: "optimal"
 
