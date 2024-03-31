@@ -11,4 +11,5 @@
     - name: Install Snap Packages
       community.general.snap:
         name:
+          - core # https://snapcraft.io/install/firefox/debian
           - firefox
