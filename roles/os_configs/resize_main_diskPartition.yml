@@ -90,7 +90,7 @@
       community.general.parted:
         device: /dev/sda
         number: "1"
-        part_end: "{{ rounded_disk_percent_free_for_swap.stdout }}"
+        part_end: "{{ rounded_disk_percent_free_for_swap.stdout }}%"
         resize: true
         state: present
         align: "optimal"
