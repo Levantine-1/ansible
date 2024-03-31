@@ -125,7 +125,7 @@
         device: /dev/sda
         number: 2
         state: present
-        label: swap
+        label: gpt
         name: swap
         part_type: primary
         part_start: "{{disk_swap_partition_start_percent.stdout}}%"
