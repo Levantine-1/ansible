@@ -1,0 +1,22 @@
+---
+- name: Install and configure XFCE desktop environment on Debian 12
+  hosts: service
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install XFCE desktop environment
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - xfce4
+        - xfce4-goodies
+        - lightdm
+        - lightdm-gtk-greeter
+        - lightdm-gtk-greeter-settings
+
+    - name: Reboot to apply changes
+      ansible.builtin.reboot:
