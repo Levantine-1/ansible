@@ -80,20 +80,23 @@
       ansible.builtin.debug:
         msg: "Rounded Disk Percent Free for Swap: {{ rounded_disk_percent_free_for_swap.stdout }}%"
 
-#    - name: Grow the main partition leaving some space for swap
-#      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
-#
-#    - name: Resize the main filesystem
-#      ansible.builtin.command: "sudo resize2fs /dev/sda1"
+#   NOTE: As of 2024-03-31 the parted community module is unable to override the prompt when resizing a mounted partition, so we'll go back to using a shell command
+        # https://stackoverflow.com/questions/73407684/ansible-community-parted-module-asking-are-you-sure-you-want-to-continue-is-t
+        # NOTE TO FUTURE SELF: This could be an opportunity to particiapte in something opensource by modifying the underlying python.
+#    - name: Extend /dev/sda1 partition to fill all available space leaving some space for swap partition
+#      community.general.parted:
+#        device: /dev/sda
+#        number: "1"
+#        part_end: "{{ rounded_disk_percent_free_for_swap.stdout }}%"
+#        resize: true
+#        state: present
+#        align: "optimal"
 
-    - name: Extend /dev/sda1 partition to fill all available space leaving some space for swap partition
-      community.general.parted:
-        device: /dev/sda
-        number: "1"
-        part_end: "{{ rounded_disk_percent_free_for_swap.stdout }}%"
-        resize: true
-        state: present
-        align: "optimal"
+    - name: Grow the main partition leaving some space for swap
+      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
+
+    - name: Resize the main filesystem
+      ansible.builtin.command: "sudo resize2fs /dev/sda1"
 
 ################### CREATING SWAP PARTITION ###################
 
