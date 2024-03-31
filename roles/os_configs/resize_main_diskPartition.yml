@@ -51,13 +51,10 @@
 
     ################### EXPANDING PRIMARY PARTITION ###################
 
+    # We're getting disk size via a CLI command because for some reason the facts in gatherfacts doesn't seem to accurately get the full physical disk size, and it's difficult to parse.
     - name: Get total size of disk
       ansible.builtin.shell: lsblk -b --output SIZE -n -d /dev/sda
       register: disk_size
-
-    - name: Debug disk size
-      ansible.builtin.debug:
-        msg: "Disk Size: {{ disk_size.stdout_lines[0] }}"
 
     - name: Parse disk size
       ansible.builtin.set_fact:
@@ -74,11 +71,8 @@
       ansible.builtin.set_fact: # Convert memory to bytes, then calculate ratio. I'm trying to ensure the swap is the same size as the physical memory.
        disk_percent_free_for_swap: "{{ ((ansible_memtotal_mb | int * 1024 * 1024) / (disk_size_bytes | int)) * 100 | round | int}}"
 
-    - name: Debug disk percent free for swap
-      ansible.builtin.debug:
-        msg: "Disk Percent Free for Swap: {{ disk_percent_free_for_swap }}%"
-
-    - name: Round the freakin number FFS
+    # Ansible is giving me a lot of grief when I try to round this number, so I'll just do it via a shell command
+    - name: Round the memory-to-disk percentage to the nearest integer
       ansible.builtin.shell: printf "%.f\n" "{{ disk_percent_free_for_swap }}"
       register: rounded_disk_percent_free_for_swap
 
@@ -86,11 +80,20 @@
       ansible.builtin.debug:
         msg: "Rounded Disk Percent Free for Swap: {{ rounded_disk_percent_free_for_swap.stdout }}%"
 
-    - name: Grow the main partition leaving some space for swap
-      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
+#    - name: Grow the main partition leaving some space for swap
+#      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
+#
+#    - name: Resize the main filesystem
+#      ansible.builtin.command: "sudo resize2fs /dev/sda1"
 
-    - name: Resize the main filesystem
-      ansible.builtin.command: "sudo resize2fs /dev/sda1"
+    - name: Extend /dev/sda1 partition to fill all available space leaving some space for swap partition
+      community.general.parted:
+        device: /dev/sda
+        number: "1"
+        part_end: "{{ rounded_disk_percent_free_for_swap.stdout }}"
+        resize: true
+        state: present
+        align: "optimal"
 
 ################### CREATING SWAP PARTITION ###################
 
@@ -114,13 +117,23 @@
       ansible.builtin.debug:
         msg: "disk_swap_partition_start_p: {{ disk_swap_partition_start_percent.stdout }}"
 
-    - name: Create a swap partition using remaining free space
-      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
-      ignore_errors: yes # For some reason it exits code 1, but the partition is created
+    - name: Create a new swap partition
+      community.general.parted:
+        device: /dev/sda
+        number: 2
+        state: present
+        fs_type: swap
+        part_start: "{{disk_swap_partition_start_percent.stdout}}%"
+        part_end: "100%"
+        align: "optimal"
 
-    - name: Verify the swap partition was created
-      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep swap"
-      # If there are no matches, the swap partition was not created and will return exit code 1, failing the task
+#    - name: Create a swap partition using remaining free space
+#      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
+#      ignore_errors: yes # For some reason it exits code 1, but the partition is created
+
+#    - name: Verify the swap partition was created
+#      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep swap"
+#      # If there are no matches, the swap partition was not created and will return exit code 1, failing the task
 
     - name: Format the swap partition
       ansible.builtin.command: "sudo mkswap /dev/sda2"
