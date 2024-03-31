@@ -8,8 +8,8 @@
     basic_packages:
       - htop
       - net-tools
-    service_host_packages:
-      - firefox
+#    service_host_packages:
+#      - firefox
 
   tasks:
     - name: Update package cache
@@ -24,8 +24,8 @@
         name: "{{ basic_packages }}"
         state: present
 
-    - name: Install service host packages
-      package:
-        name: "{{ service_host_packages }}"
-        state: present
-      when: "'service' in group_names"
+#    - name: Install service host packages
+#      package:
+#        name: "{{ service_host_packages }}"
+#        state: present
+#      when: "'service' in group_names"
