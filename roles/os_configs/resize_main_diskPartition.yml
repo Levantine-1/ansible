@@ -93,7 +93,7 @@
 #        align: "optimal"
 
     - name: Grow the main partition leaving some space for swap
-      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}"
+      ansible.builtin.command: "sudo growpart /dev/sda 1 --free-percent={{ rounded_disk_percent_free_for_swap.stdout }}%"
 
     - name: Resize the main filesystem
       ansible.builtin.command: "sudo resize2fs /dev/sda1"
@@ -120,26 +120,28 @@
       ansible.builtin.debug:
         msg: "disk_swap_partition_start_p: {{ disk_swap_partition_start_percent.stdout }}"
 
-    - name: Create a new swap partition
-      community.general.parted:
-        device: /dev/sda
-        number: 2
-        state: present
-        label: gpt
-        name: swap
-        part_type: primary
-        part_start: "{{disk_swap_partition_start_percent.stdout}}%"
-        unit: "%"
-        part_end: "100%"
-        align: "optimal"
+    # Turns out it cannot run while mounted
+    # fatal: [dockerhost1.internal.levantine.io]: FAILED! => {"changed": false, "err": "Error: Partition(s) on /dev/sda are being used.\n", "msg": "Error while running parted script: /usr/sbin/parted -s -m -a optimal /dev/sda -- unit % mklabel gpt mkpart primary 92% 100%", "out": "", "rc": 1}
+#    - name: Create a new swap partition
+#      community.general.parted:
+#        device: /dev/sda
+#        number: 2
+#        state: present
+#        label: gpt
+#        name: swap
+#        part_type: primary
+#        part_start: "{{disk_swap_partition_start_percent.stdout}}%"
+#        unit: "%"
+#        part_end: "100%"
+#        align: "optimal"
 
-#    - name: Create a swap partition using remaining free space
-#      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
-#      ignore_errors: yes # For some reason it exits code 1, but the partition is created
+    - name: Create a swap partition using remaining free space
+      ansible.builtin.command: "sudo parted --script /dev/sda mkpart primary linux-swap {{disk_swap_partition_start_percent.stdout}}% 100% set 2 --align optimal"
+      ignore_errors: yes # For some reason it exits code 1, but the partition is created
 
-#    - name: Verify the swap partition was created
-#      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep swap"
-#      # If there are no matches, the swap partition was not created and will return exit code 1, failing the task
+    - name: Verify the swap partition was created
+      ansible.builtin.shell: "sudo parted -s /dev/sda print free | grep swap"
+      # If there are no matches, the swap partition was not created and will return exit code 1, failing the task
 
     - name: Format the swap partition
       ansible.builtin.command: "sudo mkswap /dev/sda2"
