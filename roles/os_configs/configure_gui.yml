@@ -17,6 +17,9 @@
         - lightdm
         - lightdm-gtk-greeter
         - lightdm-gtk-greeter-settings
+      register: xfce_install
 
     - name: Reboot to apply changes
       ansible.builtin.reboot:
+        reboot_timeout: 300
+      when: xfce_install.changed
