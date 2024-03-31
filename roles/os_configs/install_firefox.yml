@@ -1,0 +1,14 @@
+---
+- name: Install Special Packages
+  hosts: service
+  become: yes
+
+# Because firefox is a special snowflake
+# https://docs.ansible.com/ansible/latest/collections/community/general/snap_module.html
+# https://support.mozilla.org/en-US/kb/install-firefox-linux#w_install-firefox-deb-package-for-debian-based-distributions
+
+  tasks:
+    - name: Install Snap Packages
+      community.general.snap:
+        name:
+          - firefox
