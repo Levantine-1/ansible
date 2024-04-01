@@ -32,7 +32,8 @@
     - name: Add HashiCorp repository to apt sources
       become: yes
       lineinfile:
-        path: /etc/apt/sources.list.d/hashicorp.list
+        # path: /etc/apt/sources.list.d/hashicorp.list # Template this later
+        path: /etc/apt/sources.list
         line: "deb [arch={{ ansible_architecture }} signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
         state: present
 
