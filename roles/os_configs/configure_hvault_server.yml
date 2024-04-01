@@ -18,6 +18,19 @@
       apt_key:
         url: https://apt.releases.hashicorp.com/gpg
 
+    - name: Dearmor GPG key
+      ansible.builtin.command: gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+    - name: Verify Keyring
+      ansible.builtin.command: gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+
+    - name: Add HashiCorp repository to apt sources
+      become: yes
+      lineinfile:
+        path: /etc/apt/sources.list.d/hashicorp.list
+        line: "deb [arch={{ ansible_architecture }} signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+
     - name: Install HashiCorp Vault
       apt:
         name: vault
