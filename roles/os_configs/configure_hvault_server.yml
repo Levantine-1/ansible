@@ -21,6 +21,14 @@
           - gpg
       when: vault_version.rc != 0
 
+    # NOTE: The subsequent tasks hang when the key already exists, so we only delete the key if vault is not running
+    - name: Delete HashiCorp GPG key if exists and Vault not running
+      ansible.builtin.file:
+        path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        state: absent
+      when: vault_version.rc != 0
+
+    # NOTE: This step hangs when a key already exists
     - name: Add HashiCorp GPG key
       ansible.builtin.shell: "wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
       when: vault_version.rc != 0
