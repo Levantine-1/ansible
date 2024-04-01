@@ -5,24 +5,29 @@
 
 # https://developer.hashicorp.com/vault/tutorials/getting-started/getting-started-install
   tasks:
+    - name: Check if vault is currently installed
+      ansible.builtin.command: vault --version
+      register: vault_version
+      ignore_errors: yes
+
     - name: Update apt package cache
       apt:
         update_cache: yes
+      when: vault_version.rc != 0
 
     - name: Install required packages
       apt:
         name:
           - gpg
+      when: vault_version.rc != 0
 
     - name: Add HashiCorp GPG key
-      apt_key:
-        url: https://apt.releases.hashicorp.com/gpg
-
-    - name: Dearmor GPG key
-      ansible.builtin.command: gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      ansible.builtin.command: wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      when: vault_version.rc != 0
 
     - name: Verify Keyring
       ansible.builtin.command: gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+      when: vault_version.rc != 0
 
     - name: Add HashiCorp repository to apt sources
       become: yes
