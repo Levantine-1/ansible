@@ -1,0 +1,67 @@
+---
+- name: Install HashiCorp Vault
+  hosts: Vault
+  become: yes
+
+  tasks:
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - gnupg
+          - software-properties-common
+
+    - name: Add HashiCorp GPG key
+      apt_key:
+        url: https://apt.releases.hashicorp.com/gpg
+
+    - name: Add HashiCorp apt repository
+      apt_repository:
+        repo: deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution | lower }}-{{ ansible_distribution_release }} main
+        state: present
+
+    - name: Install HashiCorp Vault
+      apt:
+        name: vault
+        state: present
+
+    - name: Create Vault configuration directory
+      file:
+        path: /etc/vault.d
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create Vault data directory
+      file:
+        path: /var/lib/vault
+        state: directory
+        mode: '0755'
+        owner: vault
+        group: vault
+
+    - name: Create Vault logs directory
+      file:
+        path: /var/log/vault
+        state: directory
+        mode: '0755'
+        owner: vault
+        group: vault
+
+    - name: Create Vault configuration file
+      template:
+        src: templates/vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Start and enable Vault service
+      systemd:
+        name: vault
+        state: started
+        enabled: yes

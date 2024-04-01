@@ -1,4 +1,7 @@
 --- # This is a wrapper playbook to run the bootstrap playbooks
+# This playbook assumes the following base image:
+# Bone stock no GUI Debian 12 with the "automation" user and public key provisioned with sudo nopass access
+# And that's about it.
 - import_playbook: user_groups.yml
 - import_playbook: users.yml
 - import_playbook: bash_profile/manage_bash_profile.yml
@@ -17,3 +20,4 @@
 - import_playbook: installDocker.yml
 - import_playbook: configure_gui.yml
 - import_playbook: install_firefox.yml
+# - import_playbook: configure_hvault_server.yml
