@@ -20,4 +20,4 @@
 - import_playbook: installDocker.yml
 - import_playbook: configure_gui.yml
 - import_playbook: install_firefox.yml
-# - import_playbook: configure_hvault_server.yml
+- import_playbook: configure_hvault_server.yml
