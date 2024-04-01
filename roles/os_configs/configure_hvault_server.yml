@@ -3,6 +3,7 @@
   hosts: Vault
   become: yes
 
+# https://developer.hashicorp.com/vault/tutorials/getting-started/getting-started-install
   tasks:
     - name: Update apt package cache
       apt:
@@ -11,17 +12,11 @@
     - name: Install required packages
       apt:
         name:
-          - gnupg
-          - software-properties-common
+          - gpg
 
     - name: Add HashiCorp GPG key
       apt_key:
         url: https://apt.releases.hashicorp.com/gpg
-
-    - name: Add HashiCorp apt repository
-      apt_repository:
-        repo: deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution | lower }}-{{ ansible_distribution_release }} main
-        state: present
 
     - name: Install HashiCorp Vault
       apt:
