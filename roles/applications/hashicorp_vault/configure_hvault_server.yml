@@ -125,10 +125,10 @@
 
     - name: Message 1
       debug:
-        msg: "Vault may be in a sealed state, you must manually unseal with at least 3/5 unseal keys provided at init time."
+        msg: "Vault may be in a sealed state, you must manually unseal with at least 3/5 unseal keys provided at time of first init using the cmd: vault operator unseal"
       when: vault_restart.changed
 
     - name: Message 2
       debug:
-        msg: "Vault needs to be manually initialized before you can use it"
+        msg: "Vault needs to be manually initialized before you can use it using cmd: vault operator init"
       when: vault_installation.changed
