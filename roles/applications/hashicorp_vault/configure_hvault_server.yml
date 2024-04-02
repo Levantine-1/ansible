@@ -113,6 +113,7 @@
         name: vault
         state: restarted
       when: vault_config.changed
+      register: vault_restart
 
     - name: Get vault version
       ansible.builtin.command: vault --version
@@ -121,3 +122,13 @@
     - name: Display vault version
       debug:
         msg: "{{ vault_version.stdout }}"
+
+    - name: Message 1
+      debug:
+        msg: "Vault may be in a sealed state, you must manually unseal with at least 3/5 unseal keys provided at init time."
+      when: vault_restart.changed
+
+    - name: Message 2
+      debug:
+        msg: "Vault needs to be manually initialized before you can use it"
+      when: vault_installation.changed
