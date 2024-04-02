@@ -1,0 +1,134 @@
+---
+- name: Install HashiCorp Vault
+  hosts: Vault
+  become: yes
+
+# https://developer.hashicorp.com/vault/tutorials/getting-started/getting-started-install
+  tasks:
+    - name: Check if vault is currently installed
+      ansible.builtin.command: vault --version
+      register: vault_version
+      ignore_errors: yes
+
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+      when: vault_version.rc != 0
+
+    - name: Install required packages
+      apt:
+        name:
+          - gpg
+      when: vault_version.rc != 0
+
+    # NOTE: The subsequent tasks hang when the key already exists, so we only delete the key if vault is not running
+    - name: Delete HashiCorp GPG key if exists and Vault not running
+      ansible.builtin.file:
+        path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        state: absent
+      when: vault_version.rc != 0
+
+    # NOTE: This step hangs when a key already exists
+    - name: Add HashiCorp GPG key
+      ansible.builtin.shell: "wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
+      when: vault_version.rc != 0
+
+    - name: Verify Keyring
+      ansible.builtin.command: gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+      when: vault_version.rc != 0
+
+    - name: Add HashiCorp repository to apt sources
+      become: yes
+      lineinfile:
+        # path: /etc/apt/sources.list.d/hashicorp.list # Template this later
+        path: /etc/apt/sources.list
+        line: "deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+      register: hashicorp_repo
+
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+      when:
+        - vault_version.rc != 0
+        - hashicorp_repo.changed
+
+    - name: Install HashiCorp Vault
+      apt:
+        name: vault
+        state: present
+      register: vault_installation
+
+    - name: Create Vault configuration directory
+      file:
+        path: /etc/vault.d
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create Vault data directory
+      file:
+        path: /var/lib/vault
+        state: directory
+        mode: '0755'
+        owner: vault
+        group: vault
+
+    - name: Create Vault logs directory
+      file:
+        path: /var/log/vault
+        state: directory
+        mode: '0755'
+        owner: vault
+        group: vault
+
+    - name: Create Vault configuration file
+      template:
+        src: templates/config.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+        owner: root
+        group: root
+        mode: '0644'
+      register: vault_config
+
+    - name: Create Vault environment configuration file
+      template:
+        src: templates/vault.env.j2
+        dest: /etc/vault.d/vault.env
+        owner: root
+        group: root
+        mode: '0644'
+      register: vault_env_config
+
+    - name: Start and enable Vault service after installation
+      ansible.builtin.service:
+        name: vault
+        state: started
+        enabled: yes
+      when: vault_installation.changed
+
+    - name: Restart service vault if config changed
+      ansible.builtin.service:
+        name: vault
+        state: restarted
+      when: vault_config.changed
+      register: vault_restart
+
+    - name: Get vault version
+      ansible.builtin.command: vault --version
+      register: vault_version
+
+    - name: Display vault version
+      debug:
+        msg: "{{ vault_version.stdout }}"
+
+    - name: Message 1
+      debug:
+        msg: "Vault may be in a sealed state, you must manually unseal with at least 3/5 unseal keys provided at time of first init using the cmd: vault operator unseal or going to the UI at http:hostname:8200/ui"
+      when: vault_restart.changed
+
+    - name: Message 2
+      debug:
+        msg: "Vault needs to be manually initialized before you can use it using cmd: vault operator init or going to the UI at http:hostname:8200/ui"
+      when: vault_installation.changed
