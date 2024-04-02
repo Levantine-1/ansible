@@ -89,12 +89,19 @@
         owner: root
         group: root
         mode: '0644'
+      register: vault_config
 
     - name: Start and enable Vault service
-      systemd:
+      ansible.builtin.service:
         name: vault
         state: started
         enabled: yes
+
+    - name: Restart service vault if config changed
+      ansible.builtin.service:
+        name: vault
+        state: restarted
+      when: vault_config.changed
 
     - name: Get vault version
       ansible.builtin.command: vault --version
