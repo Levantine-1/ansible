@@ -1,5 +1,5 @@
 storage "raft" {
-  path    = "./vault/data"
+  path    = "/var/lib/vault"
   node_id = "node1"
 }
 
@@ -11,3 +11,10 @@ listener "tcp" {
 api_addr = "http://127.0.0.1:8200"
 cluster_addr = "https://127.0.0.1:8201"
 ui = true
+
+
+log "file" {
+  level = "debug"
+  format = "json"
+  file = "/var/log/vault.log"
+}

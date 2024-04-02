@@ -92,7 +92,16 @@
         mode: '0644'
       register: vault_config
 
-    - name: Start and enable Vault service
+    - name: Create Vault environment configuration file
+      template:
+        src: templates/vault.env.j2
+        dest: /etc/vault.d/vault.env
+        owner: root
+        group: root
+        mode: '0644'
+      register: vault_env_config
+
+    - name: Start and enable Vault service after installation
       ansible.builtin.service:
         name: vault
         state: started
