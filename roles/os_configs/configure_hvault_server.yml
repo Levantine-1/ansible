@@ -42,7 +42,7 @@
       lineinfile:
         # path: /etc/apt/sources.list.d/hashicorp.list # Template this later
         path: /etc/apt/sources.list
-        line: "deb [arch={{ ansible_architecture }} signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        line: "deb [arch=x86_64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
         state: present
 
     - name: Install HashiCorp Vault
