@@ -44,6 +44,14 @@
         path: /etc/apt/sources.list
         line: "deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
         state: present
+      register: hashicorp_repo
+
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+      when:
+        - vault_version.rc != 0
+        - hashicorp_repo.changed
 
     - name: Install HashiCorp Vault
       apt:
