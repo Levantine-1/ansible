@@ -82,13 +82,13 @@
         owner: vault
         group: vault
 
-    - name: Create Vault configuration file
-      template:
-        src: templates/vault.hcl.j2
-        dest: /etc/vault.d/vault.hcl
-        owner: root
-        group: root
-        mode: '0644'
+#    - name: Create Vault configuration file
+#      template:
+#        src: templates/vault.hcl.j2
+#        dest: /etc/vault.d/vault.hcl
+#        owner: root
+#        group: root
+#        mode: '0644'
 
     - name: Start and enable Vault service
       systemd:
