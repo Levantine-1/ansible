@@ -18,8 +18,5 @@ cluster_addr = "https://localhost:8201"
 ui = true
 
 
-log "file" {
-  level = "debug"
-  format = "json"
-  file = "/var/log/vault.log"
-}
+log_requests_level = "info"
+log_level = "info"
