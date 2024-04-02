@@ -57,6 +57,7 @@
       apt:
         name: vault
         state: present
+      register: vault_installation
 
     - name: Create Vault configuration directory
       file:
@@ -96,6 +97,7 @@
         name: vault
         state: started
         enabled: yes
+      when: vault_installation.changed
 
     - name: Restart service vault if config changed
       ansible.builtin.service:
