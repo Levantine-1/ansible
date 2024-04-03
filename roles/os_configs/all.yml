@@ -2,26 +2,26 @@
 # This playbook assumes the following base image:
 # Bone stock no GUI Debian 12 with the "automation" user and public key provisioned with sudo nopass access
 # And that's about it.
-- import_playbook: user_groups.yml
-- import_playbook: users.yml
-- import_playbook: bash_profile/manage_bash_profile.yml
-- import_playbook: resize_main_diskPartitionWrapper.yml
-- import_playbook: installBasicPackages.yml
-- import_playbook: configure_time.yml
-# - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by OPNSense
-- import_playbook: configureHostFile.yml # NOTE: This will soon be deprecated by OPNSense
-- import_playbook: configureHostname.yml
-- import_playbook: configureDHCP.yml
-- import_playbook: configure_DNS_Resolver.yml
-- import_playbook: deploySSLCerts.yml
-- import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
-- import_playbook: theiaOneOff.yml
-- import_playbook: ../applications/jenkins/deployReverseProxy.yml
-- import_playbook: installDocker.yml
-- import_playbook: configure_gui.yml
-- import_playbook: install_firefox.yml
+#- import_playbook: user_groups.yml
+#- import_playbook: users.yml
+#- import_playbook: bash_profile/manage_bash_profile.yml
+#- import_playbook: resize_main_diskPartitionWrapper.yml
+#- import_playbook: installBasicPackages.yml
+#- import_playbook: configure_time.yml
+## - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by OPNSense
+#- import_playbook: configureHostFile.yml # NOTE: This will soon be deprecated by OPNSense
+#- import_playbook: configureHostname.yml
+#- import_playbook: configureDHCP.yml
+#- import_playbook: configure_DNS_Resolver.yml
+#- import_playbook: deploySSLCerts.yml
+#- import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
+#- import_playbook: theiaOneOff.yml
+#- import_playbook: ../applications/jenkins/deployReverseProxy.yml
+#- import_playbook: installDocker.yml
+#- import_playbook: configure_gui.yml
+#- import_playbook: install_firefox.yml
 - import_playbook: configure_wireguard_vpn/configure_wireguard.yml
 
 ####### CONFIGURE APPLICATIONS #######
 # Only put configure applications after the base OS configuration
-- import_playbook: ../applications/hashicorp_vault/configure_hvault_server.yml
+#- import_playbook: ../applications/hashicorp_vault/configure_hvault_server.yml
