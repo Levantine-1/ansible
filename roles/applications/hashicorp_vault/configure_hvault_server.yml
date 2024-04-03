@@ -75,14 +75,6 @@
         owner: vault
         group: vault
 
-    - name: Create Vault logs directory
-      file:
-        path: /var/log/vault
-        state: directory
-        mode: '0755'
-        owner: vault
-        group: vault
-
     - name: Create Vault configuration file
       template:
         src: templates/config.hcl.j2
