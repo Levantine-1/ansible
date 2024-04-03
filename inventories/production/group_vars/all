@@ -1,3 +1,5 @@
+env_context: prod
+
 domains:
     - levantine.io
     - nhitruong.com

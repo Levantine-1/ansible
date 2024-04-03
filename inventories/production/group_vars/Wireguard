@@ -1,0 +1,16 @@
+PersistentKeepalive: 25
+DNS: 8.8.8.8
+ListenPort: 51820
+
+wireguard_public_key:
+    ec2bastion: upBKPn/oPxn1ZTXTSTBG0CvJCBb0vR580Utzzy9fIVo=
+    vmwarebastion: XwN7aFmyLjML19A4nL1mFzKmH9s0yOk6H51KfwwH9S0=
+    jenkins: 3WxhtLIzoAI4PbxOVFZNhuz4jE+fytoDP4z6P8DUilQ=
+
+server:
+    interface:
+        address: 10.0.0.1/24
+        post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o  eth0 -j MASQUERADE
+        post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o  eth0 -j MASQUERADE
+
+    peers:
