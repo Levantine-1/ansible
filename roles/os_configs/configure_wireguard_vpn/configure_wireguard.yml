@@ -1,0 +1,30 @@
+---
+- name: Configure WireGuard VPN Server and Clients
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  vars:
+    basic_packages:
+      - wireguard
+
+  tasks:
+    - name: Update package cache
+      package:
+        name: '*'
+        state: latest
+        update_cache: yes
+      ignore_errors: yes
+
+    - name: Install packages
+      package:
+        name: "{{ basic_packages }}"
+        state: present
+
+    - name:  Download WireGuard GUI
+      ansible.builtin.get_url:
+        url: "https://github.com/ngoduykhanh/wireguard-ui/releases/download/v0.6.2/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+        dest: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+      when: wg="server"
+      #NOTE: Getting the latest release from https://github.com/ngoduykhanh/wireguard-ui/releases/latest
+      # looks very complicated for so for now this is card coded.
