@@ -25,6 +25,6 @@
       ansible.builtin.get_url:
         url: "https://github.com/ngoduykhanh/wireguard-ui/releases/download/v0.6.2/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
         dest: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
-      when: wg="server"
+      when: wg is defined and wg == "server"
       #NOTE: Getting the latest release from https://github.com/ngoduykhanh/wireguard-ui/releases/latest
       # looks very complicated for so for now this is card coded.
