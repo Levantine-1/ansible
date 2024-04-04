@@ -13,7 +13,7 @@
     required_packages:
       - wireguard
   vars_files:
-    - ../../vault.yml
+    - ../../../vault.yml
 
   tasks:
 
