@@ -1,5 +1,9 @@
 ---
 
-    - name: lolololol
-      ansible.builtin.debug:
-        msg: "olollloloolol"
+  - name: Configure Wireguard Clients
+    template:
+      src: "templates/client_wg0.conf.j2"
+      dest: "/etc/wireguard/wg0.conf"
+      owner: root
+      group: root
+      mode: '0644'
