@@ -1,7 +1,7 @@
 [Interface]
 Address = {{ wg_server['interface']['address'] }}
 ListenPort = {{ wg_server['interface']['ListenPort'] }}
-PrivateKey = {{ wireguard[env_context]['secret_key'][inventory_hostname.split('.')[0]] }}
+PrivateKey = {{ wireguard[env_context]['secret_key']['server'] }}
 MTU = {{ wg_MTU }}
 PostUp = {{ wg_server['interface']['post_up'] }}
 PreDown = {{ wg_server['interface']['pre_down'] }}
