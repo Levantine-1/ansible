@@ -5,10 +5,16 @@
 # And the client config files are to be manually checked into the templates directory and deployed to the clients via ansible.
 # Private keys are to be stored in the vault.yml file.
 
+    - name: Check if WireGuard GUI Package is already here
+      stat:
+        path: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+      register: wireguard_ui
+
     - name:  Download WireGuard GUI
       ansible.builtin.get_url:
         url: "https://github.com/ngoduykhanh/wireguard-ui/releases/download/v0.6.2/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
         dest: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+      when: not wireguard_ui.stat.exists
       #NOTE: Getting the latest release from https://github.com/ngoduykhanh/wireguard-ui/releases/latest
       # looks very complicated for so for now this is hard coded.
 
@@ -17,6 +23,7 @@
         src: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
         dest: "/etc/wireguard/"
         remote_src: yes
+      when: not wireguard_ui.stat.exists
 
     - name: Setup WGGUI systemd service unit file
       copy:
@@ -25,12 +32,14 @@
         owner: root
         group: root
         mode: 0644
+      register: wireguard_webserver_service
 
 # NOTE: The server starts on port 5000 and is not reverse proxied, you'll need to setup a socks proxy or something to access the GUI
 
     - name: Reload systemd daemon
       systemd:
         daemon_reload: yes
+      when: wireguard_webserver_service.changed
 
     - name: Enable and start the WireGuard Webserver service
       systemd:
