@@ -10,7 +10,7 @@
         url: "https://github.com/ngoduykhanh/wireguard-ui/releases/download/v0.6.2/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
         dest: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
       #NOTE: Getting the latest release from https://github.com/ngoduykhanh/wireguard-ui/releases/latest
-      # looks very complicated for so for now this is card coded.
+      # looks very complicated for so for now this is hard coded.
 
     - name: Extract WireGuard GUI
       ansible.builtin.unarchive:
@@ -21,7 +21,7 @@
     - name: Setup WGGUI systemd service unit file
       copy:
         src: templates/wireguard-webserver.service
-        dest: /etc/systemd/system/wireguard-webserver.service
+        dest: /lib/systemd/system/wireguard-webserver.service
         owner: root
         group: root
         mode: 0644
