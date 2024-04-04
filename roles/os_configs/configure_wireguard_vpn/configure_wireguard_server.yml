@@ -15,7 +15,7 @@
     - name: Extract WireGuard GUI
       ansible.builtin.unarchive:
         src: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
-        dest: "/etc/wireguard/wireguard-ui"
+        dest: "/etc/wireguard/"
         remote_src: yes
 
     - name: Setup WGGUI systemd service unit file
