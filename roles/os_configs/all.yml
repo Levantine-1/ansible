@@ -20,7 +20,7 @@
 #- import_playbook: installDocker.yml
 #- import_playbook: configure_gui.yml
 #- import_playbook: install_firefox.yml
-- import_playbook: configure_wireguard_vpn/configure_wireguard.yml
+- import_playbook: configure_wireguard_vpn/configure_wireguard_wrapper.yml
 
 ####### CONFIGURE APPLICATIONS #######
 # Only put configure applications after the base OS configuration

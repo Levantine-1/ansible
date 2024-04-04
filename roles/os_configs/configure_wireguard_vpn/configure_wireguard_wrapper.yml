@@ -1,0 +1,29 @@
+---
+- name: Configure WireGuard VPN Server and Clients
+  hosts: Wireguard
+  become: yes
+  gather_facts: yes
+# NOTE: This only sets up wireguard on all hosts and enables the GUI on the server.
+# Once the GUI is enabled on the server, configure the server from the GUI and manually restart wireguard with wg-quick up/down wg0
+# After that, the client configuration files can be downloaded from the GUI
+# And the client config files are to be manually checked into the templates directory and deployed to the clients via ansible.
+# Private keys are to be stored in the vault.yml file.
+
+  vars:
+    required_packages:
+      - wireguard
+
+  tasks:
+
+    - name: Install Required Packages
+      package:
+        name: "{{ required_packages }}"
+        state: present
+
+    - name: Configure Wireguard Server
+      include_tasks: "configure_wireguard_server.yml"
+      when: wg is defined and wg == "server"
+
+    - name: Configure Wireguard Clients
+      include_tasks: "configure_wireguard_clients.yml"
+      when: wg is defined and wg == "client"

@@ -1,0 +1,13 @@
+[Unit]
+Description=WireGuard Webserver
+After=network.target
+
+# NOTE: The server starts on port 5000 and is not reverse proxied, you'll need to setup a socks proxy or something to access the GUI
+
+[Service]
+Type=simple
+ExecStart=/etc/wireguard/wireguard-ui
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
