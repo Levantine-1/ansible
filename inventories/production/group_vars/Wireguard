@@ -1,16 +1,27 @@
-PersistentKeepalive: 25
-DNS: 8.8.8.8
-ListenPort: 51820
+wg_PersistentKeepalive: 25
+wg_DNS: 8.8.8.8
+wg_MTU: 1420
 
-wireguard_public_key:
-    ec2bastion: upBKPn/oPxn1ZTXTSTBG0CvJCBb0vR580Utzzy9fIVo=
-    vmwarebastion: XwN7aFmyLjML19A4nL1mFzKmH9s0yOk6H51KfwwH9S0=
-    jenkins: 3WxhtLIzoAI4PbxOVFZNhuz4jE+fytoDP4z6P8DUilQ=
-
-server:
+wg_server:
+    endpoint: levantine.io:51820
+    public_key: upBKPn/oPxn1ZTXTSTBG0CvJCBb0vR580Utzzy9fIVo=
+    PresharedKey: /rXMjm+uyNm4emllbiXsjdG2Eyzzy4TFRfAapMDIX+c=
     interface:
         address: 10.0.0.1/24
-        post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o  eth0 -j MASQUERADE
-        post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o  eth0 -j MASQUERADE
+        ListenPort: 51820
+        # post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o  eth0 -j MASQUERADE
+        # post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o  eth0 -j MASQUERADE
+        post_up:
+        pre_down:
+        post_down:
+        table: auto
 
-    peers:
+wg_clients:
+    vmwarebastion:
+        PublicKey: STFU
+        Address: 10.0.0.2/32
+        AllowedIPs: 0.0.0.0/0
+    jenkins:
+        PublicKey: STFU
+        Address: 10.0.0.3/32
+        AllowedIPs: 0.0.0.0/0

@@ -1,0 +1,9 @@
+[Interface]
+Address = {{ wg_server['interface']['address'] }}
+ListenPort = {{ wg_server['interface']['ListenPort'] }}
+PrivateKey = {{ wireguard[env_context]['secret_key'][inventory_hostname.split('.')[0]] }}
+MTU = {{ wg_MTU }}
+PostUp = {{ wg_server['interface']['post_up'] }}
+PreDown = {{ wg_server['interface']['pre_down'] }}
+PostDown = {{ wg_server['interface']['post_down'] }}
+Table = {{ wg_server['interface']['table'] }}
