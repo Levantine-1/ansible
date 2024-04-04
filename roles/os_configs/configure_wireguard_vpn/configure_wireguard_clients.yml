@@ -1,10 +1,5 @@
 ---
-- name: Configure WireGuard VPN Clients
-  hosts: Wireguard
-  gather_facts: yes
-  become: yes
 
-  tasks:
     - name: lolololol
       ansible.builtin.debug:
         msg: "olollloloolol"
