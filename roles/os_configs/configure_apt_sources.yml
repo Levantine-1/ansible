@@ -1,0 +1,19 @@
+# Only for the standard debian 12 image at this time because the ec2 is wonky
+---
+- name: Manage apt sources.list
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Template apt sources.list
+      template:
+        src: templates/sources.list.j2
+        dest: /etc/apt/sources.list
+      notify: Update apt cache
+      when: ansible_distribution == 'Debian' and ansible_distribution_version == '12'
+
+  handlers:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
