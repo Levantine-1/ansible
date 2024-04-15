@@ -12,12 +12,9 @@ wg_clients:
     levantine:
         PublicKey: qkybUqsnHYjVdmiR4zZv1bunbPg0oyqGWgKyyX8WlHg=
         Address: 10.0.0.2/32
-        AllowedIPs: 10.0.0.2/32
     vmwarebastion:
         PublicKey: SmaCQ9sR9138k+nuwVntVegadg7H7FEUQZvudxsPoUI=
         Address: 10.0.0.3/32
-        AllowedIPs: 10.0.0.3/32
     jenkins:
         PublicKey: Ry8AtMARkVmKOPNXzM1+mMpgcPh4h08wOoH5TK6ouik=
         Address: 10.0.0.4/32
-        AllowedIPs: 10.0.0.4/32
