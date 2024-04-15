@@ -64,9 +64,9 @@
 
     - name: Stop Wireguard Client
       ansible.builtin.command: "wg-quick down wg0"
-      when: wireguard_client_config.changed
+      when: wireguard_server_config.changed
       ignore_errors: yes
 
     - name: Start Wireguard Client
       ansible.builtin.command: "wg-quick up wg0"
-      when: wireguard_client_config.changed
+      when: wireguard_server_config.changed
