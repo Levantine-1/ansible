@@ -10,6 +10,6 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
 # Client: {{ client }}
 PublicKey = {{ wg_clients[client]['PublicKey'] }}
 AllowedIPs = {{ wg_clients[client]['AllowedIPs'] }}
-# PresharedKey = {{ wireguard[env_context]['preshared_key']['client'][client] }}
+PresharedKey = {{ wireguard[env_context]['preshared_key']['client'][client] }}
 
 {% endfor %}

@@ -9,4 +9,4 @@ PublicKey = {{ wg_server['public_key'] }}
 Endpoint = {{ wg_server['endpoint'] }}
 AllowedIPs = {{ wg_clients[inventory_hostname.split('.')[0]]['AllowedIPs'] }}
 PersistentKeepalive = {{ wg_PersistentKeepalive }}
-# PresharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}
+PresharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}
