@@ -1,7 +1,7 @@
 wg_PersistentKeepalive: 25
 
 wg_server:
-    lan_interface = ens5
+    lan_interface: ens5
     endpoint: levantine.io:51820
     public_key: xUQVpqLV1awK9c9PsZau+28sW/RSZCeiKM3OTi/xQlY=
     interface:
