@@ -13,7 +13,7 @@
       copy:
         content: |
           nameserver 192.168.1.1
-        dest: /etc/resolvconf/resolv.conf.d/pf-sense-router
+        dest: /etc/resolvconf/resolv.conf.d/opnsense_router
 
     - name: Update resolvconf
       command: resolvconf -u

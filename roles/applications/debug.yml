@@ -1,17 +1,23 @@
 ---
 - name: Debug Test
   hosts: localhost
-
+  vars_files:
+    - ../../vault.yml
   vars:
     foo: "bar"
 
   tasks:
-    - name: rp_flow
-      debug:
-        msg: "{{ rp_flow }}"
-      loop: "{{ domains }}"
 
-    - name: pplocation
+    - name: Show Foo
       debug:
-        msg: "{{ reverse_proxy_configs[rp_flow].proxy_pass_location }}"
-      loop: "{{ domains }}"
+        msg: "{{ inventory_hostname.split('.')[0] }}"
+
+    - name: Show Key
+      debug:
+        msg: "{{ wireguard[env_context]['secret_key'] }}"
+
+#  VIRTUAL_HOST: "{{ supported_containers[container_name]['env_vars']['VIRTUAL_HOST'] }}"
+
+    - name: Show Key
+      debug:
+        msg: "{{ wireguard[env_context]['secret_key'][inventory_hostname.split('.')[0]] }}"

@@ -1,0 +1,19 @@
+---
+
+  - name: Configure Wireguard Clients
+    template:
+      src: "templates/client_wg0.conf.j2"
+      dest: "/etc/wireguard/wg0.conf"
+      owner: root
+      group: root
+      mode: '0644'
+    register: wireguard_client_config
+
+  - name: Stop Wireguard Client
+    ansible.builtin.command: "wg-quick down wg0"
+    when: wireguard_client_config.changed
+    ignore_errors: yes
+
+  - name: Start Wireguard Client
+    ansible.builtin.command: "wg-quick up wg0"
+    when: wireguard_client_config.changed

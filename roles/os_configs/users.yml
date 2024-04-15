@@ -28,6 +28,7 @@
         state: present
         key: "{{ item.authorized_key }}"
       with_items: "{{ enabled_users }}"
+      no_log: true
 
     - name: Remove users
       user:

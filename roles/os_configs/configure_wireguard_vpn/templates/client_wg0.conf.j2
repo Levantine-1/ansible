@@ -1,0 +1,12 @@
+# This is for the client machine's configuration
+[Interface]
+PrivateKey = {{ wireguard[env_context]['secret_key']['client'][inventory_hostname.split('.')[0]] }}
+Address = {{ wg_clients[inventory_hostname.split('.')[0]]['Address'] }}
+
+# The Peer is always the host server
+[Peer]
+PublicKey = {{ wg_server['public_key'] }}
+Endpoint = {{ wg_server['endpoint'] }}
+AllowedIPs = {{ wg_server['interface']['address'] }}
+PersistentKeepalive = {{ wg_PersistentKeepalive }}
+# PresharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}

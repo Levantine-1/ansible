@@ -1,0 +1,72 @@
+---
+# NOTE: This only sets up wireguard on all hosts and enables the GUI on the server.
+# Once the GUI is enabled on the server, configure the server from the GUI and manually restart wireguard with wg-quick up/down wg0
+# After that, the client configuration files can be downloaded from the GUI
+# And the client config files are to be manually checked into the templates directory and deployed to the clients via ansible.
+# Private keys are to be stored in the vault.yml file.
+
+    - name: Configure Wireguard Server
+      template:
+        src: "templates/server_wg0.conf.j2"
+        dest: "/etc/wireguard/wg0.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      register: wireguard_server_config
+
+    - name: Check if WireGuard GUI Package is already here
+      stat:
+        path: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+      register: wireguard_ui
+
+    - name:  Download WireGuard GUI
+      ansible.builtin.get_url:
+        url: "https://github.com/ngoduykhanh/wireguard-ui/releases/download/v0.6.2/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+        dest: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+      when: not wireguard_ui.stat.exists
+      #NOTE: Getting the latest release from https://github.com/ngoduykhanh/wireguard-ui/releases/latest
+      # looks very complicated for so for now this is hard coded.
+
+    - name: Extract WireGuard GUI
+      ansible.builtin.unarchive:
+        src: "~/wireguard-ui-v0.6.2-linux-amd64.tar.gz"
+        dest: "/etc/wireguard/"
+        remote_src: yes
+      when: not wireguard_ui.stat.exists
+
+    - name: Setup WGGUI systemd service unit file
+      copy:
+        src: templates/wireguard-webserver.service
+        dest: /lib/systemd/system/wireguard-webserver.service
+        owner: root
+        group: root
+        mode: 0644
+      register: wireguard_webserver_service
+
+# NOTE: The server starts on port 5000 and is not reverse proxied, you'll need to setup a socks proxy or something to access the GUI
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: wireguard_webserver_service.changed
+
+    - name: Enable and start the WireGuard Webserver service
+      systemd:
+        name: wireguard-webserver
+        state: started
+        enabled: yes
+
+    - name: Restart the Wireguard Webserver
+      systemd:
+        name: wireguard-webserver
+        state: restarted
+      when: wireguard_server_config.changed
+
+    - name: Stop Wireguard Client
+      ansible.builtin.command: "wg-quick down wg0"
+      when: wireguard_server_config.changed
+      ignore_errors: yes
+
+    - name: Start Wireguard Client
+      ansible.builtin.command: "wg-quick up wg0"
+      when: wireguard_server_config.changed
