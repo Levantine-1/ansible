@@ -10,4 +10,5 @@ PreSharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}
 PublicKey = {{ wg_clients[client]['PublicKey'] }}
 AllowedIPs = {{ wg_clients[client]['AllowedIPs'] }}
 PresharedKey = {{ wireguard[env_context]['preshared_key']['client'][client] }}
+
 {% endfor %}

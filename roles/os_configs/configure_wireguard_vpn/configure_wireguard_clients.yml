@@ -1,15 +1,4 @@
 ---
-  - name: debug 1
-    debug:
-      msg: "{{ wireguard[env_context]['secret_key']['client']['jenkins'] }}"
-
-  - name: debug 2
-    debug:
-      msg: "{{ wireguard[env_context]['secret_key']['client']['vmwarebastion'] }}"
-
-  - name: debug 3
-    debug:
-      msg: "{{ wireguard[env_context]['secret_key']['client'][inventory_hostname.split('.')[0]] }}"
 
   - name: Configure Wireguard Clients
     template:
