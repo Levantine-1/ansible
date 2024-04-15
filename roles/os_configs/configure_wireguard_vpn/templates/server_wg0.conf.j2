@@ -2,7 +2,7 @@
 Address = {{ wg_server['interface']['address'] }}
 ListenPort = {{ wg_server['interface']['ListenPort'] }}
 PrivateKey = {{ wireguard[env_context]['secret_key']['server'] }}
-PreSharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}
+PresharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}
 
 {% for client in wg_clients %}
 [Peer]
