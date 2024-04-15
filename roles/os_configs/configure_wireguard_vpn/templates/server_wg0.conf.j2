@@ -2,14 +2,14 @@
 Address = {{ wg_server['interface']['address'] }}
 ListenPort = {{ wg_server['interface']['ListenPort'] }}
 PrivateKey = {{ wireguard[env_context]['secret_key']['server'] }}
-PostUp   = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ens5 -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ens5 -j MASQUERADE
+# PostUp   = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ens5 -j MASQUERADE
+# PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ens5 -j MASQUERADE
 
 {% for client in wg_clients %}
 [Peer]
 # Client: {{ client }}
 PublicKey = {{ wg_clients[client]['PublicKey'] }}
 AllowedIPs = {{ wg_clients[client]['AllowedIPs'] }}
-PresharedKey = {{ wireguard[env_context]['preshared_key']['client'][client] }}
+# PresharedKey = {{ wireguard[env_context]['preshared_key']['client'][client] }}
 
 {% endfor %}
