@@ -61,3 +61,7 @@
         name: wireguard-webserver
         state: restarted
       when: wireguard_server_config.changed
+
+    - name: Restart Wireguard Server
+      ansible.builtin.command: "wg-quick down wg0 && wg-quick up wg0"
+      when: wireguard_server_config.changed
