@@ -1,27 +1,22 @@
 wg_PersistentKeepalive: 25
-wg_DNS: 8.8.8.8
-wg_MTU: 1420
 
 wg_server:
     endpoint: levantine.io:51820
-    public_key: upBKPn/oPxn1ZTXTSTBG0CvJCBb0vR580Utzzy9fIVo=
-    PresharedKey: /rXMjm+uyNm4emllbiXsjdG2Eyzzy4TFRfAapMDIX+c=
+    public_key: xUQVpqLV1awK9c9PsZau+28sW/RSZCeiKM3OTi/xQlY=
     interface:
         address: 10.0.0.1/24
         ListenPort: 51820
-        # post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o  eth0 -j MASQUERADE
-        # post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o  eth0 -j MASQUERADE
-        post_up:
-        pre_down:
-        post_down:
-        table: auto
 
 wg_clients:
-    testable2:
-        PublicKey: STFU
+    levantine:
+        PublicKey: qkybUqsnHYjVdmiR4zZv1bunbPg0oyqGWgKyyX8WlHg=
         Address: 10.0.0.2/32
         AllowedIPs: 0.0.0.0/0
-    jenkins:
-        PublicKey: STFU
+    vmwarebastion:
+        PublicKey: SmaCQ9sR9138k+nuwVntVegadg7H7FEUQZvudxsPoUI=
         Address: 10.0.0.3/32
+        AllowedIPs: 0.0.0.0/0
+    jenkins:
+        PublicKey: Ry8AtMARkVmKOPNXzM1+mMpgcPh4h08wOoH5TK6ouik=
+        Address: 10.0.0.4/32
         AllowedIPs: 0.0.0.0/0

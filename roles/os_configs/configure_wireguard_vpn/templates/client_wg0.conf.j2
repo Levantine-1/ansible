@@ -1,14 +1,12 @@
 # This is for the client machine's configuration
 [Interface]
-Address = {{ wg_clients[inventory_hostname.split('.')[0]]['Address'] }}
 PrivateKey = {{ wireguard[env_context]['secret_key']['client'][inventory_hostname.split('.')[0]] }}
-DNS = {{ wg_DNS }}
-MTU = {{ wg_MTU }}
+Address = {{ wg_clients[inventory_hostname.split('.')[0]]['Address'] }}
 
 # The Peer is always the host server
 [Peer]
 PublicKey = {{ wg_server['public_key'] }}
-PresharedKey = {{ wg_server['PresharedKey'] }}
-AllowedIPs = {{ wg_clients[inventory_hostname.split('.')[0]]['AllowedIPs'] }}
 Endpoint = {{ wg_server['endpoint'] }}
+AllowedIPs = {{ wg_clients[inventory_hostname.split('.')[0]]['AllowedIPs'] }}
 PersistentKeepalive = {{ wg_PersistentKeepalive }}
+PreSharedKey = {{ wireguard[env_context]['preshared_key']['server'] }}
