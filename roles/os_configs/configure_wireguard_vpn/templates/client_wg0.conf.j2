@@ -2,7 +2,6 @@
 [Interface]
 PrivateKey = {{ wireguard[env_context]['secret_key']['client'][inventory_hostname.split('.')[0]] }}
 Address = {{ wg_clients[inventory_hostname.split('.')[0]]['Address'] }}
-PresharedKey = {{ wireguard[env_context]['preshared_key']['client'][inventory_hostname.split('.')[0]] }}
 
 # The Peer is always the host server
 [Peer]
