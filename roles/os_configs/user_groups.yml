@@ -1,5 +1,5 @@
 - name: Create groups and configure group permissions
-  hosts: all:!Theia
+  hosts: all
   become: yes
 
   tasks:
