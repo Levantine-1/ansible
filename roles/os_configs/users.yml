@@ -21,12 +21,8 @@
         state: present
         shell: /bin/bash
       with_items: "{{ enabled_users }}"
-      no_log: true
+      no_log: false
       register: create_user
-
-    - debug:
-        msg: "{{ create_user.stdout }}"
-      when: create_user.failed
 
     - name: Ensure authorized key exist for users
       authorized_key:
@@ -34,12 +30,8 @@
         state: present
         key: "{{ item.authorized_key }}"
       with_items: "{{ enabled_users }}"
-      no_log: true
+      no_log: false
       register: create_authorized_key
-
-    - debug:
-        msg: "{{ create_authorized_key.stdout }}"
-      when: create_authorized_key.failed
 
     - name: Remove users
       user:
