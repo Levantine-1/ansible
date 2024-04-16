@@ -10,8 +10,8 @@
         group: sudo_all
 
     disabled_users:
-      - name: example
-        authorized_key: example
+      - name: admin
+      - name: debian
 
   tasks:
     - name: Create users
@@ -21,6 +21,7 @@
         state: present
         shell: /bin/bash
       with_items: "{{ enabled_users }}"
+      no_log: true
 
     - name: Ensure authorized key exist for users
       authorized_key:
