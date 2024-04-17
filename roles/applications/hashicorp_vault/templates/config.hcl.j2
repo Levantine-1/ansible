@@ -10,6 +10,16 @@ listener "tcp" {
 api_addr = "http://localhost:8200"
 ui = true
 
+# Enable KV secret engine version 2
+secrets {
+  engine = {
+    kv_v2 = {
+      path = "secret/"
+      version = 2
+    }
+  }
+}
+
 
 log_requests_level = "info"
 log_level = "info"
