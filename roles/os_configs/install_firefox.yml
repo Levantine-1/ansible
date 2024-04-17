@@ -8,6 +8,7 @@
 # https://support.mozilla.org/en-US/kb/install-firefox-linux#w_install-firefox-deb-package-for-debian-based-distributions
 
   tasks:
+    # NOTE: snap and snapd packages are installed by installBasicPackages.yml for service hosts
     - name: Install Snap Packages
       community.general.snap:
         name:

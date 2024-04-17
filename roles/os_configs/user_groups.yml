@@ -17,16 +17,24 @@
         mode: '0440'
       become: yes
 
+#NOTE: As of 2024/14/04 if the limited group is created without users, somehow ubuntu sudoers freaks out
+    # and breaks sudo for all users. So for now we remove anything limited_users until we actually have a limited user to add.
     - name: Create group with restricted permissions
       group:
         name: limited_group
-        state: present
+        state: absent
 
-    - name: Ensure limited_group can only access their own home directory
-      copy:
-        content: "%limited_group ALL=(ALL) NOPASSWD: /bin/ls"
-        dest: /etc/sudoers.d/limited_group
-        owner: root
-        group: root
-        mode: '0440'
+#    - name: Ensure limited_group can only access their own home directory
+#      copy:
+#        content: "%limited_group ALL=(ALL) NOPASSWD: /bin/ls"
+#        dest: /etc/sudoers.d/limited_group
+#        owner: root
+#        group: root
+#        mode: '0440'
+#      become: yes
+
+    - name: Ensure limited_group file is deleted
+      file:
+        path: /etc/sudoers.d/limited_group
+        state: absent
       become: yes
