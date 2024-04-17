@@ -19,6 +19,12 @@
         - lightdm-gtk-greeter-settings
       register: xfce_install
 
+    - name: Turn off lightdm on startup
+      # I only need to start lightdm when I want to use the GUI
+      systemd:
+        name: lightdm
+        enabled: no
+
     - name: Reboot to apply changes
       ansible.builtin.reboot:
         reboot_timeout: 300
