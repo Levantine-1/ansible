@@ -9,11 +9,16 @@
       mode: '0644'
     register: wireguard_client_config
 
+  - name: Ping the Wireguard Server VPN IP
+    ansible.builtin.command: "ping -W 5 -c 1 {{ wg_server['interface']['address'] | regex_replace('\\/.*', '') }}"
+    register: ping_result
+    ignore_errors: yes
+
   - name: Stop Wireguard Client
     ansible.builtin.command: "wg-quick down wg0"
-    when: wireguard_client_config.changed
+    when: wireguard_client_config.changed or ping_result.rc != 0
     ignore_errors: yes
 
   - name: Start Wireguard Client
     ansible.builtin.command: "wg-quick up wg0"
-    when: wireguard_client_config.changed
+    when: wireguard_client_config.changed or ping_result.rc != 0

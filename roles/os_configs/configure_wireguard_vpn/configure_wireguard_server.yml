@@ -62,11 +62,18 @@
         state: restarted
       when: wireguard_server_config.changed
 
+    - name: Check if Wireguard Server is Runnning
+      ansible.builtin.command: "wg show"
+      register: wireguard_server_status
+      ignore_errors: yes
+
     - name: Stop Wireguard Client
       ansible.builtin.command: "wg-quick down wg0"
-      when: wireguard_server_config.changed
+      when: wireguard_server_config.changed or
+            "'interface: wg0' not in wireguard_server_status.stdout"
       ignore_errors: yes
 
     - name: Start Wireguard Client
       ansible.builtin.command: "wg-quick up wg0"
-      when: wireguard_server_config.changed
+      when: wireguard_server_config.changed or
+            "'interface: wg0' not in wireguard_server_status.stdout"
