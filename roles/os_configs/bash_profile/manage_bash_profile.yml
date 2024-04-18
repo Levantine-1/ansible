@@ -12,5 +12,4 @@
 
   handlers:
     - name: Reload profile
-      command: "sudo bash /etc/profile"
-      become: yes
+      command: "bash /etc/profile"

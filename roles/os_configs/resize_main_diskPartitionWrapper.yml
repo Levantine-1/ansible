@@ -28,7 +28,7 @@
         state: present
 
     - name: Get unallocated space on the disk
-      ansible.builtin.shell: "sudo parted -s /dev/sda unit GiB print free | grep 'Free Space' | tail -1 | awk '{print $3}' | tr -d 'GiB' |  awk '{print int($1+0.5)}'"
+      ansible.builtin.shell: "parted -s /dev/sda unit GiB print free | grep 'Free Space' | tail -1 | awk '{print $3}' | tr -d 'GiB' |  awk '{print int($1+0.5)}'"
       register: unallocated_space
       changed_when: false
       when: not lock_file_stat.stat.exists

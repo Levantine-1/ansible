@@ -30,7 +30,7 @@
 
     # NOTE: This step hangs when a key already exists
     - name: Add HashiCorp GPG key
-      ansible.builtin.shell: "wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
+      ansible.builtin.shell: "wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg"
       when: vault_version.rc != 0
 
     - name: Verify Keyring
