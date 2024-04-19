@@ -11,34 +11,46 @@ ENDPOINT_ADDR=$(echo "${ENDPOINT}" | cut -d ':' -f 1)
 ENDPOINT_PORT=$(echo "${ENDPOINT}" | cut -d ':' -f 2)
 WG_VPN_IP=$(echo "{{ wg_server['interface']['address'] }}" | cut -d '/' -f 1)
 TIMEOUT=5
-CHECK_INTERVAL=25
+CHECK_INTERVAL=10
+MAX_FAILED_PINGS=6
 
 echo "Watching Wireguard Server at ${WG_VPN_IP} for connectivity..."
 WG_SERVICE_RESTARTED=false
+WG_PING_CHECK_FAILED=1
 while true; do
-    sleep ${CHECK_INTERVAL} # Sleep here because the continue statement below will skip this if placed at the end of the loop
-    # Ping the host
     if ping -c 1 -W ${TIMEOUT} "${WG_VPN_IP}" &> /dev/null; then
-        if [[ ${WG_SERVICE_RESTARTED} == true ]]; then
+        if [[ ${WG_SERVICE_RESTARTED} == true || ${WG_PING_CHECK_FAILED} -gt 1 ]]; then
             echo "Ping check successful, wg server is up. Continuing to monitor..."
             WG_SERVICE_RESTARTED=false
         fi
-        continue
+        WG_PING_CHECK_FAILED=1
+    elif [[ $(sudo wg show | grep wg0) != "interface: wg0" ]]; then
+        echo "Wireguard interface is not up, restarting wireguard client service..."
+        service wg-quick@wg0 restart
+        WG_SERVICE_RESTARTED=true
+        WG_PING_CHECK_FAILED=1
     else
-        echo "Ping check failed, checking DNS resolution for ${ENDPOINT_ADDR}..."
-        if nslookup "${ENDPOINT_ADDR}" &> /dev/null; then
-            echo "DNS resolution successful, checking if port is open..."
-            nc_output=$(nc -zv -w "${TIMEOUT}" "${ENDPOINT_ADDR}" "${ENDPOINT_PORT}" 2>&1)
-            if [[ ${nc_output} == *"Connection refused"*  ]]; then
-                # Connection shows refused due to requiring authentication but if you get this, it means the port is open
-                echo "${ENDPOINT} is open, restarting wireguard client service..."
-                service wg-quick@wg0 restart
-                WG_SERVICE_RESTARTED=true
+        echo "Ping check failed ${WG_PING_CHECK_FAILED} times(s)."
+        WG_PING_CHECK_FAILED=$((WG_PING_CHECK_FAILED+1))
+        if [[ ${WG_PING_CHECK_FAILED} -ge ${MAX_FAILED_PINGS} ]]; then
+            echo "Ping check failed ${MAX_FAILED_PINGS} times, restarting wireguard client service..."
+            echo "checking DNS resolution for ${ENDPOINT_ADDR}..."
+            if nslookup "${ENDPOINT_ADDR}" &> /dev/null; then
+                echo "DNS resolution successful, checking if port is open..."
+                nc_output=$(nc -zv -w "${TIMEOUT}" "${ENDPOINT_ADDR}" "${ENDPOINT_PORT}" 2>&1)
+                if [[ ${nc_output} == *"Connection refused"*  ]]; then
+                    # Connection shows refused due to requiring authentication but if you get this, it means the port is open
+                    echo "${ENDPOINT} is open, restarting wireguard client service..."
+                    service wg-quick@wg0 restart
+                    WG_SERVICE_RESTARTED=true
+                    WG_PING_CHECK_FAILED=1
+                else
+                    echo "Unexpected error: $nc_output"
+                fi
             else
-                echo "Unexpected error: $nc_output"
+                echo "DNS resolution failed, host may be down"
             fi
-        else
-            echo "DNS resolution failed, host may be down"
         fi
     fi
+    sleep ${CHECK_INTERVAL}
 done
