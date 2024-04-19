@@ -27,3 +27,32 @@
       state: restarted
     when: (wireguard_client_config.changed and not wireguard_client_service.changed) or
           (wireguard_client_status.failed)
+
+  - name: Configure wireguard watcher script
+    template:
+      src: "templates/wireguard_watcher.sh.j2"
+      dest: "/etc/wireguard/wireguard-watcher.sh"
+      owner: root
+      group: root
+      mode: '0644'
+    register: wg_watcher_script
+
+  - name: Configure wireguard watcher service daemon
+    copy:
+      src: "templates/wireguard-watcher.service"
+      dest: "/lib/systemd/system/wireguard-watcher.service"
+      owner: root
+      group: root
+      mode: '0644'
+    register: wireguard_watcher_service
+
+  - name: Reload systemd daemon
+    systemd:
+      daemon_reload: yes
+    when: wireguard_watcher_service.changed
+
+  - name: Start the Wireguard Watcher service
+    systemd:
+      name: wireguard_watcher
+      state: enabled
+      enabled: yes

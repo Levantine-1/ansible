@@ -1,0 +1,11 @@
+[Unit]
+Description=WireGuard Watcher
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/etc/wireguard/wireguard-watcher.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
