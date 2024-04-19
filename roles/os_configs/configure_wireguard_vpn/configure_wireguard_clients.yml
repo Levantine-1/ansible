@@ -25,6 +25,5 @@
     systemd:
       name: wg-quick@wg0
       state: restarted
-    when:
-      - (wireguard_client_config.changed and wireguard_client_service.not_changed) or
-      - (wireguard_client_status.failed)
+    when: (wireguard_client_config.changed and not wireguard_client_service.changed) or
+          (wireguard_client_status.failed)
