@@ -53,7 +53,7 @@
 
   - name: Start the Wireguard Watcher service
     systemd:
-      name: wireguard_watcher
+      name: wireguard-watcher
       state: started
       enabled: yes
 
