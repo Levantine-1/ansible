@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/etc/wireguard/wireguard-watcher.sh
+ExecStart=/bin/bash /etc/wireguard/wireguard-watcher.sh
 Restart=always
 
 [Install]

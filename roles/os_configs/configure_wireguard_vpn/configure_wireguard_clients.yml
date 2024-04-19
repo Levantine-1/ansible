@@ -56,3 +56,9 @@
       name: wireguard_watcher
       state: enabled
       enabled: yes
+
+  - name: Restart the Wireguard Watcher service
+    systemd:
+      name: wireguard-watcher
+      state: restarted
+    when: wireguard_watcher_service.changed or wg_watcher_script.changed
