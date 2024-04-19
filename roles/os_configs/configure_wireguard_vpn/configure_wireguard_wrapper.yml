@@ -22,6 +22,10 @@
         name: "{{ required_packages }}"
         state: present
 
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
     - name: Configure Wireguard Server
       include_tasks: "configure_wireguard_server.yml"
       when: wg is defined and wg == "server"

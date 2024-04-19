@@ -62,18 +62,22 @@
         state: restarted
       when: wireguard_server_config.changed
 
+    - name: Enable and start the WireGuard Server service daemon
+      systemd:
+        name: wg-quick@wg0
+        state: started
+        enabled: yes
+      register: wireguard_server_service
+
     - name: Check if Wireguard Server is Runnning
-      ansible.builtin.command: "wg show"
+      ansible.builtin.command: "wg show | grep wg0"
       register: wireguard_server_status
       ignore_errors: yes
 
-    - name: Stop Wireguard Client
-      ansible.builtin.command: "wg-quick down wg0"
-      when: wireguard_server_config.changed or
-            "interface: wg0" not in wireguard_server_status.stdout
-      ignore_errors: yes
-
-    - name: Start Wireguard Client
-      ansible.builtin.command: "wg-quick up wg0"
-      when: wireguard_server_config.changed or
-            "interface: wg0" not in wireguard_server_status.stdout
+    - name: Restart Wireguard Server
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+      when:
+        - wireguard_server_config.changed and wireguard_server_service.not_changed) or
+        - wireguard_server_status.failed
