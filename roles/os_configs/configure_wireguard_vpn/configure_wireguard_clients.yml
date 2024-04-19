@@ -17,7 +17,7 @@
     register: wireguard_client_service
 
   - name: Check if Wireguard Client is Running
-    ansible.builtin.command: "wg show | grep wg0"
+    ansible.builtin.shell: "wg show | grep wg0"
     register: wireguard_client_status
     ignore_errors: yes
 

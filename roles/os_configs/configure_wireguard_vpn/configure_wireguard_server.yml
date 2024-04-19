@@ -70,7 +70,7 @@
       register: wireguard_server_service
 
     - name: Check if Wireguard Server is Runnning
-      ansible.builtin.command: "wg show | grep wg0"
+      ansible.builtin.shell: "wg show | grep wg0"
       register: wireguard_server_status
       ignore_errors: yes
 
