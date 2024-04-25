@@ -4,7 +4,8 @@
   become: yes
   # Note: In the future, we'll be using DNS forwards instead of /etc/hosts; this is just a temporary solution
   # NOTE: 2023-12-14 This will soon be deprecated by PF sense
-
+  # NOTE: 2024-04-25 This has been deprecated by OPNSense for general use. But this is going to stay here
+  # so that I don't have to reinvent the wheel if i want to use it in the future for some niche use case.
   tasks:
     - name: Read the existing /etc/hosts file
       shell: cat /etc/hosts
