@@ -4,28 +4,6 @@ domains:
     - levantine.io
     - nhitruong.com
 
-host_entries: |
-    10.0.0.1 ec2bastion.vpn.levantine.io
-
-    10.0.0.2 vmwarebastion.vpn.levantine.io
-    192.168.1.10 vmwarebastion.internal.levantine.io
-    10.69.69.10 vmwarebastion.home.levantine.io
-
-    192.168.1.20 jenkins.internal.levantine.io
-    10.69.69.126 jenkins.home.levantine.io
-    10.0.0.3 jenkins.vpn.levantine.io
-
-    192.168.1.30 theia.internal.levantine.io
-    10.69.69.147 theia.home.levantine.io
-
-    192.168.1.31 alpine1.internal.levantine.io
-    10.69.69.110 alpine1.home.levantine.io
-
-    192.168.1.50 db1rw.internal.levantine.io
-
-    192.168.1.51 db1ro.internal.levantine.io
-
-
 aws:
     default_region: us-west-2
-    account_id: 361127977446
+    account_id: 975050308029

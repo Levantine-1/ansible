@@ -1,4 +1,6 @@
 # NOTE: As of 2023-12-14 this is deprecated by PF Sense
+  # NOTE: 2024-04-25 This has been deprecated by OPNSense for general use. But this is going to stay here
+  # so that I don't have to reinvent the wheel if i want to use it in the future for some niche use case.
 ---
 - name: Configure DNS Forwarding and Resolution
   hosts: all

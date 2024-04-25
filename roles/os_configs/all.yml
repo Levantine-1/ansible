@@ -10,7 +10,7 @@
 - import_playbook: installBasicPackages.yml
 - import_playbook: configure_time.yml
 # - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by OPNSense
-- import_playbook: configureHostFile.yml # NOTE: This will soon be deprecated by OPNSense
+# - import_playbook: configureHostFile.yml # NOTE: This is deprecated by OPNSense
 - import_playbook: configureHostname.yml
 - import_playbook: configureDHCP.yml
 - import_playbook: configure_DNS_Resolver.yml
