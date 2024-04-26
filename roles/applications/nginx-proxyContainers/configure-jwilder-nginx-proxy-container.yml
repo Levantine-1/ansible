@@ -10,7 +10,7 @@
     # and it was difficult to find a way to just get a list of running containers. In any case, since this
     # just listing, it should still be declarative
     - name: Get running container names
-      ansible.builtin.command: 'docker ps --format "{{\.Names}} --filter status=running"'
+      ansible.builtin.command: 'docker ps --format "\{\{.Names\}\} --filter status=running"'
       register: running_containers_raw
       changed_when: false
 
