@@ -18,7 +18,7 @@
 #- import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 #- import_playbook: theiaOneOff.yml
 #- import_playbook: ../applications/jenkins/deployReverseProxy.yml
-#- import_playbook: installDocker.yml
+- import_playbook: installDocker.yml
 #- import_playbook: configure_gui.yml
 #- import_playbook: install_firefox.yml
 #- import_playbook: configure_wireguard_vpn/configure_wireguard_wrapper.yml
