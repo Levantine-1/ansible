@@ -1,0 +1,43 @@
+---
+- name: Pull and run nginx-proxy container
+  hosts: VMWareDockerHosts
+  gather_facts: yes
+  tasks:
+
+    - name: Get running containers
+      docker_container_info:
+        filters:
+          status: running
+      register: running_containers
+
+    - name: Pull nginx-proxy image
+      docker_image:
+        name: jwilder/nginx-proxy
+        tag: latest
+      register: image_pull
+
+    - name: Run nginx-proxy container
+      docker_container:
+        name: nginx-proxy
+        image: jwilder/nginx-proxy:latest
+        ports:
+          - "80:80"
+        volumes:
+          - "/var/run/docker.sock:/tmp/docker.sock:ro"
+        detach: yes
+      when: image_pull.changed
+      register: container_start
+
+    - name: Restart nginx-proxy container if image was pulled
+      docker_container:
+        name: nginx-proxy
+        state: restarted
+      when: image_pulled.changed and not container_start.changed
+      register: container_restart
+
+    - name: Restart running containers if nginx-proxy container was restarted
+      docker_container:
+        name: "{{ item.Names }}"
+        state: restarted
+      loop: "{{ running_containers.containers }}"
+      when: container_restart.changed and item.Names != 'nginx-proxy'
