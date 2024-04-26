@@ -42,7 +42,7 @@
         state: latest
         update_cache: true
 
-    - name: Install docker python package
-      pip:
-        name: docker
+    - name: Install packages
+      package:
+        name: "python3-docker"
         state: present
