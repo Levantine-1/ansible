@@ -17,6 +17,7 @@
     - name: Pull nginx-proxy image
       docker_image:
         name: jwilder/nginx-proxy
+        source: pull
         tag: latest
       register: image_pull
 
@@ -29,6 +30,7 @@
         volumes:
           - "/var/run/docker.sock:/tmp/docker.sock:ro"
         detach: yes
+        container_default_behavior: no_defaults
       when: image_pull.changed
       register: container_start
 
@@ -36,7 +38,7 @@
       docker_container:
         name: nginx-proxy
         state: restarted
-      when: image_pulled.changed and not container_start.changed
+      when: image_pull.changed and not container_start.changed
       register: container_restart
 
     - name: Restart running containers if nginx-proxy container was restarted
