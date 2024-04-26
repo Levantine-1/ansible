@@ -4,6 +4,8 @@
   gather_facts: true
   become: true
 
+  vars_files:
+    - ../../../vault.yml
   vars:
     # variable container_name is defined as an extra var
     account_id: "{{ aws.account_id }}"
