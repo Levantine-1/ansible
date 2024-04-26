@@ -5,7 +5,7 @@
   tasks:
 
     - name: Get running containers
-      docker_container_info:
+      docker_container_facts:
         filters:
           status: running
       register: running_containers
