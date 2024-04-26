@@ -2,13 +2,17 @@
 - name: Pull and run nginx-proxy container
   hosts: VMWareDockerHosts
   gather_facts: yes
+  become: yes
+
   tasks:
 
-    - name: Get running containers
-      docker_container_facts:
-        filters:
-          status: running
-      register: running_containers
+    # The docker module documentation mainly focuses on getting information on a specific container
+    # and it was difficult to find a way to just get a list of running containers. In any case, since this
+    # just listing, it should still be declarative
+    - name: Get running container names
+      command: docker ps --format "{{.Names}} --filter status=running"
+      register: running_containers_raw
+      changed_when: false
 
     - name: Pull nginx-proxy image
       docker_image:
@@ -37,7 +41,7 @@
 
     - name: Restart running containers if nginx-proxy container was restarted
       docker_container:
-        name: "{{ item.Names }}"
+        name: "{{ item }}"
         state: restarted
-      loop: "{{ running_containers.containers }}"
-      when: container_restart.changed and item.Names != 'nginx-proxy'
+      loop: "{{ running_containers_raw.stdout_lines }}"
+      when: container_restart.changed and item != 'nginx-proxy'
