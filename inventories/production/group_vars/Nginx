@@ -2,4 +2,4 @@ reverse_proxy_configs:
     upstream:
         proxy_pass_location: "https://vmwarebastion.vpn.levantine.io"
     downstream:
-        proxy_pass_location: "http://alpine1.internal.levantine.io"
+        proxy_pass_location: "http://dockerhost1.internal.levantine.io"
