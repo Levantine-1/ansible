@@ -10,6 +10,9 @@
     # variable container_name is defined as an extra var
     account_id: "{{ aws.account_id }}"
     default_region: "{{ aws.default_region }}"
+    aws_environment: # These will be filled in by the HashiCorp Vault lookup in this playbook
+      AWS_ACCESS_KEY_ID: "{{ aws_creds.access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ aws_creds.secret_key }}"
 
   tasks:
     - name: Validate Supported Container
@@ -24,15 +27,11 @@
 
     - name: Log in to AWS ECR
       shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
-      environment:
-        AWS_ACCESS_KEY_ID: "{{ aws_creds.access_key }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_creds.secret_key }}"
+      environment: "{{ aws_environment }}"
 
     - name: Get the latest Docker image from ECR
       shell: "aws ecr describe-images --repository-name {{ container_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ default_region }}"
-      environment:
-        AWS_ACCESS_KEY_ID: "{{ aws_creds.access_key }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_creds.secret_key }}"
+      environment: "{{ aws_environment }}"
       register: latest_image
 
     - name: Latest docker image
