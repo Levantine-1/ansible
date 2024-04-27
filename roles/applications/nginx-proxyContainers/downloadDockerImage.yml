@@ -19,15 +19,15 @@
 
     - name: Debug vault_address
       debug:
-      msg: "{{ hashicorp.vault.address }}"
+        msg: "{{ hashicorp.vault.address }}"
 
     - name: Debug vault_token
       debug:
-      msg: "{{ hashicorp.vault.token }}"
+        msg: "{{ hashicorp.vault.token }}"
 
     - name: Debug container_name
       debug:
-      msg: "{{ container_name }}"
+        msg: "{{ container_name }}"
 
     - name: Retrieve AWS Credentials from HashiCorp Vault
       set_fact:
