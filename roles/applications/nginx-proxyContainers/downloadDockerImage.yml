@@ -20,7 +20,7 @@
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
       set_fact:
-        aws_creds: "{{ lookup('hashi_vault', 'secret=secret/data/v1/kv/aws/iam_access_keys/terraform_{{ container_name }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+        aws_creds: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/terraform_thisper token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
     - name: Log in to AWS ECR
       shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
