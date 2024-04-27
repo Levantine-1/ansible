@@ -23,7 +23,7 @@
 
     - name: Debug vault_token
       debug:
-        msg: "{{ hashicorp.vault.token }}"
+        msg: "{{ hashicorp_vault_token }}"
 
     - name: Debug container_name
       debug:
