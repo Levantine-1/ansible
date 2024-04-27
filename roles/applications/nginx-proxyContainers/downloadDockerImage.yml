@@ -17,6 +17,18 @@
         msg: "Checking to see if container is supported"
       failed_when: "container_name == 'nginx-proxy' or container_name not in hostvars[groups['VMWareDockerHosts'][0]]['supported_containers']"
 
+    - name: Debug vault_address
+      debug:
+      msg: "{{ hashicorp.vault.address }}"
+
+    - name: Debug vault_token
+      debug:
+      msg: "{{ hashicorp.vault.token }}"
+
+    - name: Debug container_name
+      debug:
+      msg: "{{ container_name }}"
+
     - name: Retrieve AWS Credentials from HashiCorp Vault
       set_fact:
         aws_creds: "{{ lookup('hashi_vault', 'secret=kv/aws/iam_access_keys/{{ container_name }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
