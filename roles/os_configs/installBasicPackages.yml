@@ -6,8 +6,9 @@
 
   vars:
     basic_packages:
-      - htop
-      - net-tools
+      - htop # Better than top
+      - net-tools # ifconfig and stuff
+      - python3-hvac # HashiCorp Vault client
     service_host_packages:
       - snap # The snap packages for needed to install firefox on service host
       - snapd
