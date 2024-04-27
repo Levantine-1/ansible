@@ -7,3 +7,8 @@ domains:
 aws:
     default_region: us-west-2
     account_id: 975050308029
+
+hashicorp:
+    vault:
+        address: http://vault.internal.levantine.io:8200
+        # Token in ansible-vault
