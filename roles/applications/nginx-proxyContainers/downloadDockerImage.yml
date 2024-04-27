@@ -30,7 +30,7 @@
       shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
       environment:
         AWS_ACCESS_KEY_ID: "{{ aws_creds.access_key }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_credentials.secret_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ aws_creds.secret_key }}"
 
     - name: Get the latest Docker image from ECR
       shell: "aws ecr describe-images --repository-name {{ container_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ default_region }}"
