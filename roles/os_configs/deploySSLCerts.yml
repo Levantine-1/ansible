@@ -29,6 +29,7 @@
         dest: /etc/nginx/certs/levantine.io/{{ item }}.pem
       with_items:
         "{{ ssl_certs }}"
+      register: levantine_certs
 
     - name: Retrieving SSL Certs for nhitruong.com
       set_fact:
@@ -40,3 +41,10 @@
         dest: /etc/nginx/certs/nhitruong.com/{{ item }}.pem
       with_items:
         "{{ ssl_certs }}"
+      register: nhitruong_certs
+
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+      when: levantine_certs.changed or nhitruong_certs.changed
