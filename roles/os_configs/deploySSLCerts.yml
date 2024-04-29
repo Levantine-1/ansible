@@ -4,7 +4,7 @@
   become: yes
 
   vars_files:
-    - ../../../vault.yml
+    - ../../vault.yml
   vars:
     ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
       cert: "{{ ssl_certs.cert }}"
