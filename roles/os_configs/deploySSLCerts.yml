@@ -15,7 +15,7 @@
   tasks:
     - name: Ensure Cert Directory Exists for Each Domain
       file:
-        path: "/etc/nginx/certs/"
+        path: "/etc/nginx/certs/{{ item }}"
         state: directory
       loop: "{{ domains }}"
 
