@@ -3,26 +3,40 @@
   hosts: Nginx
   become: yes
 
+  vars_files:
+    - ../../../vault.yml
+  vars:
+    ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
+      cert: "{{ ssl_certs.cert }}"
+      chain: "{{ ssl_certs.chain }}"
+      fullchain: "{{ ssl_certs.fullchain }}"
+      privkey: "{{ ssl_certs.privkey }}"
+
   tasks:
-    - name: Ensure Cert Directory Exists
+    - name: Ensure Cert Directory Exists for Each Domain
       file:
         path: "/etc/nginx/certs/"
         state: directory
       loop: "{{ domains }}"
 
-#    - name: Copy SSL Certs
-#      copy:
-#        src: "/etc/letsencrypt/live/{{ item }}"
-#        dest: "/etc/nginx/certs/{{ item }}"
-#        remote_src: no
-#      loop: "{{ domains }}"
+    - name: Retrieving SSL Certs for levantine.io
+      set_fact:
+        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/levantine_io token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
-# The above stanza doesn't work because ansible is a total idiot and cannot find a path that's right in front of it, even with sudo permissions
-# So we copied the certs to home dir copy from that instead.
-
-    - name: Copy SSL Certs
+    - name: Configure SSL Certs for levantine.io
       copy:
-        src: "/home/jenkins/certs/{{ item }}"
-        dest: "/etc/nginx/certs/"
-        remote_src: no
-      loop: "{{ domains }}"
+        content: "{{ ssl_certs[item] }}"
+        dest: /etc/nginx/certs/levantine.io/{{ item }}.pem
+      with_items:
+        "{{ ssl_certs }}"
+
+    - name: Retrieving SSL Certs for nhitruong.com
+      set_fact:
+        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/nhitruong_com token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Configure SSL Certs for nhitruong.com
+      copy:
+        content: "{{ ssl_certs[item] }}"
+        dest: /etc/nginx/certs/nhitruong.com/{{ item }}.pem
+      with_items:
+        "{{ ssl_certs }}"
