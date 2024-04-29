@@ -1,23 +1,36 @@
 ---
 - name: Debug Test
   hosts: localhost
-  vars_files:
-    - ../../vault.yml
   vars:
     foo: "bar"
+    ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
+      cert: "{{ ssl_certs.cert }}"
+      chain: "{{ ssl_certs.chain }}"
+      fullchain: "{{ ssl_certs.fullchain }}"
+      privkey: "{{ ssl_certs.privkey }}"
 
   tasks:
 
-    - name: Show Foo
-      debug:
-        msg: "{{ inventory_hostname.split('.')[0] }}"
+#    - name: Show Foo
+#      debug:
+#        msg: "Hello World"
 
-    - name: Show Key
-      debug:
-        msg: "{{ wireguard[env_context]['secret_key'] }}"
+    - name: Retrieving SSL Certs for levantine.io
+      set_fact:
+        ssl_certs:
+          cert: "certy"
+          chain: "chainy"
+          fullchain: "fullchainy"
+          privkey: "privkeyyy"
 
-#  VIRTUAL_HOST: "{{ supported_containers[container_name]['env_vars']['VIRTUAL_HOST'] }}"
-
-    - name: Show Key
+    - name: Show SSL Cert Keys
       debug:
-        msg: "{{ wireguard[env_context]['secret_key'][inventory_hostname.split('.')[0]] }}"
+        msg: "{{ item }}"
+      with_items:
+        "{{ ssl_certs }}"
+
+    - name: Show SSL Cert values
+      debug:
+        msg: "{{ ssl_certs[item] }}"
+      with_items:
+        "{{ ssl_certs }}"
