@@ -9,7 +9,7 @@
         authorized_key: ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAlK9SYgHttisI9NMozvE0HNroEK2bBG406szUfIGz1Xq+CGTdW1x197nBh36zqa5gYbhQCM/uGKOaGCPB+6R6gW0CpaHjPvcKW+pKAUaEWkQzeRYaS1yEJjD4Fh+DFqgaYKh+VTCH7RC2c6N+YdKKJkaSan2iaI9Z5nLjAxJloepbJBTDnhPQVasqNUykh6ZbYyYM5p3EEhYPrw5bMZJJkyHV44UexfqBmroSgbA87PtyUw/+9T9aG3yYwtAafUZJlZpWbeHdMRW/SVYmt/wCze5x+IAxqjk+48b8HeltR5Nys33VSQybuKNrcnumDNzthLFMQvF4ABO66yCTQ5NaBQ== automation
         group: sudo_all
       - name: nhi
-        authorized_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQClGI+bQ4cukKCL8j8dsMnx+fUIgfqVUkVc8Vc+Tc6ppElFh5ZiAp3UUVMqEB5v+iKXdD4BJB+c0IS6Y4Uqq9+Wma5Eg6D/frkBalQTJ3qkg4XYbSxz5/9HwzvzfgiZEwh6VPwm1MN+rwBtAEXlsCJ2BMH1G9EaPUZ4yvMY6EYUXLiPw+Szssip5vfubxBbyiJ+hlA3sGqF3/8LvPK1iqa5l4wL0IZ/WAQewUsbgMSU1Ed1B3DQor71f3JKnLKMLUOL09G+Cld42UFZwPPqlHYYCYJ+g2UDZGwsgEyZGpuo+i084oBnS6I/k0f8LqYJ2AqYossTe1MB/qThXNZamXQIeuFqjzv3mejENHglW/U3fNfj0lbjjkf5WQS7VrnvFJOY0e/R4+xCQVavf08uNFusFjPfrWPU9L4AiCdN42g2JDQDkQxrAaAvxNsCMlqDJb+SvJSRmdtnhGVnXDbiJvb2IlPdOH9gtWysuiEvzKTGNaWmFALnk+4R8uL/RkZfz8U= Nhi@DESKTOP-3HLA8GT
+        authorized_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIES5NH7nCc1sjSB4ED7bxv4zizFbBoY6sX0ZytJ0UP/Y eddsa-key-20240430
         group: sudo_all
 
 
