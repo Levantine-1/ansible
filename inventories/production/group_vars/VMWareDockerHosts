@@ -3,6 +3,10 @@ supported_containers:
     env_vars:
       foo: bar
 
+  portfolio:
+    env_vars:
+      VIRTUAL_HOST: levantine.io
+
   booking-movie-ticket:
     env_vars:
       VIRTUAL_HOST: bmt.nhitruong.com
