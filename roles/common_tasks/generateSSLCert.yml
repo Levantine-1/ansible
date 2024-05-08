@@ -25,7 +25,8 @@
       with_items: "{{ domains }}"
 
     - name: Generate Let's Encrypt Wildcard Certificates
-      command: certbot certonly --non-interactive --agree-tos --email "{{ certbot_email }}" --manual --preferred-challenges=dns --domain "*.{{ item }}"
+      # For 2 domains, root domain and all subdomains of the root domain
+      command: certbot certonly --non-interactive --agree-tos --email "{{ certbot_email }}" --manual --preferred-challenges=dns --domain "*.{{ item }}" --domain "{{ item }}"
       loop: "{{ domains }}"
       register: cert_generation
 
