@@ -1,12 +1,12 @@
 server {
   listen 80;
-  server_name *.{{ item }};
+  server_name *.{{ item }} {{ item }};
   return 301 https://$host$request_uri;
 }
 
 server {
   listen 443 ssl;
-  server_name *.{{ item }};
+  server_name *.{{ item }} {{ item }};
   ssl_certificate /etc/nginx/certs/{{ item }}/fullchain.pem;
   ssl_certificate_key /etc/nginx/certs/{{ item }}/privkey.pem;
 
