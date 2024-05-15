@@ -22,3 +22,7 @@ supported_containers:
   education-platform:
     env_vars:
       VIRTUAL_HOST: education-platform.nhitruong.com
+
+  dental-care:
+    env_vars:
+      VIRTUAL_HOST: dental-care.nhitruong.com
