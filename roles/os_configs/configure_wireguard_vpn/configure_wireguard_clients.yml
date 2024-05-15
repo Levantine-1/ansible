@@ -21,7 +21,7 @@
     register: wireguard_client_status
     ignore_errors: yes
 
-  - name: Restart Wireguard Server
+  - name: Restart Wireguard Client
     systemd:
       name: wg-quick@wg0
       state: restarted
