@@ -7,7 +7,6 @@
   vars_files:
     - ../../../vault.yml
   vars:
-    account_id: "{{ aws.account_id }}"
     default_region: "{{ aws.default_region }}"
     splunk_server_installer_file: "splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
 
