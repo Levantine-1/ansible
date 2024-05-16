@@ -39,8 +39,9 @@
         - "/opt/splunk/etc/licenses/"
         - "/opt/splunk/etc/system/local/"
         - "/opt/splunk/etc/openldap/"
-        - "/opt/splunk/etc/auth/audit"
-        - "/opt/splunk/etc/auth/distServerKeys"
+        - "/opt/splunk/etc/auth/audit/"
+        - "/opt/splunk/etc/auth/distServerKeys/"
+        - "/opt/splunk/share/splunk/search_mrsparkle/"
 
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
