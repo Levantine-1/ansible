@@ -51,7 +51,7 @@
 
     - name: Enable Splunk systemd boot-start
       ansible.builtin.command:
-        cmd: "/opt/splunk/bin/splunk enable boot-start -user splunk -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+        cmd: "/opt/splunk/bin/splunk enable boot-start -user automation -systemd-managed 1 --accept-license --answer-yes --no-prompt"
       when: splunk_install.changed
 
     - name: Delete splunkserver.deb
