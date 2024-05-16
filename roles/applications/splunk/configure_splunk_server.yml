@@ -1,6 +1,6 @@
 ---
 - name: Configure Splunk Server
-  hosts: splunk
+  hosts: Splunk
   gather_facts: true
   become: true
 
