@@ -36,7 +36,7 @@
         aws_access_key: "{{ aws_creds.access_key }}"
         aws_secret_key: "{{ aws_creds.secret_key }}"
         region: "{{ aws.default_region }}"
-      when: splunk_executable.stat.exists == False
+      # when: splunk_executable.stat.exists == False
       register: splunk_download
 
     - name: Install splunk forwarder
