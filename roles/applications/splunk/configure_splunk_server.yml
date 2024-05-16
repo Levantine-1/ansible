@@ -44,6 +44,7 @@
         - "/opt/splunk/etc/licenses/"
         - "/opt/splunk/etc/system/local/"
         - "/opt/splunk/etc/openldap/"
+        - "/opt/splunk/etc/auth/audit"
 
     - name: Download splunkserver.deb from S3
       aws_s3:
