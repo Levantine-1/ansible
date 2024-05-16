@@ -11,6 +11,11 @@
     default_region: "{{ aws.default_region }}"
 
   tasks:
+    - name: Check if Splunk is installed
+      stat:
+        path: /opt/splunk/bin/splunk
+      register: splunk_executable
+
     - name: Install required system packages
       apt:
         pkg:
@@ -35,10 +40,19 @@
         aws_access_key: "{{ aws_creds.access_key }}"
         aws_secret_key: "{{ aws_creds.secret_key }}"
         region: "{{ aws.default_region }}"
+      when: splunk_executable.stat.exists == False
+      register: splunk_download
 
     - name: Install splunkserver.deb
       ansible.builtin.apt:
         deb: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+      when: splunk_download.changed
+      register: splunk_install
+
+    - name: Enable Splunk systemd boot-start
+      ansible.builtin.command:
+        cmd: "/opt/splunk/bin/splunk enable boot-start -user splunk -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+      when: splunk_install.changed
 
     - name: Delete splunkserver.deb
       ansible.builtin.file:
