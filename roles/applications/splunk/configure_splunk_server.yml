@@ -1,0 +1,36 @@
+---
+- name: Configure Splunk Server
+  hosts: splunk
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - ../../../vault.yml
+  vars:
+    account_id: "{{ aws.account_id }}"
+    default_region: "{{ aws.default_region }}"
+
+    tasks:
+    - name: Retrieve AWS Credentials from HashiCorp Vault
+      # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
+      set_fact:
+        aws_creds: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/terraform_admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Download splunkserver.deb from S3
+      aws_s3:
+        bucket: "{{ env_context }}-levantine-terraform-bucket"
+        object: "splunk/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+        dest: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+        mode: get
+        aws_access_key: "{{ aws_creds.data.access_key }}"
+        aws_secret_key: "{{ aws_creds.data.secret_key }}"
+        region: "{{ aws.default_region }}"
+
+    - name: Install splunkserver.deb
+      ansible.builtin.apt:
+        deb: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+
+    - name: Delete splunkserver.deb
+      ansible.builtin.file:
+        path: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+        state: absent
