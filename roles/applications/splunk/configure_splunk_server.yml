@@ -26,22 +26,22 @@
         path: /opt/splunk/bin/splunk
       register: splunk_executable
 
-    - name: Create Splunk Directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: 0755
-        owner: automation
-        group: automation
-      with_items:
-        - "/opt/splunk/"
-        - "/opt/splunk/var/log/"
-        - "/opt/splunk/etc/licenses/"
-        - "/opt/splunk/etc/system/local/"
-        - "/opt/splunk/etc/openldap/"
-        - "/opt/splunk/etc/auth/audit/"
-        - "/opt/splunk/etc/auth/distServerKeys/"
-        - "/opt/splunk/share/splunk/search_mrsparkle/modules.new/"
+#    - name: Create Splunk Directories
+#      ansible.builtin.file:
+#        path: "{{ item }}"
+#        state: directory
+#        mode: 0755
+#        owner: automation
+#        group: automation
+#      with_items:
+#        - "/opt/splunk/"
+#        - "/opt/splunk/var/log/"
+#        - "/opt/splunk/etc/licenses/"
+#        - "/opt/splunk/etc/system/local/"
+#        - "/opt/splunk/etc/openldap/"
+#        - "/opt/splunk/etc/auth/audit/"
+#        - "/opt/splunk/etc/auth/distServerKeys/"
+#        - "/opt/splunk/share/splunk/search_mrsparkle/modules.new/"
 
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
@@ -68,7 +68,7 @@
 
     - name: Enable Splunk systemd boot-start
       ansible.builtin.command:
-        cmd: "/opt/splunk/bin/splunk enable boot-start -user automation -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
       when: splunk_install.changed
 
     - name: Retrieve default Splunk Login Password from HashiCorp Vault
