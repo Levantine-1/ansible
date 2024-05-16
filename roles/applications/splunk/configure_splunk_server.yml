@@ -26,23 +26,6 @@
         path: /opt/splunk/bin/splunk
       register: splunk_executable
 
-#    - name: Create Splunk Directories
-#      ansible.builtin.file:
-#        path: "{{ item }}"
-#        state: directory
-#        mode: 0755
-#        owner: automation
-#        group: automation
-#      with_items:
-#        - "/opt/splunk/"
-#        - "/opt/splunk/var/log/"
-#        - "/opt/splunk/etc/licenses/"
-#        - "/opt/splunk/etc/system/local/"
-#        - "/opt/splunk/etc/openldap/"
-#        - "/opt/splunk/etc/auth/audit/"
-#        - "/opt/splunk/etc/auth/distServerKeys/"
-#        - "/opt/splunk/share/splunk/search_mrsparkle/modules.new/"
-
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
       set_fact:
@@ -66,11 +49,6 @@
       when: splunk_download.changed
       register: splunk_install
 
-    - name: Enable Splunk systemd boot-start
-      ansible.builtin.command:
-        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
-      when: splunk_install.changed
-
     - name: Retrieve default Splunk Login Password from HashiCorp Vault
       set_fact:
         splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
@@ -85,10 +63,10 @@
           PASSWORD = "{{ splunk_creds.PASSWORD }}"
       when: splunk_install.changed
 
-    - name: Restart Splunk to apply user-seed.conf changes
-      ansible.builtin.command:
-        cmd: "/opt/splunk/bin/splunk restart"
-      when: splunk_install.changed
+#    - name: Enable Splunk systemd boot-start
+#      ansible.builtin.command:
+#        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+#      when: splunk_install.changed
 
     - name: Delete splunkserver.deb
       ansible.builtin.file:
