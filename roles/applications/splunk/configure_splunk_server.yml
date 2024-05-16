@@ -11,6 +11,13 @@
     default_region: "{{ aws.default_region }}"
 
   tasks:
+    - name: Ensure boto3 and botocore are installed
+      ansible.builtin.pip:
+        name:
+          - boto3
+          - botocore
+      state: present
+
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
       set_fact:
