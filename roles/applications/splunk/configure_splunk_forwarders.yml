@@ -1,0 +1,52 @@
+---
+- name: Configure Splunk Forwarders
+  hosts: all:!Splunk
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - ../../../vault.yml
+  vars:
+    account_id: "{{ aws.account_id }}"
+    default_region: "{{ aws.default_region }}"
+    splunk_forwarder_installer_file: "splunkforwarder-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+
+  tasks:
+    - name: Install required system packages
+      apt:
+        pkg:
+          - python3-pip
+          - virtualenv
+          - python3-boto3
+          - python3-botocore
+        state: latest
+        update_cache: true
+
+
+    - name: Retrieve AWS Credentials from HashiCorp Vault
+      # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
+      set_fact:
+        aws_creds: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/terraform_admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Download splunkforwarder.deb from S3
+      aws_s3:
+        bucket: "{{ env_context }}-levantine-terraform-bucket"
+        object: "splunk/{{ splunk_forwarder_installer_file }}"
+        dest: "~/{{ splunk_forwarder_installer_file }}"
+        mode: get
+        aws_access_key: "{{ aws_creds.access_key }}"
+        aws_secret_key: "{{ aws_creds.secret_key }}"
+        region: "{{ aws.default_region }}"
+      when: splunk_executable.stat.exists == False
+      register: splunk_download
+
+    - name: Install splunk forwarder
+      ansible.builtin.apt:
+        deb: "~/{{ splunk_forwarder_installer_file }}"
+      when: splunk_download.changed
+      register: splunk_install
+
+    - name: Delete splunkforwarder.deb
+      ansible.builtin.file:
+        path: "~/{{ splunk_forwarder_installer_file }}"
+        state: absent

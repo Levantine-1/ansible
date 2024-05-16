@@ -9,6 +9,7 @@
   vars:
     account_id: "{{ aws.account_id }}"
     default_region: "{{ aws.default_region }}"
+    splunk_server_installer_file: "splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
 
   tasks:
     - name: Install required system packages
@@ -34,8 +35,8 @@
     - name: Download splunkserver.deb from S3
       aws_s3:
         bucket: "{{ env_context }}-levantine-terraform-bucket"
-        object: "splunk/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
-        dest: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+        object: "splunk/{{ splunk_server_installer_file }}"
+        dest: "~/{{ splunk_server_installer_file }}"
         mode: get
         aws_access_key: "{{ aws_creds.access_key }}"
         aws_secret_key: "{{ aws_creds.secret_key }}"
@@ -45,13 +46,13 @@
 
     - name: Install splunkserver.deb
       ansible.builtin.apt:
-        deb: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+        deb: "~/{{ splunk_server_installer_file }}"
       when: splunk_download.changed
       register: splunk_install
 
     - name: Delete splunkserver.deb
       ansible.builtin.file:
-        path: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
+        path: "~/{{ splunk_server_installer_file }}"
         state: absent
 
 #    - name: Retrieve default Splunk Login Password from HashiCorp Vault
