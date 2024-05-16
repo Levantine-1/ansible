@@ -10,7 +10,7 @@
     account_id: "{{ aws.account_id }}"
     default_region: "{{ aws.default_region }}"
 
-    tasks:
+  tasks:
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
       set_fact:
