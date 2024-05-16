@@ -22,8 +22,8 @@
         object: "splunk/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
         dest: "~/splunk-9.2.1-78803f08aabb-linux-2.6-amd64.deb"
         mode: get
-        aws_access_key: "{{ aws_creds.data.access_key }}"
-        aws_secret_key: "{{ aws_creds.data.secret_key }}"
+        aws_access_key: "{{ aws_creds.access_key }}"
+        aws_secret_key: "{{ aws_creds.secret_key }}"
         region: "{{ aws.default_region }}"
 
     - name: Install splunkserver.deb
