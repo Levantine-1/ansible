@@ -31,6 +31,16 @@
       set_fact:
         aws_creds: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/terraform_admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
+    - name: Create Splunk Directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: 0755
+        owner: automation
+        group: automation
+      with_items:
+        - "/opt/splunk/var/log"
+
     - name: Download splunkserver.deb from S3
       aws_s3:
         bucket: "{{ env_context }}-levantine-terraform-bucket"
