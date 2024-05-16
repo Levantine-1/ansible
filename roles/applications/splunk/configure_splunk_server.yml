@@ -11,6 +11,15 @@
     default_region: "{{ aws.default_region }}"
 
   tasks:
+    - name: Install required system packages
+      apt:
+        pkg:
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
+
     - name: Ensure boto3 and botocore are installed
       ansible.builtin.pip:
         name:
