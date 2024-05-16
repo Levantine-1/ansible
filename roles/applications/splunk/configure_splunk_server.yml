@@ -40,8 +40,8 @@
         group: automation
       with_items:
         - "/opt/splunk/"
-        - "/opt/splunk/var/log"
-        - "/opt/splunk/etc/"
+        - "/opt/splunk/var/log/"
+        - "/opt/splunk/etc/licenses/"
 
     - name: Download splunkserver.deb from S3
       aws_s3:
