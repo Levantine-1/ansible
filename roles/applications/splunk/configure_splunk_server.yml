@@ -16,7 +16,7 @@
         name:
           - boto3
           - botocore
-      state: present
+        state: present
 
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
