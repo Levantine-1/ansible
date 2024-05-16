@@ -11,11 +11,6 @@
     default_region: "{{ aws.default_region }}"
 
   tasks:
-    - name: Check if Splunk is installed
-      stat:
-        path: /opt/splunk/bin/splunk
-      register: splunk_executable
-
     - name: Install required system packages
       apt:
         pkg:
@@ -26,10 +21,10 @@
         state: latest
         update_cache: true
 
-    - name: Retrieve AWS Credentials from HashiCorp Vault
-      # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
-      set_fact:
-        aws_creds: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/terraform_admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+    - name: Check if Splunk is installed
+      stat:
+        path: /opt/splunk/bin/splunk
+      register: splunk_executable
 
     - name: Create Splunk Directories
       ansible.builtin.file:
@@ -46,6 +41,11 @@
         - "/opt/splunk/etc/openldap/"
         - "/opt/splunk/etc/auth/audit"
         - "/opt/splunk/etc/auth/distServerKeys"
+
+    - name: Retrieve AWS Credentials from HashiCorp Vault
+      # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
+      set_fact:
+        aws_creds: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/terraform_admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
     - name: Download splunkserver.deb from S3
       aws_s3:
@@ -68,6 +68,25 @@
     - name: Enable Splunk systemd boot-start
       ansible.builtin.command:
         cmd: "/opt/splunk/bin/splunk enable boot-start -user automation -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+      when: splunk_install.changed
+
+    - name: Retrieve default Splunk Login Password from HashiCorp Vault
+      set_fact:
+        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      when: splunk_install.changed
+
+    - name: Create username and password in user-seed.conf
+      copy:
+        dest: "/opt/splunk/etc/system/local/user-seed.conf"
+        content: |
+          [user_info]
+          USERNAME = "{{ splunk_creds.USERNAME }}"
+          PASSWORD = "{{ splunk_creds.PASSWORD }}"
+      when: splunk_install.changed
+
+    - name: Restart Splunk to apply user-seed.conf changes
+      ansible.builtin.command:
+        cmd: "/opt/splunk/bin/splunk restart"
       when: splunk_install.changed
 
     - name: Delete splunkserver.deb
