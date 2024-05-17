@@ -2,6 +2,6 @@
 defaultGroup = splunk-server
 
 [tcpout:splunk-server]
-server = "{{ splunk.server.host }}:{{ splunk.server.port }}"
+server = {{ splunk.server.host }}:{{ splunk.server.port }}
 
-[tcpout-server://"{{ splunk.server.host }}:{{ splunk.server.port }}"]
+[tcpout-server://{{ splunk.server.host }}:{{ splunk.server.port }}]
