@@ -3,7 +3,13 @@ disabled = false
 index = main
 sourcetype = vmware
 
+[journald://]
+disabled = false
+index = syslog
+sourcetype = syslog
+
 [journald://sshd]
 disabled = false
-index = main
+index = sshd
 sourcetype = syslog
+
