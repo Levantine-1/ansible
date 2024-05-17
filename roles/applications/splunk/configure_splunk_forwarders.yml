@@ -77,6 +77,7 @@
       ansible.builtin.command:
         cmd: "/opt/splunkforwarder/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
       when: splunk_install.changed
+      become: true
 
     - name: Restart Splunkd service
       ansible.builtin.service:
