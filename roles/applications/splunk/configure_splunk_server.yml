@@ -68,15 +68,15 @@
           HASHED_PASSWORD  = "{{ splunk_creds.PASSWORD_HASH }}"
       when: splunk_install.changed
 
-    - name: Enable Splunk systemd boot-start
-      ansible.builtin.command:
-        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
-      when: splunk_install.changed
-
-    - name: Restart Splunk
-      ansible.builtin.command:
-        cmd: "/opt/splunk/bin/splunk restart"
-      when: splunk_install.changed
+#    - name: Enable Splunk systemd boot-start
+#      ansible.builtin.command:
+#        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+#      when: splunk_install.changed
+#
+#    - name: Restart Splunk
+#      ansible.builtin.command:
+#        cmd: "/opt/splunk/bin/splunk restart"
+#      when: splunk_install.changed
 
 # NOTE: For some weird reason, the splunk server doesn't provision the admin user with the correct password as specified
 # in the user-seed.conf file despite EXPLICITLY requesting the file and the file is created with the exact fields it wants,
