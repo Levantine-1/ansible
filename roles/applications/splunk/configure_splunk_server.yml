@@ -79,7 +79,7 @@
 
     - name: Configure server inputs file
       template:
-        src: "templates/server/input.conf.j2"
+        src: "templates/server/inputs.conf.j2"
         dest: "/opt/splunk/etc/system/local/inputs.conf"
         owner: root
         group: root

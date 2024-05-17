@@ -89,7 +89,7 @@
 
     - name: Configure forwarders inputs file
       template:
-        src: "templates/forwarders/input.conf.j2"
+        src: "templates/forwarders/inputs.conf.j2"
         dest: "/opt/splunk/etc/system/local/inputs.conf"
         owner: root
         group: root
