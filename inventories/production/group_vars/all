@@ -12,3 +12,8 @@ hashicorp:
     vault:
         address: http://vault.internal.levantine.io:8200
         # Token in ansible-vault
+
+splunk:
+    server:
+        host: splunk.internal.levantine.io
+        port: 9997

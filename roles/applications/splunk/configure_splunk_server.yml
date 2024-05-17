@@ -77,8 +77,17 @@
         cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
       when: splunk_install.changed
 
+    - name: Configure server inputs file
+      template:
+        src: "templates/server/input.conf.j2"
+        dest: "/opt/splunk/etc/system/local/inputs.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      register: inputs_config
+
     - name: Restart Splunkd service
       ansible.builtin.service:
         name: Splunkd
         state: restarted
-      when: splunk_install.changed
+      when: splunk_install.changed or inputs_config.changed
