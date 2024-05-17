@@ -99,7 +99,7 @@
     - name: Configure forwarders journalctl log inputs file
       template:
         src: "templates/forwarders/journalctl_inputs.conf.j2"
-        dest: "/opt/splunkforwarder/etc/apps/journald_input/local/local/inputs.conf"
+        dest: "/opt/splunkforwarder/etc/apps/journald_input/local/inputs.conf"
         owner: root
         group: root
         mode: '0644'
