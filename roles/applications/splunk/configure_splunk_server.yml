@@ -59,37 +59,26 @@
         splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
       when: splunk_install.changed
 
+    # NOTE: DO NOT use quotes around the splunk_creds variables. Splunk will not provision the user correctly.
+    # https://docs.splunk.com/Documentation/Splunk/9.2.1/Admin/User-seedconf
     - name: Create username and password in user-seed.conf
       copy:
         dest: "/opt/splunk/etc/system/local/user-seed.conf"
         content: |
           [user_info]
-          USERNAME = "{{ splunk_creds.USERNAME }}"
-          HASHED_PASSWORD  = "{{ splunk_creds.PASSWORD_HASH }}"
+          USERNAME = {{ splunk_creds.USERNAME }}
+          HASHED_PASSWORD  = {{ splunk_creds.PASSWORD_HASH }}
+        # Use HASHED_PASSWORD for a more secure installation. To hash a clear-text password,
+        # use the 'splunk hash-passwd' command then copy the output to this file.
       when: splunk_install.changed
 
-#    - name: Enable Splunk systemd boot-start
-#      ansible.builtin.command:
-#        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
-#      when: splunk_install.changed
-#
-#    - name: Restart Splunk
-#      ansible.builtin.command:
-#        cmd: "/opt/splunk/bin/splunk restart"
-#      when: splunk_install.changed
+    - name: Enable Splunk systemd boot-start
+      ansible.builtin.command:
+        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+      when: splunk_install.changed
 
-# NOTE: For some weird reason, the splunk server doesn't provision the admin user with the correct password as specified
-# in the user-seed.conf file despite EXPLICITLY requesting the file and the file is created with the exact fields it wants,
-# and when starting the splunk server, it does not complain. I don't know why, I can't figure it out. So once the splunk server is installed,
-# Run the following steps manually on the splunk server host:
-
-# 1. sudo /opt/splunk/bin/splunk start --accept-license --answer-yes
-     # Configure the initial username and password here.
-
-# 2. sudo /opt/splunk/bin/splunk stop
-     # We stop splunk here to enable and start it as a systemd service
-
-# 3. sudo /opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1
-     # This command will enable splunk to start on boot as a systemd service
-
-# 4. sudo service Splunkd start
+    - name: Restart Splunkd service
+      ansible.builtin.service:
+        name: Splunkd
+        state: restarted
+      when: splunk_install.changed
