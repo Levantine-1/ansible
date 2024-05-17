@@ -87,14 +87,23 @@
       # but when you run the exact command twice, you get this message "Overwriting present value (splunkfwd) of 'SPLUNK_OS_USER' in /opt/splunkforwarder/etc/splunk-launch.conf"
       # and then it works. I have no idea why, but it works after restarting the service daemon.
 
-    - name: Configure forwarders inputs file
+    - name: Configure forwarders log file inputs file
       template:
-        src: "templates/forwarders/inputs.conf.j2"
+        src: "templates/forwarders/monitor_inputs.conf.j2"
         dest: "/opt/splunkforwarder/etc/system/local/inputs.conf"
         owner: root
         group: root
         mode: '0644'
       register: inputs_config
+
+    - name: Configure forwarders journalctl log inputs file
+      template:
+        src: "templates/forwarders/journalctl_inputs.conf.j2"
+        dest: "/opt/splunkforwarder/etc/apps/journald_input/local/local/inputs.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      register: jctl_inputs_config
 
     - name: Configure forwarders outputs file
       template:
@@ -109,4 +118,4 @@
       ansible.builtin.service:
         name: SplunkForwarder
         state: restarted
-      when: splunk_install.changed or inputs_config.changed or outputs_config.changed
+      when: splunk_install.changed or inputs_config.changed or outputs_config.changed or jctl_inputs_config.changed
