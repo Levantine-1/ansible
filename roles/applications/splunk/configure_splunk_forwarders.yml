@@ -75,7 +75,7 @@
 
     - name: Enable Splunk systemd boot-start
       ansible.builtin.command:
-        cmd: "/opt/splunkforwarder/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+        cmd: "sudo /opt/splunkforwarder/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
       when: splunk_install.changed
       become: true
 
