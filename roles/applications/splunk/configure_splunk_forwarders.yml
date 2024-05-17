@@ -96,23 +96,23 @@
         mode: '0644'
       register: inputs_config
 
-    - name: Configure forwarders journalctl log inputs file
-      template:
-        src: "templates/forwarders/journalctl_inputs.conf.j2"
-        dest: "/opt/splunkforwarder/etc/apps/journald_input/local/inputs.conf"
-        owner: root
-        group: root
-        mode: '0644'
-      register: jctl_inputs_config
-
-#    - name: Configure forwarders outputs file
+#    - name: Configure forwarders journalctl log inputs file
 #      template:
-#        src: "templates/forwarders/outputs.conf.j2"
-#        dest: "/opt/splunkforwarder/etc/system/local/outputs.conf"
+#        src: "templates/forwarders/journalctl_inputs.conf.j2"
+#        dest: "/opt/splunkforwarder/etc/apps/journald_input/local/inputs.conf"
 #        owner: root
 #        group: root
 #        mode: '0644'
-#      register: outputs_config
+#      register: jctl_inputs_config
+
+    - name: Configure forwarders outputs file
+      template:
+        src: "templates/forwarders/outputs.conf.j2"
+        dest: "/opt/splunkforwarder/etc/system/local/outputs.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      register: outputs_config
 
     - name: Restart Splunkd service
       ansible.builtin.service:
