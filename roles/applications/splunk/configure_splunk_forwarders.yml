@@ -72,3 +72,14 @@
         # Use HASHED_PASSWORD for a more secure installation. To hash a clear-text password,
         # use the 'splunk hash-passwd' command then copy the output to this file.
       when: splunk_install.changed
+
+    - name: Enable Splunk systemd boot-start
+      ansible.builtin.command:
+        cmd: "/opt/splunkforwarder/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+      when: splunk_install.changed
+
+    - name: Restart Splunkd service
+      ansible.builtin.service:
+        name: SplunkForwarder
+        state: restarted
+      when: splunk_install.changed
