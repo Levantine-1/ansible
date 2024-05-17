@@ -54,24 +54,29 @@
         path: "~/{{ splunk_server_installer_file }}"
         state: absent
 
-#    - name: Retrieve default Splunk Login Password from HashiCorp Vault
-#      set_fact:
-#        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-#      when: splunk_install.changed
+    - name: Retrieve default Splunk Login Password from HashiCorp Vault
+      set_fact:
+        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      when: splunk_install.changed
 
-#    - name: Create username and password in user-seed.conf
-#      copy:
-#        dest: "/opt/splunk/etc/system/local/user-seed.conf"
-#        content: |
-#          [user_info]
-#          USERNAME = "{{ splunk_creds.USERNAME }}"
-#          PASSWORD = "{{ splunk_creds.PASSWORD }}"
-#      when: splunk_install.changed
+    - name: Create username and password in user-seed.conf
+      copy:
+        dest: "/opt/splunk/etc/system/local/user-seed.conf"
+        content: |
+          [user_info]
+          USERNAME = "{{ splunk_creds.USERNAME }}"
+          HASHED_PASSWORD  = "{{ splunk_creds.PASSWORD_HASH }}"
+      when: splunk_install.changed
 
-#    - name: Enable Splunk systemd boot-start
-#      ansible.builtin.command:
-#        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
-#      when: splunk_install.changed
+    - name: Enable Splunk systemd boot-start
+      ansible.builtin.command:
+        cmd: "/opt/splunk/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
+      when: splunk_install.changed
+
+    - name: Restart Splunk
+      ansible.builtin.command:
+        cmd: "/opt/splunk/bin/splunk restart"
+      when: splunk_install.changed
 
 # NOTE: For some weird reason, the splunk server doesn't provision the admin user with the correct password as specified
 # in the user-seed.conf file despite EXPLICITLY requesting the file and the file is created with the exact fields it wants,
