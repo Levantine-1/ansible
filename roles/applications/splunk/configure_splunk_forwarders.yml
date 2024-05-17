@@ -53,3 +53,22 @@
       ansible.builtin.file:
         path: "~/{{ splunk_forwarder_installer_file }}"
         state: absent
+
+    #NOTE: I know this is the server login, but to keep things simple for now, I'm using the same credentials for the forwarders as well
+    - name: Retrieve default Splunk Login Password from HashiCorp Vault
+      set_fact:
+        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      when: splunk_install.changed
+
+    # NOTE: DO NOT use quotes around the splunk_creds variables. Splunk will not provision the user correctly.
+    # https://docs.splunk.com/Documentation/Splunk/9.2.1/Admin/User-seedconf
+    - name: Create username and password in user-seed.conf
+      copy:
+        dest: "/opt/splunkforwarder/etc/system/local/user-seed.conf"
+        content: |
+          [user_info]
+          USERNAME = {{ splunk_creds.USERNAME }}
+          HASHED_PASSWORD  = {{ splunk_creds.PASSWORD_HASH }}
+        # Use HASHED_PASSWORD for a more secure installation. To hash a clear-text password,
+        # use the 'splunk hash-passwd' command then copy the output to this file.
+      when: splunk_install.changed
