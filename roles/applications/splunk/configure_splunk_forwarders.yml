@@ -90,7 +90,7 @@
     - name: Configure forwarders inputs file
       template:
         src: "templates/forwarders/inputs.conf.j2"
-        dest: "/opt/splunk/etc/system/local/inputs.conf"
+        dest: "/opt/splunkforwarder/etc/system/local/inputs.conf"
         owner: root
         group: root
         mode: '0644'
@@ -99,7 +99,7 @@
     - name: Configure forwarders outputs file
       template:
         src: "templates/forwarders/outputs.conf.j2"
-        dest: "/opt/splunk/etc/system/local/outputs.conf"
+        dest: "/opt/splunkforwarder/etc/system/local/outputs.conf"
         owner: root
         group: root
         mode: '0644'
