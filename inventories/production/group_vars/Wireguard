@@ -9,7 +9,7 @@ wg_server:
         ListenPort: 51820
 
 wg_clients:
-    levantine:
+    splunk:
         PublicKey: qkybUqsnHYjVdmiR4zZv1bunbPg0oyqGWgKyyX8WlHg=
         Address: 10.0.0.2/32
     vmwarebastion:
