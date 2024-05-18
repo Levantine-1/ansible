@@ -31,10 +31,8 @@ disabled = false
 index = wireguard
 sourcetype = syslog
 
-{% if ansible_env.wg == 'client' %}
 [journald://wireguard-watcher]
 disabled = false
 index = wireguard
 sourcetype = syslog
-{% endif %}
 {% endif %}
