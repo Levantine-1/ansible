@@ -23,7 +23,7 @@
         update_cache: true
 
     - name: Check if Splunk Forwarder is currently installed
-      ansible.builtin.command: /opt/splunkforwarder/bin/splunk -version | grep -v 'Warning'
+      ansible.builtin.command: /opt/splunkforwarder/bin/splunk -version
       register: splunk_forwarder_version
       ignore_errors: yes
 
