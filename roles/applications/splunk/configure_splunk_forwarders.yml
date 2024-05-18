@@ -22,8 +22,15 @@
         state: latest
         update_cache: true
 
+#    - name: Check if Splunk Forwarder is currently installed
+#      ansible.builtin.shell: /opt/splunkforwarder/bin/splunk -version > /dev/null
+#      register: splunk_forwarder_version
+#      ignore_errors: yes
+      # NOTE: For some weird reason, this command hangs when run as a task, but works perfectly fine when run as a command in the terminal.
+      # I'm just going to ls the file instead.
+
     - name: Check if Splunk Forwarder is currently installed
-      ansible.builtin.shell: /opt/splunkforwarder/bin/splunk -version > /dev/null
+      ansible.builtin.shell: ls /opt/splunkforwarder/bin/splunk
       register: splunk_forwarder_version
       ignore_errors: yes
 
