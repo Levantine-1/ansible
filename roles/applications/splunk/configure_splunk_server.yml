@@ -86,8 +86,17 @@
         mode: '0644'
       register: inputs_config
 
+    - name: Configure indexes conf file
+      template:
+        src: "templates/server/indexes.conf.j2"
+        dest: "/opt/splunk/etc/system/local/indexes.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      register: indexes_config
+
     - name: Restart Splunkd service
       ansible.builtin.service:
         name: Splunkd
         state: restarted
-      when: splunk_install.changed or inputs_config.changed
+      when: splunk_install.changed or inputs_config.changed or indexes_config.changed
