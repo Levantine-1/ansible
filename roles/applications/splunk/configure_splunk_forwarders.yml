@@ -49,13 +49,11 @@
         aws_secret_key: "{{ aws_creds.secret_key }}"
         region: "{{ aws.default_region }}"
       when: splunk_forwarder_version.rc != 0
-      register: splunk_download
 
     - name: Install splunk forwarder
       ansible.builtin.apt:
         deb: "~/{{ splunk_forwarder_installer_file }}"
-      when: splunk_download.changed
-      register: splunk_install
+      when: splunk_forwarder_version.rc != 0
 
     - name: Delete splunkforwarder.deb
       ansible.builtin.file:
@@ -66,7 +64,7 @@
     - name: Retrieve default Splunk Login Password from HashiCorp Vault
       set_fact:
         splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/server token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-      when: splunk_install.changed
+      when: splunk_forwarder_version.rc != 0
 
     # NOTE: DO NOT use quotes around the splunk_creds variables. Splunk will not provision the user correctly.
     # https://docs.splunk.com/Documentation/Splunk/9.2.1/Admin/User-seedconf
@@ -79,17 +77,17 @@
           HASHED_PASSWORD  = {{ splunk_creds.PASSWORD_HASH }}
         # Use HASHED_PASSWORD for a more secure installation. To hash a clear-text password,
         # use the 'splunk hash-passwd' command then copy the output to this file.
-      when: splunk_install.changed
+      when: splunk_forwarder_version.rc != 0
 
     - name: Enable Splunk systemd boot-start
       ansible.builtin.command:
         cmd: "/opt/splunkforwarder/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
-      when: splunk_install.changed
+      when: splunk_forwarder_version.rc != 0
 
     - name: Enable Splunk systemd boot-start
       ansible.builtin.command:
         cmd: "/opt/splunkforwarder/bin/splunk enable boot-start -user root -systemd-managed 1 --accept-license --answer-yes --no-prompt"
-      when: splunk_install.changed
+      when: splunk_forwarder_version.rc != 0
       ignore_errors: yes
       # OK, so this is weird, this command oddly needs to be run twice. If run once, even as sudo, it fails with a permission error.
       # but when you run the exact command twice, you get this message "Overwriting present value (splunkfwd) of 'SPLUNK_OS_USER' in /opt/splunkforwarder/etc/splunk-launch.conf"
@@ -117,4 +115,4 @@
       ansible.builtin.service:
         name: SplunkForwarder
         state: restarted
-      when: splunk_install.changed or inputs_config.changed or outputs_config.changed
+      when: splunk_forwarder_version.rc != 0 or inputs_config.changed or outputs_config.changed
