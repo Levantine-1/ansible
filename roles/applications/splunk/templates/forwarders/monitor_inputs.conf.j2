@@ -1,15 +1,40 @@
-[monitor:///var/log/vmware-vmsvc-root.log]
-disabled = false
-index = main
-sourcetype = vmware
-
-[journald://]
-disabled = false
-index = syslog
-sourcetype = syslog
-
 [journald://sshd]
 disabled = false
 index = sshd
 sourcetype = syslog
 
+[journald://cron]
+disabled = false
+index = cron
+sourcetype = syslog
+
+[journald://systemd-logind]
+disabled = false
+index = systemd-logind
+sourcetype = syslog
+
+{% if 'Nginx' in group_names %}
+[monitor:///var/log/nginx/access.log]
+disabled = false
+index = nginx
+sourcetype = nginx
+
+[monitor:///var/log/nginx/error.log]
+disabled = false
+index = nginx
+sourcetype = nginx
+{% endif %}
+
+{% if 'Wireguard' in group_names %}
+[journald://wg-quick@wg0]
+disabled = false
+index = wireguard
+sourcetype = syslog
+
+{% if ansible_env.wg == 'client' %}
+[journald://wireguard-watcher]
+disabled = false
+index = wireguard
+sourcetype = syslog
+{% endif %}
+{% endif %}

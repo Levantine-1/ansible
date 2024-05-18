@@ -1,6 +1,7 @@
 ---
 - name: Configure Splunk Forwarders
-  hosts: all:!Splunk
+  hosts: all:!Splunk:!Theia:!Jenkins
+  # Excluding Theia and Jenkins because they're legacy envs and I don't want to deal with potential conflicts
   gather_facts: true
   become: true
 
