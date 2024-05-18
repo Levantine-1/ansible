@@ -22,10 +22,10 @@
         state: latest
         update_cache: true
 
-    - name: Check if Splunk is installed
-      stat:
-        path: /opt/splunkforwarder/bin/splunk
-      register: splunk_executable
+    - name: Check if Splunk Forwarder is currently installed
+      ansible.builtin.command: /opt/splunkforwarder/bin/splunk -version | grep -v 'Warning'
+      register: splunk_forwarder_version
+      ignore_errors: yes
 
     - name: Retrieve AWS Credentials from HashiCorp Vault
       # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
@@ -41,7 +41,7 @@
         aws_access_key: "{{ aws_creds.access_key }}"
         aws_secret_key: "{{ aws_creds.secret_key }}"
         region: "{{ aws.default_region }}"
-      when: splunk_executable.stat.exists == False
+      when: splunk_forwarder_version.rc != 0
       register: splunk_download
 
     - name: Install splunk forwarder
