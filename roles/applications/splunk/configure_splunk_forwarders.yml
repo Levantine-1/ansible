@@ -109,4 +109,4 @@
       ansible.builtin.service:
         name: SplunkForwarder
         state: restarted
-      when: splunk_install.changed or inputs_config.changed or outputs_config.changed or jctl_inputs_config.changed
+      when: splunk_install.changed or inputs_config.changed or outputs_config.changed
