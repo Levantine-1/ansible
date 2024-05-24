@@ -26,3 +26,7 @@ supported_containers:
   dental-care:
     env_vars:
       VIRTUAL_HOST: dental-care.nhitruong.com
+
+  pet-care:
+    env_vars:
+      VIRTUAL_HOST: pet-care.nhitruong.com
