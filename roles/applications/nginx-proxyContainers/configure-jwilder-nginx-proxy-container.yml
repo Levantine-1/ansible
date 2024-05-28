@@ -4,6 +4,9 @@
   gather_facts: yes
   become: yes
 
+  vars_files:
+    - ../../../vault.yml
+
   tasks:
 
     # The docker module documentation mainly focuses on getting information on a specific container
@@ -21,6 +24,12 @@
         tag: latest
       register: image_pull
 
+    - name: Retrieve SplunkForwarder Token from HashiCorp Vault
+      # NOTE: This token is created manually under splunk>settings>data inputs>HTTP Event Collector and stored in vault at path below
+      set_fact:
+        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/http_access_tokens/docker token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      when: image_pull.changed
+
     - name: Run nginx-proxy container
       docker_container:
         name: nginx-proxy
@@ -31,6 +40,12 @@
           - "/var/run/docker.sock:/tmp/docker.sock:ro"
         detach: yes
         container_default_behavior: no_defaults
+        log_driver: splunk
+        log_options:
+          splunk-token: "{{ splunk_creds.token }}"
+          splunk-url: "http://{{ splunk.server.host }}:{{ splunk.forwarders.http_event_collector_port }}"
+          splunk-insecureskipverify: "{{ splunk.forwarders.insecureskipverify }}"
+          splunk-source: "nginx-proxy"
       when: image_pull.changed
       register: container_start
 
