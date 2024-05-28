@@ -18,5 +18,5 @@ splunk:
         host: splunk.internal.levantine.io
         port: 9997
     forwarders:
-        insecureskipverify: true
+        insecureskipverify: "true"
         http_event_collector_port: 8088
