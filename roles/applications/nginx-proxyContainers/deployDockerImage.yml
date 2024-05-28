@@ -57,7 +57,7 @@
         log_driver: splunk
         log_options:
           splunk-token: "{{ splunk_creds.token }}"
-          splunk-url: "http://{{ splunk.server.host }}:{{ splunk.server.port }}"
+          splunk-url: "http://{{ splunk.server.host }}:{{ splunk.forwarders.http_event_collector_port }}"
           splunk-insecureskipverify: "{{ splunk.forwarders.insecureskipverify }}"
           splunk-source: "{{ container_name }}"
 
