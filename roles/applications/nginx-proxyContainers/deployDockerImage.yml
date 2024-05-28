@@ -7,6 +7,9 @@
   # vars:
     # variable container_name is defined as an extra var
 
+  vars_files:
+    - ../../../vault.yml
+
   tasks:
     - name: Validate Supported Container
       debug:
