@@ -17,3 +17,5 @@ splunk:
     server:
         host: splunk.internal.levantine.io
         port: 9997
+    forwarders:
+        insecureskipverify: true

@@ -40,12 +40,23 @@
         load_path: "/tmp/{{ container_name }}_latest.tar"
         source: load
 
+    - name: Retrieve SplunkForwarder Token from HashiCorp Vault
+      # NOTE: This token is created manually under splunk>settings>data inputs>HTTP Event Collector and stored in vault at path below
+      set_fact:
+        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/http_access_tokens/docker token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
         image: "{{ loaded_image_name.stdout }}"
         env:
           VIRTUAL_HOST: "{{ supported_containers[container_name]['env_vars']['VIRTUAL_HOST'] }}"
+        log_driver: splunk
+        log_options:
+          splunk-token: "{{ splunk_creds.token }}"
+          splunk-url: "{{ splunk.server.host }}:{{ splunk.server.port }}"
+          splunk-insecureskipverify: "{{ splunk.forwarders.insecure_skip_verify }}"
+          splunk-source: "{{ container_name }}"
 
     - name: Prune Docker
       command: docker system prune -af
