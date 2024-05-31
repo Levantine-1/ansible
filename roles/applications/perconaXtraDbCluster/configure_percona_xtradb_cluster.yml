@@ -11,6 +11,7 @@
       - gnupg2
       - lsb-release
       - curl
+      - python3-pexpect
 
   tasks:
     - name: Update the system
@@ -42,4 +43,4 @@
       expect:
         command: apt install -y percona-xtradb-cluster-full
         responses:
-          'New password for the Percona XtraDB Cluster root user:': 'your_password_here'
+          'New password for the Percona XtraDB Cluster root user:': 'password'
