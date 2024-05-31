@@ -14,7 +14,7 @@
       - python3-pexpect
 
   tasks:
-    - name: Update the system
+    - name: Update apt repository cache
       ansible.builtin.apt:
         update_cache: yes
 
@@ -39,8 +39,8 @@
     - name: Enable the release repository for Percona XtraDB Cluster
       ansible.builtin.shell: percona-release setup pxc80
 
-    - name: Install the Percona XtraDB Cluster full package
-      expect:
-        command: apt install -y percona-xtradb-cluster-full
-        responses:
-          'New password for the Percona XtraDB Cluster root user:': 'password'
+#    - name: Install the Percona XtraDB Cluster full package
+#      expect:
+#        command: apt install -y percona-xtradb-cluster-full
+#        responses:
+#          'Enter root password:': 'password'
