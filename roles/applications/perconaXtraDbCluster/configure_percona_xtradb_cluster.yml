@@ -60,7 +60,7 @@
         DEBIAN_FRONTEND: readline
         # By default, the installer will use a dialog interface to get user input.
         # This will force it to use readline instead so that the expect module can interact with it.
-#      no_log: true
+      no_log: true
       ignore_errors: yes # For some reason this will throw an error, but the installation is successful. So we'll verify it next step.
 
     - name: Start the Percona XtraDB Cluster service
@@ -75,7 +75,7 @@
         MYSQL_PWD: "{{ percona_creds.root_password }}"
       register: result
       failed_when: "'ERROR' in result.stderr"
-#      no_log: true
+      no_log: true
 
     - name: Stop the Percona XtraDB Cluster service
       ansible.builtin.systemd:
