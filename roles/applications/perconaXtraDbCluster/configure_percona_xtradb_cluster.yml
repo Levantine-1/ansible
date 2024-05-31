@@ -60,11 +60,11 @@
         DEBIAN_FRONTEND: readline
         # By default, the installer will use a dialog interface to get user input.
         # This will force it to use readline instead so that the expect module can interact with it.
-      no_log: true
+#      no_log: true
       ignore_errors: yes # For some reason this will throw an error, but the installation is successful. So we'll verify it next step.
 
     - name: Verify MySQL login
       command: mysql -u root -p{{ percona_creds.root_password }} -e 'SELECT 1;'
       register: result
       failed_when: "'ERROR' in result.stderr"
-      no_log: true
+#      no_log: true
