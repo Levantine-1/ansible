@@ -52,6 +52,7 @@ wsrep_sst_method={{ percona_configs.wsrep_sst_method }}
 ### NOTE: 2024-05-31 Not configuring SSL for now.
 # [mysqld]
 # wsrep_provider_options=”socket.ssl_key=server-key.pem;socket.ssl_cert=server-cert.pem;socket.ssl_ca=ca.pem”
+wsrep_provider_options=socket.ssl=NO
 
 # [sst]
 # encrypt=4
