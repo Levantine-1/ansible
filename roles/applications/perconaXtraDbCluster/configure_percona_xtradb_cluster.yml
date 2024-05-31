@@ -55,7 +55,7 @@
           'Enter root password:': '{{ percona_creds.root_password }}'
           'Re-enter root password:': '{{ percona_creds.root_password }}'
           'Select default authentication plugin': '1'
-          #   1. Use Strong Password Encryption (RECOMMENDED)  2. Use Legacy Authentication Method (Retain MySQL 5.x Compatibility)
+#   1. Use Strong Password Encryption (RECOMMENDED)  2. Use Legacy Authentication Method (Retain MySQL 5.x Compatibility)
         echo: yes
       environment:
         DEBIAN_FRONTEND: readline
@@ -64,26 +64,26 @@
 #      no_log: true
       ignore_errors: yes # For some reason this will throw an error, but the installation is successful. So we'll verify it next step.
 
-    - name: Start the Percona XtraDB Cluster service
-      ansible.builtin.systemd:
-        name: mysql
-        state: started
-        enabled: yes
-
-    - name: Verify MySQL login
-      command: mysql -u root -e 'SELECT 1;'
-      environment:
-        MYSQL_PWD: "{{ percona_creds.root_password }}"
-      register: result
-      failed_when: "'ERROR' in result.stderr"
-      no_log: true
-
-    - name: Stop the Percona XtraDB Cluster service
-      ansible.builtin.systemd:
-        name: mysql
-        state: stopped
-
-    - name: Configure mysqld.cnf
-      template:
-        src: templates/mysqld.cnf.j2
-        dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+#    - name: Start the Percona XtraDB Cluster service
+#      ansible.builtin.systemd:
+#        name: mysql
+#        state: started
+#        enabled: yes
+#
+#    - name: Verify MySQL login
+#      command: mysql -u root -e 'SELECT 1;'
+#      environment:
+#        MYSQL_PWD: "{{ percona_creds.root_password }}"
+#      register: result
+#      failed_when: "'ERROR' in result.stderr"
+#      no_log: true
+#
+#    - name: Stop the Percona XtraDB Cluster service
+#      ansible.builtin.systemd:
+#        name: mysql
+#        state: stopped
+#
+#    - name: Configure mysqld.cnf
+#      template:
+#        src: templates/mysqld.cnf.j2
+#        dest: /etc/mysql/mysql.conf.d/mysqld.cnf
