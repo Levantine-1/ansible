@@ -39,10 +39,13 @@
     - name: Enable the release repository for Percona XtraDB Cluster
       ansible.builtin.shell: percona-release setup pxc80
 
-#    - name: Install the Percona XtraDB Cluster package
-#      ansible.builtin.apt:
-#        name: percona-xtradb-cluster
-#        state: present
-#      environment:
-#        DEBIAN_FRONTEND: noninteractive
-#        # This env var is needed to prevent the package from asking for user input. The DB root password is configured later.
+    - name: Install the Percona XtraDB Cluster package
+      expect:
+        command: apt-get -y install percona-xtradb-cluster
+        responses:
+          'Enter root password:': 'password'
+          'Re-enter root password:': 'password'
+          'Select default authentication plugin': '1'
+      become: yes
+      environment:
+        DEBIAN_FRONTEND: readline
