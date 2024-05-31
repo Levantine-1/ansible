@@ -14,30 +14,30 @@
       - python3-pexpect
 
   tasks:
-    - name: Update apt repository cache
-      ansible.builtin.apt:
-        update_cache: yes
-
-    - name: Install prerequisite packages
-      package:
-        name: "{{ prerequisite_packages }}"
-        state: present
-
-    - name: Download the repository package
-      ansible.builtin.get_url:
-        url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
-        dest: "/tmp/percona-release_latest.generic_all.deb"
-
-    - name: Install the package with dpkg
-      ansible.builtin.apt:
-        deb: "/tmp/percona-release_latest.generic_all.deb"
-
-    - name: Refresh the local cache to update the package information
-      ansible.builtin.apt:
-        update_cache: yes
-
-    - name: Enable the release repository for Percona XtraDB Cluster
-      ansible.builtin.shell: percona-release setup pxc80
+#    - name: Update apt repository cache
+#      ansible.builtin.apt:
+#        update_cache: yes
+#
+#    - name: Install prerequisite packages
+#      package:
+#        name: "{{ prerequisite_packages }}"
+#        state: present
+#
+#    - name: Download the repository package
+#      ansible.builtin.get_url:
+#        url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
+#        dest: "/tmp/percona-release_latest.generic_all.deb"
+#
+#    - name: Install the package with dpkg
+#      ansible.builtin.apt:
+#        deb: "/tmp/percona-release_latest.generic_all.deb"
+#
+#    - name: Refresh the local cache to update the package information
+#      ansible.builtin.apt:
+#        update_cache: yes
+#
+#    - name: Enable the release repository for Percona XtraDB Cluster
+#      ansible.builtin.shell: percona-release setup pxc80
 
     - name: Install the Percona XtraDB Cluster package
       ansible.builtin.apt:
