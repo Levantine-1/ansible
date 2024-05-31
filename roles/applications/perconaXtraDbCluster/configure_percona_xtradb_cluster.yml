@@ -64,6 +64,12 @@
       no_log: true
       ignore_errors: yes # I don't know why when done manually this works, but when automated it fails. But it does work and the issue is addressed in the next task.
 
+    - name: Wait for dpkg lock to be released
+      ansible.builtin.wait_for:
+        path: /var/lib/dpkg/lock
+        state: absent
+        timeout: 30
+
     # For some reason, the previous step installs the package, but it misses a configuration step that we to address below.
     - name: Configure apparmor
       expect:
