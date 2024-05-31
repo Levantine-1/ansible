@@ -1,0 +1,45 @@
+# https://docs.percona.com/percona-xtradb-cluster/8.0/apt.html#install-from-repository
+---
+- name: Install Percona XtraDB Cluster
+  hosts: PerconaCluster
+  gather_facts: yes
+  become: yes
+
+  vars:
+    prerequisite_packages:
+      - wget
+      - gnupg2
+      - lsb-release
+      - curl
+
+  tasks:
+    - name: Update the system
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install prerequisite packages
+      package:
+        name: "{{ prerequisite_packages }}"
+        state: present
+
+    - name: Download the repository package
+      ansible.builtin.get_url:
+        url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
+        dest: "/tmp/percona-release_latest.generic_all.deb"
+
+    - name: Install the package with dpkg
+      ansible.builtin.apt:
+        deb: "/tmp/percona-release_latest.generic_all.deb"
+
+    - name: Refresh the local cache to update the package information
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Enable the release repository for Percona XtraDB Cluster
+      ansible.builtin.shell: percona-release setup pxc80
+
+    - name: Install the Percona XtraDB Cluster full package
+      expect:
+        command: apt install -y percona-xtradb-cluster-full
+        responses:
+          'New password for the Percona XtraDB Cluster root user:': 'your_password_here'
