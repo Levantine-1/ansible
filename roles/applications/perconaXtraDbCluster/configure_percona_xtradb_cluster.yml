@@ -56,12 +56,12 @@
           'Re-enter root password:': '{{ percona_creds.root_password }}'
           'Select default authentication plugin': '1'
           #   1. Use Strong Password Encryption (RECOMMENDED)  2. Use Legacy Authentication Method (Retain MySQL 5.x Compatibility)
-      become: yes
+        echo: yes
       environment:
         DEBIAN_FRONTEND: readline
         # By default, the installer will use a dialog interface to get user input.
         # This will force it to use readline instead so that the expect module can interact with it.
-      no_log: true
+#      no_log: true
       ignore_errors: yes # For some reason this will throw an error, but the installation is successful. So we'll verify it next step.
 
     - name: Start the Percona XtraDB Cluster service
