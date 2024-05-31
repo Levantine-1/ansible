@@ -1,0 +1,4 @@
+percona_configs:
+    wsrep_cluster_name: pxc-cluster
+    pxc_strict_mode: ENFORCING
+    wsrep_sst_method: xtrabackup-v2
