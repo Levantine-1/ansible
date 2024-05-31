@@ -48,14 +48,11 @@ pxc_strict_mode={{ percona_configs.pxc_strict_mode }}
 # SST method
 wsrep_sst_method={{ percona_configs.wsrep_sst_method }}
 
+[mysqld]
+wsrep_provider_options="socket.ssl_key=/etc/mysql/certs/privkey.pem;socket.ssl_cert=/etc/mysql/certs/cert.pem;socket.ssl_ca=/etc/mysql/certs/fullchain.pem"
 
-### NOTE: 2024-05-31 Not configuring SSL for now.
-# [mysqld]
-# wsrep_provider_options=”socket.ssl_key=server-key.pem;socket.ssl_cert=server-cert.pem;socket.ssl_ca=ca.pem”
-wsrep_provider_options=socket.ssl=NO
-
-# [sst]
-# encrypt=4
-# ssl-key=server-key.pem
-# ssl-ca=ca.pem
-# ssl-cert=server-cert.pem
+[sst]
+encrypt=4
+ssl-key=/etc/mysql/certs/privkey.pem
+ssl-ca=/etc/mysql/certs/fullchain.pem
+ssl-cert=/etc/mysql/certs/cert.pem

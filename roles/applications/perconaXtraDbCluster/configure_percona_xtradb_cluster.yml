@@ -12,6 +12,11 @@
       - lsb-release
       - curl
       - python3-pexpect
+    ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
+      cert: "{{ ssl_certs.cert }}"
+      chain: "{{ ssl_certs.chain }}"
+      fullchain: "{{ ssl_certs.fullchain }}"
+      privkey: "{{ ssl_certs.privkey }}"
 
   vars_files:
     - ../../../vault.yml
@@ -110,3 +115,21 @@
       template:
         src: templates/mysqld.cnf.j2
         dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+
+    - name: Creating directory for SSL Certs
+      ansible.builtin.file:
+        path: /etc/mysql/certs/
+        state: directory
+        mode: '0700'
+
+    - name: Retrieving SSL Certs for levantine.io
+      set_fact:
+        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/levantine_io token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Configure SSL Certs for percona cluster
+      copy:
+        content: "{{ ssl_certs[item] }}"
+        dest: /etc/mysql/certs/{{ item }}.pem
+      with_items:
+        "{{ ssl_certs }}"
+      register: levantine_certs
