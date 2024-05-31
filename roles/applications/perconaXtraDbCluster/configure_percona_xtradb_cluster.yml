@@ -55,7 +55,7 @@
 
     - name: Install the Percona XtraDB Cluster package
       expect:
-        command: apt-get -y install percona-xtradb-cluster-full
+        command: apt-get -y install percona-xtradb-cluster
         responses:
           'Enter root password:': '{{ percona_creds.root_password }}'
           'Re-enter root password:': '{{ percona_creds.root_password }}'
