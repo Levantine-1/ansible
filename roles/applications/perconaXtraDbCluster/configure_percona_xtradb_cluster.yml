@@ -113,7 +113,7 @@
         password: "{{ percona_creds.root_password }}"
         priv: "*.*:ALL,GRANT"
         state: present
-      when: "{{ bootstrap }}" == True
+      when: bootstrap == "True"
 
     - name: Create SST User for Percona Syncing
       mysql_user:
@@ -122,14 +122,14 @@
         password: "{{ percona_creds.sstuser_password }}"
         priv: "*.*:ALL"
         state: present
-      when: "{{ bootstrap }}" == True
+      when: bootstrap == "True"
 
     - name: Flush privileges
       mysql_query:
         login_user: root
         login_password: "{{ percona_creds.root_password }}"
         query: "FLUSH PRIVILEGES;"
-      when: "{{ bootstrap }}" == True
+      when: bootstrap == "True"
 
     - name: Stop the Percona XtraDB Cluster service
       ansible.builtin.systemd:
