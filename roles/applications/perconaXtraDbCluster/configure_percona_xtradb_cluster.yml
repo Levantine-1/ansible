@@ -167,4 +167,4 @@
     - name: Debug bootstrap variable 2
       ansible.builtin.debug:
         msg: "Bootstrap: {{ bootstrap }}"
-      when: bootstrap is defined and bootstrap == "True"
+      when: bootstrap is defined and bootstrap == "yes"
