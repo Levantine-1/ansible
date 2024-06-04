@@ -91,56 +91,56 @@
 #          # It was detected that there is /etc/apparmor.d/(local)/usr.sbin.mysqld or/and /etc/apparmor.d/usr.bin.wsrep_sst_xtrabackup-v2 file on the system. Probably it comes from previous setup and may contain custom changes. Please decide should it be replaced or not.
 #          #  1. Use existent AppArmor profile (RECOMMENDED)  2. Use NEW AppArmor profile
 #      ignore_errors: yes
-
-    - name: Start the Percona XtraDB Cluster service
-      ansible.builtin.systemd:
-        name: mysql
-        state: started
-        enabled: yes
-
-    - name: Verify MySQL login
-      command: mysql -u root -e 'SELECT 1;'
-      environment:
-        MYSQL_PWD: "{{ percona_creds.root_password }}"
-      register: result
-      failed_when: "'ERROR' in result.stderr"
-      no_log: true
-
-    - name: Grant remote priviliges for MySQL Server
-      mysql_user:
-        name: root
-        host: "%"
-        password: "{{ percona_creds.root_password }}"
-        priv: "*.*:ALL,GRANT"
-        state: present
-      when: bootstrap is defined and bootstrap == "True"
-
-    - name: Create SST User for Percona Syncing
-      mysql_user:
-        name: sstuser
-        host: "%"
-        password: "{{ percona_creds.sstuser_password }}"
-        priv: "*.*:ALL"
-        state: present
-      when: bootstrap is defined and bootstrap == "True"
-
-    - name: Flush privileges
-      mysql_query:
-        login_user: root
-        login_password: "{{ percona_creds.root_password }}"
-        query: "FLUSH PRIVILEGES;"
-      when: bootstrap is defined and bootstrap == "True"
-
-    - name: Stop the Percona XtraDB Cluster service
-      ansible.builtin.systemd:
-        name: mysql
-        state: stopped
-
-    - name: Configure mysqld.cnf
-      template:
-        src: templates/mysqld.cnf.j2
-        dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+# #########
+#    - name: Start the Percona XtraDB Cluster service
+#      ansible.builtin.systemd:
+#        name: mysql
+#        state: started
+#        enabled: yes
 #
+#    - name: Verify MySQL login
+#      command: mysql -u root -e 'SELECT 1;'
+#      environment:
+#        MYSQL_PWD: "{{ percona_creds.root_password }}"
+#      register: result
+#      failed_when: "'ERROR' in result.stderr"
+#      no_log: true
+#
+#    - name: Grant remote priviliges for MySQL Server
+#      mysql_user:
+#        name: root
+#        host: "%"
+#        password: "{{ percona_creds.root_password }}"
+#        priv: "*.*:ALL,GRANT"
+#        state: present
+#      when: bootstrap is defined and bootstrap == "True"
+#
+#    - name: Create SST User for Percona Syncing
+#      mysql_user:
+#        name: sstuser
+#        host: "%"
+#        password: "{{ percona_creds.sstuser_password }}"
+#        priv: "*.*:ALL"
+#        state: present
+#      when: bootstrap is defined and bootstrap == "True"
+#
+#    - name: Flush privileges
+#      mysql_query:
+#        login_user: root
+#        login_password: "{{ percona_creds.root_password }}"
+#        query: "FLUSH PRIVILEGES;"
+#      when: bootstrap is defined and bootstrap == "True"
+#
+#    - name: Stop the Percona XtraDB Cluster service
+#      ansible.builtin.systemd:
+#        name: mysql
+#        state: stopped
+#
+#    - name: Configure mysqld.cnf
+#      template:
+#        src: templates/mysqld.cnf.j2
+#        dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+# #############
 #    - name: Creating directory for SSL Certs
 #      ansible.builtin.file:
 #        path: /etc/mysql/certs/
@@ -158,3 +158,8 @@
 #      with_items:
 #        "{{ ssl_certs }}"
 #      register: levantine_certs
+
+    - name: Debug bootstrap variable
+      ansible.builtin.debug:
+          msg: "Bootstrap: {{ bootstrap }}"
+      when: bootstrap is defined
