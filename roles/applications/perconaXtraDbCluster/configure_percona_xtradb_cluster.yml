@@ -12,6 +12,7 @@
       - lsb-release
       - curl
       - python3-pexpect
+      - python3-PyMySQL
     ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
       cert: "{{ ssl_certs.cert }}"
       chain: "{{ ssl_certs.chain }}"
@@ -22,14 +23,14 @@
     - ../../../vault.yml
 
   tasks:
-#    - name: Update apt repository cache
-#      ansible.builtin.apt:
-#        update_cache: yes
-#
-#    - name: Install prerequisite packages
-#      package:
-#        name: "{{ prerequisite_packages }}"
-#        state: present
+    - name: Update apt repository cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install prerequisite packages
+      package:
+        name: "{{ prerequisite_packages }}"
+        state: present
 #
 #    - name: Download the repository package
 #      ansible.builtin.get_url:
