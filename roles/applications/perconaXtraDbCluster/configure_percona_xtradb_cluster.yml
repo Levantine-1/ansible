@@ -140,10 +140,10 @@
 #      when: bootstrap is defined and bootstrap == "yes"
 ##      no_log: true
 #
-#    - name: Stop the Percona XtraDB Cluster service
-#      ansible.builtin.systemd:
-#        name: mysql
-#        state: stopped
+    - name: Stop the Percona XtraDB Cluster service
+      ansible.builtin.systemd:
+        name: mysql
+        state: stopped
 
     - name: Configure mysqld.cnf
       template:
