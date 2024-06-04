@@ -20,7 +20,7 @@ wsrep_provider=/usr/lib/galera4/libgalera_smm.so
 # Cluster connection URL contains IPs of nodes
 #If no IP is found, this implies that a new cluster needs to be created,
 #in order to do that you need to bootstrap this node
-wsrep_cluster_address=gcomm://{{ groups['PerconaCluster'] | join(',') }}
+wsrep_cluster_address=gcomm://{{ groups['PerconaCluster'] | map('extract', hostvars, ['ansible_host']) | join(',') }}
 
 # In order for Galera to work correctly binlog format should be ROW
 binlog_format=ROW
@@ -34,7 +34,7 @@ wsrep_log_conflicts
 innodb_autoinc_lock_mode=2
 
 # Node IP address
-wsrep_node_address={{ inventory_hostname }}
+wsrep_node_address={{ hostvars[inventory_hostname]['ansible_host'] }}
 # Cluster name
 wsrep_cluster_name={{ percona_configs.wsrep_cluster_name }}
 
