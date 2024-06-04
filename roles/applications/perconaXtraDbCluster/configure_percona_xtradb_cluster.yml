@@ -12,7 +12,7 @@
       - lsb-release
       - curl
       - python3-pexpect
-      - python3-PyMySQL
+      - python3-mysqldb
     ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
       cert: "{{ ssl_certs.cert }}"
       chain: "{{ ssl_certs.chain }}"
