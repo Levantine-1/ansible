@@ -100,11 +100,12 @@
         enabled: yes
 
     - name: Verify MySQL login
-      command: mysql -u root -e 'SELECT 1;'
-      environment:
-        MYSQL_PWD: "{{ percona_creds.root_password }}"
+      mysql_query:
+        login_user: root
+        login_password: "{{ percona_creds.root_password }}"
+        query: "SELECT 1;"
       register: result
-      failed_when: "'ERROR' in result.stderr"
+      failed_when: "'ERROR' in result.msg"
 #      no_log: true
 
     - name: Grant remote priviliges for MySQL Server
@@ -114,6 +115,8 @@
         password: "{{ percona_creds.root_password }}"
         priv: "*.*:ALL,GRANT"
         state: present
+        login_user: root
+        login_password: "{{ percona_creds.root_password }}"
       when: bootstrap is defined and bootstrap == "yes"
 #      no_log: true
 
@@ -124,6 +127,8 @@
         password: "{{ percona_creds.sstuser_password }}"
         priv: "*.*:ALL"
         state: present
+        login_user: root
+        login_password: "{{ percona_creds.root_password }}"
       when: bootstrap is defined and bootstrap == "yes"
 #      no_log: true
 
