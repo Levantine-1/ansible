@@ -150,13 +150,13 @@
         src: templates/mysqld.cnf.j2
         dest: /etc/mysql/mysql.conf.d/mysqld.cnf
 
-    - name: Copy .pem files from bootstrap node to all other nodes
-      copy:
-        src: "/var/lib/mysql/*.pem"
-        dest: "/var/lib/mysql/"
-        delegate_to: "{{ 'inventory_hostname' }}"
-        remote_src: yes
-      when: bootstrap is defined and bootstrap == "yes"
+#    - name: Copy .pem files from bootstrap node to all other nodes
+#      copy:
+#        src: "/var/lib/mysql/*.pem"
+#        dest: "/var/lib/mysql/"
+#        delegate_to: "{{ 'inventory_hostname' }}"
+#        remote_src: yes
+#      when: bootstrap is defined and bootstrap == "yes"
 
 #    - name: Creating directory for SSL Certs
 #      ansible.builtin.file:
