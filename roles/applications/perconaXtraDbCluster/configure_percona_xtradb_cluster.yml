@@ -155,6 +155,7 @@
         src: "/var/lib/mysql/*.pem"
         dest: "/var/lib/mysql/"
         delegate_to: "{{ 'inventory_hostname' }}"
+        remote_src: yes
       when: bootstrap is defined and bootstrap == "yes"
 
 #    - name: Creating directory for SSL Certs
