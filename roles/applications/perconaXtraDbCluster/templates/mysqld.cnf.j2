@@ -34,7 +34,7 @@ wsrep_log_conflicts
 innodb_autoinc_lock_mode=2
 
 # Node IP address
-#wsrep_node_address=192.168.70.63
+wsrep_node_address={{ inventory_hostname }}
 # Cluster name
 wsrep_cluster_name={{ percona_configs.wsrep_cluster_name }}
 

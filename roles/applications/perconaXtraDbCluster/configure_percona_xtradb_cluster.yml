@@ -22,15 +22,15 @@
   vars_files:
     - ../../../vault.yml
 
-  tasks:
-    - name: Update apt repository cache
-      ansible.builtin.apt:
-        update_cache: yes
-
-    - name: Install prerequisite packages
-      package:
-        name: "{{ prerequisite_packages }}"
-        state: present
+#  tasks:
+#    - name: Update apt repository cache
+#      ansible.builtin.apt:
+#        update_cache: yes
+#
+#    - name: Install prerequisite packages
+#      package:
+#        name: "{{ prerequisite_packages }}"
+#        state: present
 #
 #    - name: Download the repository package
 #      ansible.builtin.get_url:
