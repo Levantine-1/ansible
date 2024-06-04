@@ -14,10 +14,22 @@
       - python3-pexpect
       - python3-mysqldb
     ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
-      cert: "{{ ssl_certs.cert }}"
-      chain: "{{ ssl_certs.chain }}"
-      fullchain: "{{ ssl_certs.fullchain }}"
-      privkey: "{{ ssl_certs.privkey }}"
+      - name: ca-key
+        mode: '0600'
+      - name: ca
+        mode: '0644'
+      - name: client-cert
+        mode: '0644'
+      - name: client-key
+        mode: '0600'
+      - name: private_key
+        mode: '0600'
+      - name: public_key
+        mode: '0644'
+      - name: server-cert
+        mode: '0644'
+      - name: server-key
+        mode: '0600'
 
   vars_files:
     - ../../../vault.yml
@@ -150,6 +162,20 @@
         src: templates/mysqld.cnf.j2
         dest: /etc/mysql/mysql.conf.d/mysqld.cnf
 
+    - name: Store generated certs from bootstrap node in Vault
+      ansible.builtin.slurp:
+        src: "/var/lib/mysql/{{ item.name }}.pem"
+      register: file_contents
+      loop: "{{ ssl_certs }}"
+      when: bootstrap is defined and bootstrap == "yes"
+
+    - name: Store files in Vault
+      community.hashi_vault.hashi_vault_write:
+        secret: "kv/data/percona_cluster/{{ item.item.name }}"
+        data:
+          content: "{{ item.content | b64decode }}"
+      loop: "{{ file_contents.results }}"
+
 #    - name: Copy .pem files from bootstrap node to all other nodes
 #      copy:
 #        src: "/var/lib/mysql/*.pem"
@@ -163,15 +189,3 @@
 #        path: /etc/mysql/certs/
 #        state: directory
 #        mode: '0700'
-
-#    - name: Retrieving SSL Certs for levantine.io
-#      set_fact:
-#        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/levantine_io token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-#
-#    - name: Configure SSL Certs for percona cluster
-#      copy:
-#        content: "{{ ssl_certs[item] }}"
-#        dest: /etc/mysql/certs/{{ item }}.pem
-#      with_items:
-#        "{{ ssl_certs }}"
-#      register: levantine_certs
