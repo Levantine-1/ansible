@@ -22,7 +22,7 @@
   vars_files:
     - ../../../vault.yml
 
-#  tasks:
+  tasks:
 #    - name: Update apt repository cache
 #      ansible.builtin.apt:
 #        update_cache: yes
