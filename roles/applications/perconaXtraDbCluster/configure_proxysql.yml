@@ -45,6 +45,8 @@
       mysql_user:
         login_user: admin
         login_password: admin
+        login_port: 6032
+        host: localhost
         user: admin
         password: "{{ proxysql_creds.admin_password }}"
 
