@@ -36,6 +36,18 @@
 #        name: "{{ required_packages }}"
 #        state: present
 
+    - name: Retrieve proxySQL admin password from HashiCorp Vault
+      set_fact:
+        proxysql_creds: "{{ lookup('hashi_vault', 'secret=kv/data/percona_cluster/proxy_sql token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    - name: Change default proxysql admin password
+      mysql_user:
+        login_user: admin
+        login_password: admin
+        user: admin
+        password: "{{ proxysql_creds.admin_password }}"
+
     - debug:
         msg: |
           Waiting for the user to bootstrap the cluster and start at least 1 other node to the cluster before setting up ProxySQL.
