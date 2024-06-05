@@ -42,16 +42,15 @@
         percona_creds: "{{ lookup('hashi_vault', 'secret=kv/data/percona_cluster/pxc-cluster token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
       no_log: true
 
-    - name: Verify Percona Cluster is up
-      mysql_query:
-        login_host: "{{ groups['PerconaCluster'][0] }}" # This should be the bootstrap node
-        login_user: root
-        login_password: "{{ percona_creds.root_password }}"
-        query: "SHOW STATUS LIKE 'wsrep_cluster_size';"
-      register: cluster_status
-
-    - debug:
-        msg: "{{ cluster_status }}"
-
-    - debug:
-        msg: "{{ cluster_status.query_result[0][0].Value }}"
+    - name: Wait for Percona XtraDB Cluster to be ready
+      block:
+        - name: Query cluster size
+          mysql_query:
+            login_host: "{{ groups['PerconaCluster'][0] }}" # This should be the bootstrap node
+            login_user: root
+            login_password: "{{ percona_creds.root_password }}"
+            query: "SHOW STATUS LIKE 'wsrep_cluster_size';"
+          register: cluster_status
+          until: cluster_status.query_result[0][0].Value | int > 1
+          retries: 120 # 120 retries * 5 seconds = 10 minutes to timeout
+          delay: 5
