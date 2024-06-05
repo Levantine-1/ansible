@@ -2,45 +2,23 @@
 # NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
 # ansible-galaxy collection install community.hashi_vault
 
-    - name: Retrieve the ca-key.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/ca-key.pem
-      register: ca_key_pem
+    - name: Define list of certificate files
+      set_fact:
+        cert_files:         # Indexes
+          - ca-key.pem      # 0
+          - ca.pem          # 1
+          - client-cert.pem # 2
+          - client-key.pem  # 3
+          - private_key.pem # 4
+          - public_key.pem  # 5
+          - server-cert.pem # 6
+          - server-key.pem  # 7
 
-    - name: Retrieve the ca.pem certificate
+    - name: Retrieve certificates
       ansible.builtin.slurp:
-        src: /var/lib/mysql/ca.pem
-      register: ca_pem
-
-    - name: Retrieve the client-cert.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/client-cert.pem
-      register: client_cert_pem
-
-    - name: Retrieve the client-key.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/client-key.pem
-      register: client_key_pem
-
-    - name: Retrieve the private_key.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/private_key.pem
-      register: private_key_pem
-
-    - name: Retrieve the public_key.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/public_key.pem
-      register: public_key_pem
-
-    - name: Retrieve the server-cert.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/server-cert.pem
-      register: server_cert_pem
-
-    - name: Retrieve the server-key.pem certificate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/server-key.pem
-      register: server_key_pem
+        src: "/var/lib/mysql/{{ item }}"
+      register: slurped_certs
+      loop: "{{ cert_files }}"
 
     - name: Store certificates in Vault
       community.hashi_vault.vault_write:
@@ -49,11 +27,11 @@
         path: "{{ vault_secret_path }}"
         data:
           data:
-            ca-key: "{{ ca_key_pem.content | b64decode }}"
-            ca: "{{ ca_pem.content | b64decode }}"
-            client-cert: "{{ client_cert_pem.content | b64decode }}"
-            client-key: "{{ client_key_pem.content | b64decode }}"
-            private_key: "{{ private_key_pem.content | b64decode }}"
-            public_key: "{{ public_key_pem.content | b64decode }}"
-            server-cert: "{{ server_cert_pem.content | b64decode }}"
-            server-key: "{{ server_key_pem.content | b64decode }}"
+            ca-key: "{{ slurped_certs.results[0].content | b64decode }}"
+            ca: "{{ slurped_certs.results[1].content | b64decode }}"
+            client-cert: "{{ slurped_certs.results[2].content | b64decode }}"
+            client-key: "{{ slurped_certs.results[3].content | b64decode }}"
+            private_key: "{{ slurped_certs.results[4].content | b64decode }}"
+            public_key: "{{ slurped_certs.results[5].content | b64decode }}"
+            server-cert: "{{ slurped_certs.results[6].content | b64decode }}"
+            server-key: "{{ slurped_certs.results[7].content | b64decode }}"

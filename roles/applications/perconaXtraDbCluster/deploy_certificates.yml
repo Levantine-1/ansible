@@ -21,17 +21,6 @@
         path: "{{ vault_secret_path }}"
       register: percona_certificates
 
-    - debug:
-        msg: "{{ percona_certificates.data.data.data.ca }}"
-
-    - debug:
-        msg: "{{ percona_certificates.data.data.data }}"
-
-    - name: Get list of keys from percona_certificates
-      debug:
-        msg: "{{ item.key }}"
-      loop: "{{ percona_certificates.data.data.data | dict2items }}"
-
     - name: Deploy certificates to other nodes
       ansible.builtin.copy:
         content: "{{ item.value }}"
