@@ -51,4 +51,4 @@
       register: cluster_status
 
     - debug:
-        msg: "{{ cluster_status.msg.query_result[0]['Value'] }}"
+        msg: "{{ cluster_status.msg.query_result[0].Value }}"
