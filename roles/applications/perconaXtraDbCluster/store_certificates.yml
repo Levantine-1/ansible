@@ -2,16 +2,16 @@
 # NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
 # ansible-galaxy collection install community.hashi_vault
 
+# NOTE: 2024-06-04 Slurp isn't working as expected, but according to this SO, cat-ing the file is a valid solution
+# https://stackoverflow.com/questions/34722761/ansible-read-remote-file
 
-    - name: Slurp up the ca-key certficate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/ca.pem
-      register: slurped_ca_key_pem
+    - name: Retrieve the ca-key certficate
+      shell: cat /var/lib/mysql/ca-key.pem
+      register: ca_key_pem
 
-    - name: Slurp up the ca certficate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/ca.pem
-      register: slurped_ca_pem
+    - name: Retrieve the ca certficate
+      shell: cat /var/lib/mysql/ca.pem
+      register: ca_pem
 
     - name: Store ca-key.pem in Vault
       community.hashi_vault.vault_write:
@@ -19,8 +19,8 @@
         token: "{{ vault_token }}"
         path: "{{ vault_secret_path }}"
         data:
-            ca-key: "{{ slurped_ca_key_pem['content'] | b64decode }}"
-            ca:     "{{ slurped_ca_pem['content'] | b64decode }}"
+            ca-key: "{{ ca_key_pem.stdout }}"
+            ca:     "{{ ca_pem.stdout }}"
 
 
 #    - name: Store ca.pem in Vault
