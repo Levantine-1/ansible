@@ -2,85 +2,51 @@
 # NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
 # ansible-galaxy collection install community.hashi_vault
 
-# NOTE: 2024-06-04 Slurp isn't working as expected, but according to this SO, cat-ing the file is a valid solution
-# https://stackoverflow.com/questions/34722761/ansible-read-remote-file
-
 #    - name: Retrieve the ca-key certficate
-#      shell: cat /var/lib/mysql/ca-key.pem
+#      ansible.builtin.slurp:
+#        src: /var/lib/mysql/ca-key.pem
 #      register: ca_key_pem
+#
+#    - name: Retrieve the ca certficate
+#      ansible.builtin.slurp:
+#        src: /var/lib/mysql/ca.pem
+#      register: ca_pem
+#
+#    - name: Store ca-key.pem in Vault
+#      community.hashi_vault.vault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        path: "{{ vault_secret_path }}"
+#        data:
+#          data:
+#            ca-key: "{{ ca_key_pem.content | b64decode }}"
+#            ca:     "{{ ca_pem.content | b64decode}}"
 
-    - name: Retrieve the ca-key certficate
-      ansible.builtin.slurp:
-        src: /var/lib/mysql/ca-key.pem
-      register: ca_key_pem
+    - name: Define list of certificate files
+      set_fact:
+        cert_files:
+          - ca-key.pem
+          - ca.pem
+          - client-cert.pem
+          - client-key.pem
+          - private_key.pem
+          - public_key.pem
+          - server-cert.pem
+          - server-key.pem
 
-    - name: Retrieve the ca certficate
-      shell: cat /var/lib/mysql/ca.pem
-      register: ca_pem
+    - name: Retrieve and store certificates in Vault
+      block:
+        - name: Retrieve the {{ item }} certificate
+          ansible.builtin.slurp:
+            src: "/var/lib/mysql/{{ item }}"
+          register: slurped_cert
 
-    - name: Store ca-key.pem in Vault
-      community.hashi_vault.vault_write:
-        url: "{{ vault_addr }}"
-        token: "{{ vault_token }}"
-        path: "{{ vault_secret_path }}"
-        data:
-          data:
-            ca-key: "{{ ca_key_pem.content | b64decode }}"
-            ca:     "{{ ca_pem.stdout }}"
-
-
-#    - name: Store ca.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/ca"
-#        data:
-#          key: "{{ lookup('file', 'ca.pem') }}"
-#
-#    - name: Store client-cert.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/client-cert"
-#        data:
-#          key: "{{ lookup('file', 'client-cert.pem') }}"
-#
-#    - name: Store client-key.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/client-key"
-#        data:
-#          key: "{{ lookup('file', 'client-key.pem') }}"
-#
-#    - name: Store private_key.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/private_key"
-#        data:
-#          key: "{{ lookup('file', 'private_key.pem') }}"
-#
-#    - name: Store public_key.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/public_key"
-#        data:
-#          key: "{{ lookup('file', 'public_key.pem') }}"
-#
-#    - name: Store server-cert.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/server-cert"
-#        data:
-#          key: "{{ lookup('file', 'server-cert.pem') }}"
-#
-#    - name: Store server-key.pem in Vault
-#      community.hashi_vault.hashivault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        secret: "{{ vault_secret_path }}/server-key"
-#        data:
-#          key: "{{ lookup('file', 'server-key.pem') }}"
+        - name: Store {{ item }} in Vault
+          community.hashi_vault.vault_write:
+            url: "{{ vault_addr }}"
+            token: "{{ vault_token }}"
+            path: "{{ vault_secret_path }}"
+            data:
+              data:
+                "{{ item }}": "{{ slurped_cert.content | b64decode }}"
+      loop: "{{ cert_files }}"
