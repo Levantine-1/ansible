@@ -94,10 +94,12 @@
     - name: Add cluster nodes to ProxySQL
       ansible.builtin.command:
         cmd: >
-          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'pxdbc1.internal.levantine.io',3306);"
-          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'pxdbc2.internal.levantine.io',3306);"
-          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'pxdbc3.internal.levantine.io',3306);"
+          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'{{ item }}',3306);"
       environment:
         MYSQL_PWD: "{{ proxysql_creds.admin_password }}"
         MYSQL_HOST: 127.0.0.1
         MYSQL_TCP_PORT: 6032
+      loop:
+        - pxdbc1.internal.levantine.io
+        - pxdbc2.internal.levantine.io
+        - pxdbc3.internal.levantine.io
