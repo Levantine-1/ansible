@@ -1,0 +1,37 @@
+# https://docs.percona.com/percona-xtradb-cluster/8.0/apt.html#install-from-repository
+---
+- name: Install Percona XtraDB Cluster
+  hosts: PerconaCluster
+  gather_facts: yes
+  become: yes
+
+  vars:
+    vault_addr: "{{ hashicorp.vault.address }}"
+    vault_token: "{{ hashicorp_vault_token }}"
+    vault_secret_path: "kv/data/percona_cluster/certificates"
+    prerequisite_packages:
+      - wget
+      - gnupg2
+      - lsb-release
+      - curl
+      - python3-pexpect
+      - python3-mysqldb
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+    - name: Update apt repository cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Required Packages
+      package:
+        name: "{{ prerequisite_packages }}"
+        state: present
+
+    - name: configure percona xtradb cluster
+      include_tasks: "configure_percona_xtradb_cluster.yml"
+
+    - name: store certificates
+      include_tasks: "store_certificates.yml"

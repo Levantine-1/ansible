@@ -1,0 +1,64 @@
+---
+    - name: Store ca-key.pem in Vault
+      community.hashi_vault.hashivault_write:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        secret: "{{ vault_secret_path }}"
+        data:
+          key: "{{ lookup('file', 'ca-key.pem') }}"
+
+    - name: Store ca.pem in Vault
+      community.hashi_vault.hashivault_write:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        secret: "{{ vault_secret_path }}/ca"
+        data:
+          key: "{{ lookup('file', 'ca.pem') }}"
+#
+#    - name: Store client-cert.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/client-cert"
+#        data:
+#          key: "{{ lookup('file', 'client-cert.pem') }}"
+#
+#    - name: Store client-key.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/client-key"
+#        data:
+#          key: "{{ lookup('file', 'client-key.pem') }}"
+#
+#    - name: Store private_key.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/private_key"
+#        data:
+#          key: "{{ lookup('file', 'private_key.pem') }}"
+#
+#    - name: Store public_key.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/public_key"
+#        data:
+#          key: "{{ lookup('file', 'public_key.pem') }}"
+#
+#    - name: Store server-cert.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/server-cert"
+#        data:
+#          key: "{{ lookup('file', 'server-cert.pem') }}"
+#
+#    - name: Store server-key.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/server-key"
+#        data:
+#          key: "{{ lookup('file', 'server-key.pem') }}"

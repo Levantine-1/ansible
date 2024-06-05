@@ -1,48 +1,6 @@
 # https://docs.percona.com/percona-xtradb-cluster/8.0/apt.html#install-from-repository
 ---
-- name: Install Percona XtraDB Cluster
-  hosts: PerconaCluster
-  gather_facts: yes
-  become: yes
 
-  vars:
-    prerequisite_packages:
-      - wget
-      - gnupg2
-      - lsb-release
-      - curl
-      - python3-pexpect
-      - python3-mysqldb
-    ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
-      - name: ca-key
-        mode: '0600'
-      - name: ca
-        mode: '0644'
-      - name: client-cert
-        mode: '0644'
-      - name: client-key
-        mode: '0600'
-      - name: private_key
-        mode: '0600'
-      - name: public_key
-        mode: '0644'
-      - name: server-cert
-        mode: '0644'
-      - name: server-key
-        mode: '0600'
-
-  vars_files:
-    - ../../../vault.yml
-
-  tasks:
-#    - name: Update apt repository cache
-#      ansible.builtin.apt:
-#        update_cache: yes
-#
-#    - name: Install prerequisite packages
-#      package:
-#        name: "{{ prerequisite_packages }}"
-#        state: present
 #
 #    - name: Download the repository package
 #      ansible.builtin.get_url:
@@ -162,19 +120,6 @@
         src: templates/mysqld.cnf.j2
         dest: /etc/mysql/mysql.conf.d/mysqld.cnf
 
-    - name: Store generated certs from bootstrap node in Vault
-      ansible.builtin.slurp:
-        src: "/var/lib/mysql/{{ item.name }}.pem"
-      register: file_contents
-      loop: "{{ ssl_certs }}"
-      when: bootstrap is defined and bootstrap == "yes"
-
-    - name: Store files in Vault
-      community.hashi_vault.hashi_vault_write:
-        secret: "kv/data/percona_cluster/{{ item.item.name }}"
-        data:
-          content: "{{ item.content | b64decode }}"
-      loop: "{{ file_contents.results }}"
 
 #    - name: Copy .pem files from bootstrap node to all other nodes
 #      copy:

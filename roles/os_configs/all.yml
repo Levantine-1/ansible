@@ -29,4 +29,4 @@
 #- import_playbook: ../applications/hashicorp_vault/configure_hvault_server.yml
 #- import_playbook: ../applications/nginx-proxyContainers/configure-jwilder-nginx-proxy-container.yml
 #- import_playbook: ../applications/splunk/configure_splunk_server.yml
-- import_playbook: ../applications/perconaXtraDbCluster/configure_percona_xtradb_cluster.yml
+- import_playbook: ../applications/perconaXtraDbCluster/configure_percona_wrapper.yml
