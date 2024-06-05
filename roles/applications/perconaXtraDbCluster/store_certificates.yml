@@ -19,6 +19,7 @@
         token: "{{ vault_token }}"
         path: "{{ vault_secret_path }}"
         data:
+          data:
             ca-key: "{{ ca_key_pem.stdout }}"
             ca:     "{{ ca_pem.stdout }}"
 
