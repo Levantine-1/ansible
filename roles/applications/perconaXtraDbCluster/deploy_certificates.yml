@@ -25,7 +25,7 @@
     - name: Deploy certificates to other nodes
       ansible.builtin.copy:
         content: "{{ item.value }}"
-        dest: "/var/lib/mysql/{{ item.key }}"
+        dest: "/var/lib/mysql/{{ item.key }}.pem"
         owner: mysql
         group: mysql
         mode: "{{ file_permissions[item.key] }}"
