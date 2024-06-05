@@ -5,8 +5,13 @@
 # NOTE: 2024-06-04 Slurp isn't working as expected, but according to this SO, cat-ing the file is a valid solution
 # https://stackoverflow.com/questions/34722761/ansible-read-remote-file
 
+#    - name: Retrieve the ca-key certficate
+#      shell: cat /var/lib/mysql/ca-key.pem
+#      register: ca_key_pem
+
     - name: Retrieve the ca-key certficate
-      shell: cat /var/lib/mysql/ca-key.pem
+      ansible.builtin.slurp:
+        src: /var/lib/mysql/ca-key.pem
       register: ca_key_pem
 
     - name: Retrieve the ca certficate
@@ -20,7 +25,7 @@
         path: "{{ vault_secret_path }}"
         data:
           data:
-            ca-key: "{{ ca_key_pem.stdout }}"
+            ca-key: "{{ ca_key_pem.content | b64decode }}"
             ca:     "{{ ca_pem.stdout }}"
 
 
