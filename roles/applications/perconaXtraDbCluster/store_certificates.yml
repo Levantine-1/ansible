@@ -11,7 +11,7 @@
     - name: Slurp up the ca certficate
       ansible.builtin.slurp:
         src: /var/lib/mysql/ca.pem
-      register: splurped_ca_pem
+      register: slurped_ca_pem
 
     - name: Store ca-key.pem in Vault
       community.hashi_vault.vault_write:
@@ -20,7 +20,7 @@
         secret: "{{ vault_secret_path }}"
         data:
           data:
-            ca-key: "{{ splurped_ca_key_pem['content'] }}"
+            ca-key: "{{ slurped_ca_key_pem['content'] }}"
             ca:     "{{ slurped_ca_pem['content'] }}"
 
 
