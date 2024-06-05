@@ -19,6 +19,7 @@
         src: "/var/lib/mysql/{{ item }}"
       register: slurped_certs
       loop: "{{ cert_files }}"
+      no_log: true
 
     - name: Store certificates in Vault
       community.hashi_vault.vault_write:
@@ -35,3 +36,4 @@
             public_key: "{{ slurped_certs.results[5].content | b64decode }}"
             server-cert: "{{ slurped_certs.results[6].content | b64decode }}"
             server-key: "{{ slurped_certs.results[7].content | b64decode }}"
+      no_log: true

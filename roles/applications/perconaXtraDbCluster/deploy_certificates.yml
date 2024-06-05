@@ -20,6 +20,7 @@
         token: "{{ vault_token }}"
         path: "{{ vault_secret_path }}"
       register: percona_certificates
+      no_log: true
 
     - name: Deploy certificates to other nodes
       ansible.builtin.copy:
@@ -29,3 +30,4 @@
         group: mysql
         mode: "{{ file_permissions[item.key] }}"
       loop: "{{ percona_certificates.data.data.data | dict2items }}"
+      no_log: true
