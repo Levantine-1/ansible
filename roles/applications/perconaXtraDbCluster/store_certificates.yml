@@ -19,8 +19,8 @@
         token: "{{ vault_token }}"
         path: "{{ vault_secret_path }}"
         data:
-            ca-key: "{{ slurped_ca_key_pem['content'] }}"
-            ca:     "{{ slurped_ca_pem['content'] }}"
+            ca-key: "{{ slurped_ca_key_pem['content'] | b64decode }}"
+            ca:     "{{ slurped_ca_pem['content'] | b64decode }}"
 
 
 #    - name: Store ca.pem in Vault
