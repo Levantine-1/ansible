@@ -41,14 +41,19 @@
         proxysql_creds: "{{ lookup('hashi_vault', 'secret=kv/data/percona_cluster/proxy_sql token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
       no_log: true
 
+#    - name: Change default proxysql admin password
+#      mysql_user:
+#        login_user: admin
+#        login_password: admin
+#        login_port: 6032
+#        host: 127.0.0.1
+#        user: admin
+#        password: "{{ proxysql_creds.admin_password }}"
+
     - name: Change default proxysql admin password
-      mysql_user:
-        login_user: admin
-        login_password: admin
-        login_port: 6032
-        host: 127.0.0.1
-        user: admin
-        password: "{{ proxysql_creds.admin_password }}"
+      ansible.builtin.command:
+        cmd: >
+          mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "ALTER USER 'admin'@'localhost' IDENTIFIED BY '{{ proxysql_creds.admin_password }}';"
 
     - debug:
         msg: |
