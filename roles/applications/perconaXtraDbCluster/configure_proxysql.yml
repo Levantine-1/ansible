@@ -54,8 +54,8 @@
       ansible.builtin.command:
         cmd: >
           mysql -u admin -h 127.0.0.1 -P 6032 -e "ALTER USER 'admin'@'localhost' IDENTIFIED BY '{{ proxysql_creds.admin_password }}';"
-        environment:
-          MYSQL_PWD: admin
+      environment:
+        MYSQL_PWD: admin
 
     - debug:
         msg: |
