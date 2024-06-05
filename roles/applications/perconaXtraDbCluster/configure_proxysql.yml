@@ -41,6 +41,7 @@
         proxysql_creds: "{{ lookup('hashi_vault', 'secret=kv/data/percona_cluster/proxy_sql token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
       no_log: true
 
+# NOTE: The following task is not working as expected because it tries to log into proxysql via a socket file that doesn't exist, we'll do it as a command instead in the next task.
 #    - name: Change default proxysql admin password
 #      mysql_user:
 #        login_user: admin
@@ -50,6 +51,7 @@
 #        user: admin
 #        password: "{{ proxysql_creds.admin_password }}"
 
+# https://www.digitalocean.com/community/tutorials/how-to-use-proxysql-as-a-load-balancer-for-mysql-on-ubuntu-16-04#:~:text=To%20set%20the%20administrator%20password%20in%20ProxySQL%2C%20we%E2%80%99ll,-p%20-h%20127.0.0.1%20-P%206032%20--prompt%3D%27%20ProxySQLAdmin%3E%20%27
     - name: Change default proxysql admin password
       ansible.builtin.command:
         cmd: mysql -u admin -e "UPDATE global_variables SET variable_value='admin:{{ proxysql_creds.admin_password }}' WHERE variable_name='admin-admin_credentials'; LOAD ADMIN VARIABLES TO RUNTIME; SAVE ADMIN VARIABLES TO DISK;"
@@ -57,6 +59,7 @@
         MYSQL_PWD: admin
         MYSQL_HOST: 127.0.0.1
         MYSQL_TCP_PORT: 6032
+      ignore_errors: yes # If default password is already changed, this will fail, but that's okay.
 
     - debug:
         msg: |
@@ -87,3 +90,14 @@
           delay: 5
           ignore_errors: yes # The DB may not be ready to query yet.
           failed_when: cluster_status.retries == 120 # So fail on the timeout.
+
+    - name: Add cluster nodes to ProxySQL
+      ansible.builtin.command:
+        cmd: >
+          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'pxdbc1.internal.levantine.io',3306);"
+          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'pxdbc2.internal.levantine.io',3306);"
+          mysql -u admin -e "INSERT INTO mysql_servers(hostgroup_id, hostname, port) VALUES (0,'pxdbc3.internal.levantine.io',3306);"
+      environment:
+        MYSQL_PWD: {{ proxysql_creds.admin_password }}
+        MYSQL_HOST: 127.0.0.1
+        MYSQL_TCP_PORT: 6032
