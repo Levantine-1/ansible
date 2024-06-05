@@ -52,7 +52,7 @@
 
     - name: Change default proxysql admin password
       ansible.builtin.command:
-        cmd: mysql -u admin -e "select 1;"
+        cmd: mysql -u admin -e "UPDATE global_variables SET variable_value='admin:{{ proxysql_creds.admin_password }}' WHERE variable_name='admin-admin_credentials';"
       environment:
         MYSQL_PWD: admin
         MYSQL_HOST: 127.0.0.1
