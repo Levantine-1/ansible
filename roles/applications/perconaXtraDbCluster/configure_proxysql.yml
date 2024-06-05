@@ -1,14 +1,24 @@
+# https://docs.percona.com/percona-xtradb-cluster/8.0/load-balance-proxysql.html#manual-configuration
 ---
-- name: Configure Percona XtraDB Cluster (Wrapper)
+- name: Configure ProxySQL
   hosts: ProxySQL
   gather_facts: yes
   become: yes
 
   vars:
+    required_packages:
+      - percona-xtradb-cluster-client
+      - proxysql2
 
   vars_files:
     - ../../../vault.yml
 
   tasks:
-    - debug:
-        msg: "This is a placeholder for the Percona XtraDB Cluster ProxySQL configuration playbook."
+    - name: Update apt repository cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Required Packages
+      package:
+        name: "{{ required_packages }}"
+        state: present
