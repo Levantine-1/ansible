@@ -11,4 +11,4 @@
 
   tasks:
     - debug:
-      msg: "This is a placeholder for the Percona XtraDB Cluster ProxySQL configuration playbook."
+        msg: "This is a placeholder for the Percona XtraDB Cluster ProxySQL configuration playbook."
