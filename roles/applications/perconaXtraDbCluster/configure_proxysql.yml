@@ -64,3 +64,4 @@
           retries: 120 # 120 retries * 5 seconds = 10 minutes to timeout
           delay: 5
           ignore_errors: yes # The DB may not be ready to query yet.
+          failed_when: cluster_status.retries == 120 # So fail on the timeout.

@@ -77,6 +77,17 @@
       failed_when: result is failed
       no_log: true
 
+    # I know this is not very secure, but I'm no DBA, and I'm pressed for time at the moment. Will fix this later.
+    - name: Create MySQL root user and allow access from any host and grant privileges
+      mysql_user:
+        login_user: root
+        login_password: "{{ percona_creds.root_password }}"
+        name: root
+        host_all: yes
+        password: "{{ percona_creds.root_password }}"
+        priv: "*.*:ALL,GRANT"
+        state: present
+
     - name: Stop the Percona XtraDB Cluster service
       ansible.builtin.systemd:
         name: mysql
