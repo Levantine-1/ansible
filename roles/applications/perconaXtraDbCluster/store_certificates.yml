@@ -1,0 +1,39 @@
+---
+# NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
+# ansible-galaxy collection install community.hashi_vault
+
+    - name: Define list of certificate files
+      set_fact:
+        cert_files:         # Indexes
+          - ca-key.pem      # 0
+          - ca.pem          # 1
+          - client-cert.pem # 2
+          - client-key.pem  # 3
+          - private_key.pem # 4
+          - public_key.pem  # 5
+          - server-cert.pem # 6
+          - server-key.pem  # 7
+
+    - name: Retrieve certificates
+      ansible.builtin.slurp:
+        src: "/var/lib/mysql/{{ item }}"
+      register: slurped_certs
+      loop: "{{ cert_files }}"
+      no_log: true
+
+    - name: Store certificates in Vault
+      community.hashi_vault.vault_write:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        path: "{{ vault_secret_path }}"
+        data:
+          data:
+            ca-key: "{{ slurped_certs.results[0].content | b64decode }}"
+            ca: "{{ slurped_certs.results[1].content | b64decode }}"
+            client-cert: "{{ slurped_certs.results[2].content | b64decode }}"
+            client-key: "{{ slurped_certs.results[3].content | b64decode }}"
+            private_key: "{{ slurped_certs.results[4].content | b64decode }}"
+            public_key: "{{ slurped_certs.results[5].content | b64decode }}"
+            server-cert: "{{ slurped_certs.results[6].content | b64decode }}"
+            server-key: "{{ slurped_certs.results[7].content | b64decode }}"
+      no_log: true

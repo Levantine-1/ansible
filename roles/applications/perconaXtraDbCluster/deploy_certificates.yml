@@ -1,0 +1,33 @@
+---
+# NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
+# ansible-galaxy collection install community.hashi_vault
+
+    - name: Define permissions levels for each certificate
+      set_fact:
+        file_permissions:
+          ca-key: '0600'
+          ca: '0644'
+          client-cert: '0644'
+          client-key: '0600'
+          private_key: '0600'
+          public_key: '0644'
+          server-cert: '0644'
+          server-key: '0600'
+
+    - name: Retrieve certifcates from hashicorp vault
+      community.hashi_vault.vault_read:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        path: "{{ vault_secret_path }}"
+      register: percona_certificates
+      no_log: true
+
+    - name: Deploy certificates to other nodes
+      ansible.builtin.copy:
+        content: "{{ item.value }}"
+        dest: "/var/lib/mysql/{{ item.key }}.pem"
+        owner: mysql
+        group: mysql
+        mode: "{{ file_permissions[item.key] }}"
+      loop: "{{ percona_certificates.data.data.data | dict2items }}"
+      no_log: true
