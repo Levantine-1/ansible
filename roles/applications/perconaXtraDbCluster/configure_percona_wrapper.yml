@@ -33,8 +33,9 @@
         state: present
 
     - name: Check if Percona XtraDB Cluster is installed
-      command: dpkg-query -W -f='${Status}' percona-xtradb-cluster 2>/dev/null | grep "ok installed"
+      ansible.builtin.shell: dpkg-query -W -f='${Status}' percona-xtradb-cluster 2>/dev/null | grep "ok installed"
       register: percona_installed
+      ignore_errors: yes
       changed_when: false
 
     - name: Install Percona XtraDB Cluster
