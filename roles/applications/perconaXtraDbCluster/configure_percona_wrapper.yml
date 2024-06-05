@@ -1,4 +1,6 @@
 # https://docs.percona.com/percona-xtradb-cluster/8.0/apt.html#install-from-repository
+# NOTE: You will need to install the hashi_vault plugin for ansible to use the lookup plugin.
+# ansible-galaxy collection install community.hashi_vault
 ---
 - name: Configure Percona XtraDB Cluster (Wrapper)
   hosts: PerconaCluster

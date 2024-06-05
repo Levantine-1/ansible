@@ -1,4 +1,7 @@
 ---
+# NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
+# ansible-galaxy collection install community.hashi_vault
+
     - name: Store ca-key.pem in Vault
       community.hashi_vault.vault_write:
         url: "{{ vault_addr }}"
@@ -6,8 +9,8 @@
         secret: "{{ vault_secret_path }}"
         data:
           data:
-            ca-key: "{{ lookup('file', /var/lib/mysql/ca-key.pem) }}"
-            ca:     "{{ lookup('file', /var/lib/mysql/ca.pem) }}"
+            ca-key: "{{ lookup('file', '/var/lib/mysql/ca-key.pem') }}"
+            ca:     "{{ lookup('file', '/var/lib/mysql/ca.pem') }}"
 
 
 #    - name: Store ca.pem in Vault
