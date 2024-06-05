@@ -10,4 +10,4 @@
       register: percona_certificates
 
     - debug:
-        msg: "{{ percona_certificates }}"
+        msg: "{{ percona_certificates.ca }}"
