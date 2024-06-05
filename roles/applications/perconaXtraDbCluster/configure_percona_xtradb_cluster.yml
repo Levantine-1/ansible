@@ -77,44 +77,7 @@
       failed_when: result is failed
       no_log: true
 
-#    - name: Grant remote priviliges for MySQL Server
-#      mysql_user:
-#        name: root
-#        host: "%"
-#        password: "{{ percona_creds.root_password }}"
-#        priv: "*.*:ALL,GRANT"
-#        state: present
-#        login_user: root
-#        login_password: "{{ percona_creds.root_password }}"
-#      when: bootstrap is defined and bootstrap == "yes"
-##      no_log: true
-#
-#    - name: Create SST User for Percona Syncing
-#      mysql_user:
-#        name: sstuser
-#        host: "%"
-#        password: "{{ percona_creds.sstuser_password }}"
-#        priv: "*.*:ALL"
-#        state: present
-#        login_user: root
-#        login_password: "{{ percona_creds.root_password }}"
-#      when: bootstrap is defined and bootstrap == "yes"
-##      no_log: true
-#
-#    - name: Flush privileges
-#      mysql_query:
-#        login_user: root
-#        login_password: "{{ percona_creds.root_password }}"
-#        query: "FLUSH PRIVILEGES;"
-#      when: bootstrap is defined and bootstrap == "yes"
-##      no_log: true
-#
     - name: Stop the Percona XtraDB Cluster service
       ansible.builtin.systemd:
         name: mysql
         state: stopped
-
-    - name: Configure mysqld.cnf
-      template:
-        src: templates/mysqld.cnf.j2
-        dest: /etc/mysql/mysql.conf.d/mysqld.cnf

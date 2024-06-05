@@ -32,13 +32,45 @@
         name: "{{ prerequisite_packages }}"
         state: present
 
-    - name: Configure Percona XtraDB Cluster
+    - name: Check if Percona XtraDB Cluster is installed
+      command: dpkg-query -W -f='${Status}' percona-xtradb-cluster 2>/dev/null | grep "ok installed"
+      register: percona_installed
+      changed_when: false
+
+    - name: Install Percona XtraDB Cluster
       include_tasks: "configure_percona_xtradb_cluster.yml"
+      when: percona_installed.rc == 1
+
+    - name: Configure mysqld.cnf
+      template:
+        src: templates/mysqld.cnf.j2
+        dest: /etc/mysql/mysql.conf.d/mysqld.cnf
 
     - name: Retrieve certificates from bootstrap node.
       include_tasks: "store_certificates.yml"
-      when: bootstrap is defined and bootstrap == "yes"
+      when: bootstrap is defined and bootstrap == "yes" and percona_installed.rc == 1
 
     - name: Deploy certificates to other nodes.
       include_tasks: "deploy_certificates.yml"
       when: bootstrap is not defined or bootstrap == "no"
+
+    - debug:
+        msg: |
+          NOTE: Due to the potential for data loss or split brain scenario, this playbook will not bootstrap the cluster nor startup the other nodes.
+          The user will need to manually bootstrap the cluster and start the other nodes.
+          To bootstrap the cluster, run the following command on the first node:
+          "sudo service mysql bootstrap-pxc" or "sudo systemctl start mysql@bootstrap.service"
+          Then once the cluster is bootstrapped, start the other nodes with the following command:
+          "sudo service mysql start" or "sudo systemctl start mysql"
+          Check the status of the cluster with the following command after logging into mysql:
+          "show status like '%wsrep%';"
+          
+
+      # NOTE: Due to the potential for data loss or split brain scenario, this playbook will not bootstrap the cluster nor startup the other nodes.
+      # The user will need to manually bootstrap the cluster and start the other nodes.
+      # To bootstrap the cluster, run the following command on the first node:
+      # "sudo service mysql bootstrap-pxc" or "sudo systemctl start mysql@bootstrap.service"
+      # Then once the cluster is bootstrapped, start the other nodes with the following command:
+      # "sudo service mysql start" or "sudo systemctl start mysql"
+      # Check the status of the cluster with the following command after logging into mysql:
+      # "show status like '%wsrep%';"
