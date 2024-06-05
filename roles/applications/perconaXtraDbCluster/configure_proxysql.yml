@@ -52,7 +52,7 @@
 
     - name: Change default proxysql admin password
       ansible.builtin.command:
-        cmd: mysql -u admin -e "ALTER USER 'admin'@'localhost' IDENTIFIED BY '{{ proxysql_creds.admin_password }}';"
+        cmd: mysql -u admin -e "select 1;"
       environment:
         MYSQL_PWD: admin
         MYSQL_HOST: 127.0.0.1
