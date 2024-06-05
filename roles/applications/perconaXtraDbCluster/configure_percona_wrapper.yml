@@ -23,21 +23,21 @@
     - ../../../vault.yml
 
   tasks:
-#    - name: Update apt repository cache
-#      ansible.builtin.apt:
-#        update_cache: yes
-#
-#    - name: Install Required Packages
-#      package:
-#        name: "{{ prerequisite_packages }}"
-#        state: present
-#
-#    - name: Configure Percona XtraDB Cluster
-#      include_tasks: "configure_percona_xtradb_cluster.yml"
-#
-#    - name: Retrieve certificates from bootstrap node.
-#      include_tasks: "store_certificates.yml"
-#      when: bootstrap is defined and bootstrap == "yes"
+    - name: Update apt repository cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Required Packages
+      package:
+        name: "{{ prerequisite_packages }}"
+        state: present
+
+    - name: Configure Percona XtraDB Cluster
+      include_tasks: "configure_percona_xtradb_cluster.yml"
+
+    - name: Retrieve certificates from bootstrap node.
+      include_tasks: "store_certificates.yml"
+      when: bootstrap is defined and bootstrap == "yes"
 
     - name: Deploy certificates to other nodes.
       include_tasks: "deploy_certificates.yml"
