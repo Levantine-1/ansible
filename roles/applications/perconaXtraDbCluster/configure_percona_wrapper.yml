@@ -35,9 +35,9 @@
 #    - name: configure percona xtradb cluster
 #      include_tasks: "configure_percona_xtradb_cluster.yml"
 
-#    - name: Retrieve certificates from bootstrap node.
-#      include_tasks: "store_certificates.yml"
-#      when: bootstrap is defined and bootstrap == "yes"
+    - name: Retrieve certificates from bootstrap node.
+      include_tasks: "store_certificates.yml"
+      when: bootstrap is defined and bootstrap == "yes"
 
     - name: Deploy certificates to other nodes.
       include_tasks: "deploy_certificates.yml"
