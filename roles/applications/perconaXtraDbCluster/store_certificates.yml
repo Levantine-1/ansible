@@ -2,26 +2,6 @@
 # NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
 # ansible-galaxy collection install community.hashi_vault
 
-#    - name: Retrieve the ca-key certficate
-#      ansible.builtin.slurp:
-#        src: /var/lib/mysql/ca-key.pem
-#      register: ca_key_pem
-#
-#    - name: Retrieve the ca certficate
-#      ansible.builtin.slurp:
-#        src: /var/lib/mysql/ca.pem
-#      register: ca_pem
-#
-#    - name: Store ca-key.pem in Vault
-#      community.hashi_vault.vault_write:
-#        url: "{{ vault_addr }}"
-#        token: "{{ vault_token }}"
-#        path: "{{ vault_secret_path }}"
-#        data:
-#          data:
-#            ca-key: "{{ ca_key_pem.content | b64decode }}"
-#            ca:     "{{ ca_pem.content | b64decode}}"
-
     - name: Retrieve the ca-key.pem certificate
       ansible.builtin.slurp:
         src: /var/lib/mysql/ca-key.pem

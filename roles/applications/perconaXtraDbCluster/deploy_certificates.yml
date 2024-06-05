@@ -1,0 +1,13 @@
+---
+# NOTE: You will need the hashi_vault plugin for ansible to use the lookup plugin.
+# ansible-galaxy collection install community.hashi_vault
+-
+    - name: Retrieve certifcates from hashicorp vault
+      community.hashi_vault.vault_read:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        path: "{{ vault_secret_path }}"
+      register: percona_certificates
+
+    - debug:
+        msg: "{{ percona_certificates.ca }}"
