@@ -6,8 +6,8 @@
         secret: "{{ vault_secret_path }}"
         data:
           data:
-            ca-key: {{ lookup('file', /var/lib/mysql/ca-key.pem) }}
-            ca:     {{ lookup('file', /var/lib/mysql/ca.pem) }}
+            ca-key: "{{ lookup('file', /var/lib/mysql/ca-key.pem) }}"
+            ca:     "{{ lookup('file', /var/lib/mysql/ca.pem) }}"
 
 
 #    - name: Store ca.pem in Vault
