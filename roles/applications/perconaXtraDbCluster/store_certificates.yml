@@ -17,9 +17,8 @@
       community.hashi_vault.vault_write:
         url: "{{ vault_addr }}"
         token: "{{ vault_token }}"
-        secret: "{{ vault_secret_path }}"
+        path: "{{ vault_secret_path }}"
         data:
-          data:
             ca-key: "{{ slurped_ca_key_pem['content'] }}"
             ca:     "{{ slurped_ca_pem['content'] }}"
 
