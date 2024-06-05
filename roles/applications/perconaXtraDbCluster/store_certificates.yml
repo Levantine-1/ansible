@@ -1,19 +1,22 @@
 ---
     - name: Store ca-key.pem in Vault
-      community.hashi_vault.hashivault_write:
+      community.hashi_vault.vault_write:
         url: "{{ vault_addr }}"
         token: "{{ vault_token }}"
         secret: "{{ vault_secret_path }}"
         data:
-          key: "{{ lookup('file', 'ca-key.pem') }}"
+          data:
+            ca-key: {{ lookup('file', /var/lib/mysql/ca-key.pem) }}
+            ca:     {{ lookup('file', /var/lib/mysql/ca.pem) }}
 
-    - name: Store ca.pem in Vault
-      community.hashi_vault.hashivault_write:
-        url: "{{ vault_addr }}"
-        token: "{{ vault_token }}"
-        secret: "{{ vault_secret_path }}/ca"
-        data:
-          key: "{{ lookup('file', 'ca.pem') }}"
+
+#    - name: Store ca.pem in Vault
+#      community.hashi_vault.hashivault_write:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        secret: "{{ vault_secret_path }}/ca"
+#        data:
+#          key: "{{ lookup('file', 'ca.pem') }}"
 #
 #    - name: Store client-cert.pem in Vault
 #      community.hashi_vault.hashivault_write:

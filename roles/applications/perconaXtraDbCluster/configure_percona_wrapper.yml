@@ -1,6 +1,6 @@
 # https://docs.percona.com/percona-xtradb-cluster/8.0/apt.html#install-from-repository
 ---
-- name: Install Percona XtraDB Cluster
+- name: Configure Percona XtraDB Cluster (Wrapper)
   hosts: PerconaCluster
   gather_facts: yes
   become: yes
@@ -21,17 +21,17 @@
     - ../../../vault.yml
 
   tasks:
-    - name: Update apt repository cache
-      ansible.builtin.apt:
-        update_cache: yes
+#    - name: Update apt repository cache
+#      ansible.builtin.apt:
+#        update_cache: yes
+#
+#    - name: Install Required Packages
+#      package:
+#        name: "{{ prerequisite_packages }}"
+#        state: present
 
-    - name: Install Required Packages
-      package:
-        name: "{{ prerequisite_packages }}"
-        state: present
-
-    - name: configure percona xtradb cluster
-      include_tasks: "configure_percona_xtradb_cluster.yml"
+#    - name: configure percona xtradb cluster
+#      include_tasks: "configure_percona_xtradb_cluster.yml"
 
     - name: store certificates
       include_tasks: "store_certificates.yml"
