@@ -37,3 +37,4 @@
 
     - name: store certificates
       include_tasks: "store_certificates.yml"
+      when: bootstrap is defined and bootstrap == "yes"
