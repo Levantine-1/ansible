@@ -5,14 +5,14 @@
     - name: Define permissions levels for each certificate
       set_fact:
         file_permissions:
-          ca-key.pem: '0600'
-          ca.pem: '0644'
-          client-cert.pem: '0644'
-          client-key.pem: '0600'
-          private_key.pem: '0600'
-          public_key.pem: '0644'
-          server-cert.pem: '0644'
-          server-key.pem: '0600'
+          ca-key: '0600'
+          ca: '0644'
+          client-cert: '0644'
+          client-key: '0600'
+          private_key: '0600'
+          public_key: '0644'
+          server-cert: '0644'
+          server-key: '0600'
 
     - name: Retrieve certifcates from hashicorp vault
       community.hashi_vault.vault_read:
