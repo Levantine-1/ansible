@@ -36,3 +36,15 @@ disabled = false
 index = wireguard
 sourcetype = syslog
 {% endif %}
+
+{% if 'PerconaCluster' in group_names %}
+[journald://mysql]
+disabled = false
+index = percona
+sourcetype = syslog
+
+[monitor:///var/log/mysql/error.log]
+disabled = false
+index = percona
+sourcetype = syslog
+{% endif %}
