@@ -1,0 +1,14 @@
+---
+- name: Configure Percona XtraDB Cluster (Wrapper)
+  hosts: ProxySQL
+  gather_facts: yes
+  become: yes
+
+  vars:
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+    - debug:
+      msg: "This is a placeholder for the Percona XtraDB Cluster ProxySQL configuration playbook."
