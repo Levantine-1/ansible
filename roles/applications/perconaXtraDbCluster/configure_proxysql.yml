@@ -154,7 +154,7 @@
         login_password: "{{ percona_creds.root_password }}"
         login_host: "{{ groups['PerconaCluster'][0] }}" # This should be the bootstrap node
         name: "{{ proxysql.client_username }}"
-        host_all: yes
+        host: '%'
         password: "{{ proxysql_creds.sbuser }}"
         priv: "*.*:ALL"
         state: present
