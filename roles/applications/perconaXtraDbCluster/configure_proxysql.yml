@@ -160,6 +160,15 @@
         priv: "*.*:ALL"
         state: present
 
+    - name: Load Servers into runtime space
+      ansible.builtin.command:
+        cmd: >
+          mysql -u admin -e "LOAD MYSQL SERVERS TO RUNTIME; SAVE MYSQL SERVERS TO DISK;"
+      environment:
+        MYSQL_PWD: "{{ proxysql_creds.admin_password }}"
+        MYSQL_HOST: 127.0.0.1
+        MYSQL_TCP_PORT: 6032
+
     - name: Load users into runtime space
       ansible.builtin.command:
         cmd: >
