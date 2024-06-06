@@ -147,6 +147,7 @@
         MYSQL_PWD: "{{ proxysql_creds.admin_password }}"
         MYSQL_HOST: 127.0.0.1
         MYSQL_TCP_PORT: 6032
+      ignore_errors: yes # If the user already exists, this will fail, but that's okay.
 
     - name: Provide client user with read write access to the cluster for ProxySQL
       mysql_user:
