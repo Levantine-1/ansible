@@ -89,7 +89,6 @@
           retries: 120 # 120 retries * 5 seconds = 10 minutes to timeout
           delay: 5
           ignore_errors: yes # The DB may not be ready to query yet.
-          failed_when: cluster_status.retries == 120 # So fail on the timeout.
 
     - name: Add cluster nodes to ProxySQL
       ansible.builtin.command:
@@ -99,7 +98,5 @@
         MYSQL_PWD: "{{ proxysql_creds.admin_password }}"
         MYSQL_HOST: 127.0.0.1
         MYSQL_TCP_PORT: 6032
-      loop:
-        - pxdbc1.internal.levantine.io
-        - pxdbc2.internal.levantine.io
-        - pxdbc3.internal.levantine.io
+      loop: "{{ groups['PerconaCluster'] }}"
+      ignore_errors: yes # If the nodes are already added, this will fail due to a UUID constraint, but that's okay for now.
