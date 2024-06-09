@@ -50,6 +50,7 @@
     - name: Retrieve certificates from bootstrap node.
       include_tasks: "store_certificates.yml"
       when: bootstrap is defined and bootstrap == "yes" and percona_installed.rc == 1
+      # I am assuming percona-xtradb-cluster is installed correctly on the bootstrap node if the "Install Percona XtraDB Cluster" task is executed.
 
     - name: Deploy certificates to other nodes.
       include_tasks: "deploy_certificates.yml"
