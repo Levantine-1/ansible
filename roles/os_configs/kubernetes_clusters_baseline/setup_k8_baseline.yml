@@ -22,10 +22,11 @@
     ansible.builtin.apt_key:
       url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
       state: present
+      keyring: /usr/share/keyrings/kubernetes-archive-keyring.gpg
 
   - name: Add Kubernetes APT repository
-    apt_repository:
-      repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+    ansible.builtin.apt_repository:
+      repo: "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
       state: present
       filename: 'kubernetes'
     register: apt_repo
