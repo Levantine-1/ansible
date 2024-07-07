@@ -1,7 +1,6 @@
 # https://kubernetes.io/docs/setup/production-environment/#what-s-next
 # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
-# https://github.com/kairen/kubeadm-ansible/tree/master/roles/commons/pre-install/tasks
 ---
   - name: Disable system swap
     shell: "swapoff -a"
@@ -20,13 +19,13 @@
       state: present
 
   - name: Add Kubernetes APT GPG key
-    apt_key:
-      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    ansible.builtin.apt_key:
+      url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
       state: present
 
   - name: Add Kubernetes APT repository
     apt_repository:
-      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
       state: present
       filename: 'kubernetes'
     register: apt_repo
