@@ -31,9 +31,24 @@
         name: "{{ required_packages }}"
         state: present
 
+#    - name: Add Kubernetes GPG key
+#      ansible.builtin.apt_key:
+#        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+#        state: present
+
+    - name: Download Kubernetes GPG key
+      ansible.builtin.get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+        dest: /tmp/kubernetes.gpg
+
+    - name: Read Kubernetes GPG key
+      ansible.builtin.slurp:
+        src: /tmp/kubernetes.gpg
+      register: kubernetes_gpg_key
+
     - name: Add Kubernetes GPG key
       ansible.builtin.apt_key:
-        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+        data: "{{ kubernetes_gpg_key['content'] | b64decode }}"
         state: present
 
     - name: Add Kubernetes Repository
