@@ -1,2 +1,2 @@
 DataGatewayK8Cluster:
-    apt_package_hold_state: held
+    apt_package_hold_state: fixed     # Value of state must be one of: absent, build-dep, fixed, latest, present
