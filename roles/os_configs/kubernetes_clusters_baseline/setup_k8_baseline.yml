@@ -1,0 +1,54 @@
+# https://kubernetes.io/docs/setup/production-environment/#what-s-next
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
+# https://github.com/kairen/kubeadm-ansible/tree/master/roles/commons/pre-install/tasks
+---
+  - name: Disable system swap
+    shell: "swapoff -a"
+
+  - name: Remove current swaps from fstab
+    lineinfile:
+      dest: /etc/fstab
+      regexp: '(?i)^([^#][\S]+\s+(none|swap)\s+swap.*)'
+      line: '# \1'
+      backrefs: yes
+      state: present
+
+  - name: Install Required Packages
+    package:
+      name: "{{ required_packages }}"
+      state: present
+
+  - name: Add Kubernetes APT GPG key
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+
+  - name: Add Kubernetes APT repository
+    apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+      filename: 'kubernetes'
+    register: apt_repo
+
+  - name: Update apt cache
+    ansible.builtin.apt:
+      update_cache: yes
+    when: apt_repo.changed
+    ignore_errors: yes
+
+  - name: Install Kubernetes Packages
+    package:
+      name: "{{ kube_packages }}"
+      state: present
+
+  - name: Set Kubernetes Packages Apt Hold State
+    ansible.builtin.apt:
+      name: "{{ kube_packages }}"
+      state: "{{ DataGatewayK8Cluster.apt_package_hold_state | default('held') }}"
+
+  - name: Enable and start kubelet service
+    ansible.builtin.systemd:
+      name: kubelet
+      enabled: yes
+      state: started
