@@ -1,0 +1,2 @@
+DataGatewayK8Cluster:
+    apt_package_hold_state: held

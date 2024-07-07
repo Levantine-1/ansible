@@ -1,0 +1,74 @@
+# https://kubernetes.io/docs/setup/production-environment/#what-s-next
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
+
+---
+- name: Configure Kubernetes Cluster Baseline
+  hosts: DataGatewayK8Cluster
+  become: yes
+  gather_facts: yes
+
+  vars:
+    required_packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    kube_packages:
+      - kubeadm
+      - kubelet
+      - kubectl
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+
+    # NOTE: Docker will be installed a few steps earlier in the app.yml playbook -- - import_playbook: installDocker.yml
+
+    - name: Install Required Packages
+      package:
+        name: "{{ required_packages }}"
+        state: present
+
+    - name: Add Kubernetes GPG key
+      ansible.builtin.apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+        state: present
+
+    - name: Add Kubernetes Repository
+      ansible.builtin.apt_repository:
+        # v1.30 is the latest stable version as of 2024-07-07 -- https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+        repo: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+        state: present
+      register: apt_repo
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+      when: apt_repo.changed
+      ignore_errors: yes
+
+    - name: Install Kubernetes Packages
+      package:
+        name: "{{ kube_packages }}"
+        state: present
+
+    - name: Set Kubernetes Packages Apt Hold State
+      ansible.builtin.apt:
+        name: "{{ kube_packages }}"
+        state: "{{ DataGatewayK8Cluster.apt_package_hold_state | default('held') }}"
+
+    - name: Enable and start kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+        state: started
+
+    - name: Configure Control Plane Nodes
+      include_tasks: "configure_control_plane.yml"
+      when: node is defined and node == "controller"
+
+    - name: Configure Worker Nodes
+      include_tasks: "configure_worker_nodes.yml"
+      when: node is defined and node == "worker"

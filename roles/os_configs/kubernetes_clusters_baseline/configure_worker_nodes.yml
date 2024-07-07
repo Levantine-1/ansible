@@ -1,0 +1,4 @@
+---
+  - name: Configuring Worker Nodes
+    debug:
+      msg: "Power to the workers of the world!"

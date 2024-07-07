@@ -1,0 +1,4 @@
+---
+  - name: Configuring Control Plane Nodes
+    debug:
+      msg: "Control Plane"
