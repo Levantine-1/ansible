@@ -49,6 +49,7 @@
       include_tasks: "configure_control_plane.yml"
       when:
         - node is defined and node == "controller"
+        - init_node is defined and init_node == "yes"
         - kubectl_installed.rc == 1
 
     - name: Configure Worker Nodes
