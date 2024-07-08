@@ -32,7 +32,7 @@
 
       # This isn't perfect, but if kubectl isn't working, there's a good chance it needs to be setup.
     - name: Check if kubectl is installed
-      ansible.builtin.shell: sudo kubectl version
+      ansible.builtin.shell: kubectl version
       register: kubectl_installed
       ignore_errors: yes
       changed_when: false
