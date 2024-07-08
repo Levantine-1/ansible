@@ -37,9 +37,15 @@
       no_log: false
       register: create_authorized_key
 
+    # NOTE: The retry logic is a workaround for the seemingly random error when deleting the debian user.
+    # Even though all hosts are built from the same base image, the error occurs randomly on a few hosts.
     - name: Remove users
       user:
         name: "{{ item.name }}"
         state: absent
         shell: /bin/bash
+      register: result
+      until: result is succeeded
+      retries: 3
+      delay: 2
       with_items: "{{ disabled_users }}"

@@ -427,6 +427,46 @@
         <dnsserver/>
         <ntpserver/>
       </staticmap>
+      <staticmap>
+        <mac>00:0c:29:a6:60:5c</mac>
+        <cid>kube-m-01</cid>
+        <ipaddr>192.168.1.80</ipaddr>
+        <hostname>kube-m-01</hostname>
+        <descr>kube-m-01</descr>
+        <winsserver/>
+        <dnsserver/>
+        <ntpserver/>
+      </staticmap>
+      <staticmap>
+        <mac>00:0c:29:d6:ae:34</mac>
+        <cid>kube-w-01</cid>
+        <ipaddr>192.168.1.81</ipaddr>
+        <hostname>kube-w-01</hostname>
+        <descr>kube-w-01</descr>
+        <winsserver/>
+        <dnsserver/>
+        <ntpserver/>
+      </staticmap>
+      <staticmap>
+        <mac>00:0c:29:8f:a6:10</mac>
+        <cid>kube-w-02</cid>
+        <ipaddr>192.168.1.82</ipaddr>
+        <hostname>kube-w-02</hostname>
+        <descr>kube-w-02</descr>
+        <winsserver/>
+        <dnsserver/>
+        <ntpserver/>
+      </staticmap>
+      <staticmap>
+        <mac>00:0c:29:ea:98:1a</mac>
+        <cid>kube-w-03</cid>
+        <ipaddr>192.168.1.83</ipaddr>
+        <hostname>kube-w-03</hostname>
+        <descr>kube-w-03</descr>
+        <winsserver/>
+        <dnsserver/>
+        <ntpserver/>
+      </staticmap>
       <pool/>
     </lan>
   </dhcpd>
@@ -571,8 +611,8 @@
   </widgets>
   <revision>
     <username>root@192.168.1.50</username>
-    <time>1717620848.4684</time>
-    <description>Changed backup revision count</description>
+    <time>1717921965.4689</time>
+    <description>/services_dhcp_edit.php made changes</description>
   </revision>
   <OPNsense>
     <wireguard>

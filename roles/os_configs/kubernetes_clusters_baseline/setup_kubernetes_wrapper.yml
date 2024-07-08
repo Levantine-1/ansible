@@ -1,0 +1,59 @@
+# https://kubernetes.io/docs/setup/production-environment/#what-s-next
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
+# https://github.com/kairen/kubeadm-ansible/tree/master/roles/commons/pre-install/tasks
+
+---
+- name: Configure Kubernetes Cluster Baseline
+  hosts: DataGatewayK8Cluster
+  become: yes
+  gather_facts: yes
+
+  vars:
+    vault_addr: "{{ hashicorp.vault.address }}"
+    vault_token: "{{ hashicorp_vault_token }}"
+    vault_secret_path: "kv/data/k8clusters/{{ group_names[0] }}" # group_names[0] is the name of the group that the playbook is running against
+                      # It's going to cause problems if the host is in multiple groups, but for now, I'm going to assume that the host is only in one group.
+    required_packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    kube_packages:
+      - kubeadm
+      - kubelet
+      - kubectl
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+    # NOTE: Docker will be installed a few steps earlier in the app.yml playbook -- - import_playbook: installDocker.yml
+
+      # This isn't perfect, but if kubectl isn't working, there's a good chance it needs to be setup. We can do fancy stuff like check cluster status later
+    - name: Check if kubectl is installed
+      ansible.builtin.shell: kubectl version --client
+      register: kubectl_installed
+      ignore_errors: yes
+      changed_when: false
+
+    - name: kubectl_installed status
+      debug:
+        var: kubectl_installed
+
+    - name: Setup Kubernetes Cluster Baseline
+      include_tasks: "setup_k8_baseline.yml"
+      when: kubectl_installed.rc != 0
+
+    - name: Configure Control Plane Nodes
+      include_tasks: "configure_control_plane.yml"
+      when:
+        - node is defined and node == "controller"
+        - init_node is defined and init_node == "yes"
+        - kubectl_installed.rc != 0
+
+    - name: Configure Worker Nodes
+      include_tasks: "configure_worker_nodes.yml"
+      when:
+        - node is defined and node == "worker"
+        - kubectl_installed.rc != 0

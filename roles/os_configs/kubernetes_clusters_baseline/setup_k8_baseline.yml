@@ -1,0 +1,77 @@
+# https://kubernetes.io/docs/setup/production-environment/#what-s-next
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
+---
+  - name: Disable system swap
+    shell: "swapoff -a"
+
+  - name: Remove current swaps from fstab
+    lineinfile:
+      dest: /etc/fstab
+      regexp: '(?i)^([^#][\S]+\s+(none|swap)\s+swap.*)'
+      line: '# \1'
+      backrefs: yes
+      state: present
+
+  - name: Install Required Packages
+    package:
+      name: "{{ required_packages }}"
+      state: present
+
+  - name: Download cri-dockerd binary
+    get_url:
+      url: "https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.14/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
+      dest: "/tmp/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
+
+# Regarding cri-dockerd:
+# Note:  https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+# Docker Engine does not implement the CRI which is a requirement for a container runtime to work with Kubernetes.
+# For that reason, an additional service cri-dockerd has to be installed.
+# cri-dockerd is a project based on the legacy built-in Docker Engine support that was removed from the kubelet in
+# version 1.24.
+# Runtime/ Domain socket: Docker Engine (using cri-dockerd)	unix:///var/run/cri-dockerd.sock
+
+  - name: Install cri-dockerd
+    apt:
+      deb: "/tmp/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
+
+  - name: Enable and start cri-dockerd service
+    ansible.builtin.systemd:
+      name: cri-docker
+      enabled: yes
+      state: started
+
+  - name: Add Kubernetes APT GPG key
+    ansible.builtin.apt_key:
+      url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+      state: present
+      keyring: /usr/share/keyrings/kubernetes-archive-keyring.gpg
+
+  - name: Add Kubernetes APT repository
+    ansible.builtin.apt_repository:
+      repo: "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
+      state: present
+      filename: 'kubernetes'
+    register: apt_repo
+
+  - name: Update apt cache
+    ansible.builtin.apt:
+      update_cache: yes
+    when: apt_repo.changed
+    ignore_errors: yes
+
+  - name: Install Kubernetes Packages
+    package:
+      name: "{{ kube_packages }}"
+      state: present
+
+  - name: Set Kubernetes Packages Apt Hold State
+    ansible.builtin.apt:
+      name: "{{ kube_packages }}"
+      state: "{{ DataGatewayK8Cluster.apt_package_hold_state | default('held') }}"
+
+  - name: Enable and start kubelet service
+    ansible.builtin.systemd:
+      name: kubelet
+      enabled: yes
+      state: started
