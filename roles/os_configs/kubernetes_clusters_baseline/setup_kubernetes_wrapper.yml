@@ -26,8 +26,8 @@
   tasks:
     # NOTE: Docker will be installed a few steps earlier in the app.yml playbook -- - import_playbook: installDocker.yml
 
-    - name: Setup Kubernetes Cluster Baseline
-      include_tasks: "setup_k8_baseline.yml"
+#    - name: Setup Kubernetes Cluster Baseline
+#      include_tasks: "setup_k8_baseline.yml"
 
     - name: Configure Control Plane Nodes
       include_tasks: "configure_control_plane.yml"
