@@ -35,6 +35,12 @@
     apt:
       deb: "/tmp/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
 
+  - name: Enable and start cri-dockerd service
+    ansible.builtin.systemd:
+      name: cri-dockerd
+      enabled: yes
+      state: started
+
   - name: Add Kubernetes APT GPG key
     ansible.builtin.apt_key:
       url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
