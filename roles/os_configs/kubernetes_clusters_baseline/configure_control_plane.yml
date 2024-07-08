@@ -8,11 +8,6 @@
     include_tasks: store_control_plane_secrets.yml
     when: node is defined and node == "controller"
 
-  - name: debug
-    ansible.builtin.debug:
-      msg: "{{ kubeadm_join_cmd }}"
-    when: node is defined and node == "controller"
-
   - name: Apply Flannel network
     ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
     when: node is defined and node == "controller"
