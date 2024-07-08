@@ -2,6 +2,18 @@
 #  The join command hostvar is captured in the control plane configuration task: Capture kubeadm join command
 # all.yml -> kubernetes_clusters_baseline/setup_kubernetes_wrapper.yml -> configure_control_plane.yml
 
+  - name: Retrieve token and hash from Vault
+    community.hashi_vault.vault_read:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        path: "{{ vault_secret_path }}/tokens"
+    register: k8s_tokens
+    no_log: true
+
   - name: Join node to the cluster
-    ansible.builtin.command: "{{ kubeadm_join_cmd }} --cri-socket {{ DataGatewayK8Cluster.cri_socket }}"
+    ansible.builtin.command: >
+        kubeadm join {{ DataGatewayK8Cluster.control_plane_endpoint }}:6443
+        --cri-socket {{ DataGatewayK8Cluster.cri_socket }}
+        --token {{ k8s_tokens.data.data.token }}
+        --discovery-token-ca-cert-hash {{ k8s_tokens.data.data.discovery-token-ca-cert-hash }}
     when: node is defined and node == "worker"
