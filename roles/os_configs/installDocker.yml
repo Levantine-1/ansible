@@ -26,6 +26,23 @@
         state: latest
         update_cache: true
 
+    - name: Download cri-dockerd binary
+      get_url:
+        url: "https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.14/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
+        dest: "/tmp/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
+
+    # Regarding cri-dockerd:
+    # Note:  https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+    # Docker Engine does not implement the CRI which is a requirement for a container runtime to work with Kubernetes.
+    # For that reason, an additional service cri-dockerd has to be installed.
+    # cri-dockerd is a project based on the legacy built-in Docker Engine support that was removed from the kubelet in
+    # version 1.24.
+    # Runtime/ Domain socket: Docker Engine (using cri-dockerd)	unix:///var/run/cri-dockerd.sock
+
+    - name: Install cri-dockerd
+      apt:
+        deb: "/tmp/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
+
     - name: Add Docker GPG apt Key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
