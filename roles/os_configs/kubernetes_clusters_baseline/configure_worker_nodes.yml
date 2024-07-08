@@ -10,10 +10,6 @@
     register: k8s_tokens
     no_log: true
 
-  - name: Debug tokens
-    ansible.builtin.debug:
-        var: k8s_tokens
-
   - name: Join node to the cluster
     ansible.builtin.command: >
         kubeadm join {{ DataGatewayK8Cluster.control_plane_endpoint }}:6443
