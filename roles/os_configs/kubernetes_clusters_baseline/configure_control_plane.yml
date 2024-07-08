@@ -8,6 +8,7 @@
     ansible.builtin.file:
         path: "{{ ansible_env.HOME }}/.kube"
         state: directory
+    become: no
 
   - name: Copy admin.conf to .kube/config
     ansible.builtin.copy:
@@ -17,6 +18,7 @@
         group: "{{ ansible_env.USER }}"
         mode: '0644'
         remote_src: yes
+    become: no
 
   - name: Change ownership of .kube/config
     ansible.builtin.file:
@@ -24,6 +26,7 @@
         owner: "{{ ansible_env.USER }}"
         group: "{{ ansible_env.USER }}"
         mode: '0644'
+    become: no
 
   - name: Copy flannel.yaml from local to remote
     ansible.builtin.copy:

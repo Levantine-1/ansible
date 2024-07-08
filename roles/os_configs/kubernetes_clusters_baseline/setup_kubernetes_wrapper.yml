@@ -33,9 +33,9 @@
 #    - name: Setup Kubernetes Cluster Baseline
 #      include_tasks: "setup_k8_baseline.yml"
 
-#    - name: Configure Control Plane Nodes
-#      include_tasks: "configure_control_plane.yml"
-#      when: node is defined and node == "controller"
+    - name: Configure Control Plane Nodes
+      include_tasks: "configure_control_plane.yml"
+      when: node is defined and node == "controller"
 
     - name: Configure Worker Nodes
       include_tasks: "configure_worker_nodes.yml"
