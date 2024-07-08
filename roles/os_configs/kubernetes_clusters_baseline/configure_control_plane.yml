@@ -1,12 +1,17 @@
 ---
   - name: Initialize the Kubernetes control plane
-    ansible.builtin.command: sudo kubeadm init --cri-socket "{{ DataGatewayK8Cluster.cri_socket }}" --control-plane-endpoint "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+    ansible.builtin.command: kubeadm init --cri-socket "{{ DataGatewayK8Cluster.cri_socket }}" --control-plane-endpoint "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
     register: kubeadm_init
     when: node is defined and node == "controller"
 
   - name: Capture kubeadm join command
     set_fact:
       join_command: "{{ kubeadm_init.stdout_lines[-2] }}"
+    when: node is defined and node == "controller"
+
+  - name: debug
+    ansible.builtin.debug:
+      msg: "{{ join_command }}"
     when: node is defined and node == "controller"
 
   - name: Apply Flannel network
