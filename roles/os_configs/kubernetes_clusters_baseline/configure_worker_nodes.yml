@@ -18,6 +18,6 @@
     ansible.builtin.command: >
         kubeadm join {{ DataGatewayK8Cluster.control_plane_endpoint }}:6443
         --cri-socket {{ DataGatewayK8Cluster.cri_socket }}
-        --token {{ k8s_tokens['data']['data']['token'] }}
-        --discovery-token-ca-cert-hash {{ k8s_tokens['data']['data']['kubeadm_init_join_ca_cert_hash'] }}
+        --token {{ k8s_tokens['data']['data']['data']['token'] }}
+        --discovery-token-ca-cert-hash {{ k8s_tokens['data']['data']['data']['kubeadm_init_join_ca_cert_hash'] }}
     when: node is defined and node == "worker"
