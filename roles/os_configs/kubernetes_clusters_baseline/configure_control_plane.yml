@@ -13,9 +13,14 @@
     when: node is defined and node == "controller"
     # kubeadm_init_join_cmd will be used in the follow-up playbook to join the nodes to the cluster: configure_worker_nodes.yml
 
+  - name: Set fact for kubeadm join command
+    ansible.builtin.set_fact:
+      kubeadm_join_cmd: "{{ kubeadm_init_join_cmd.stdout }}"
+    when: node is defined and node == "controller"
+
   - name: debug
     ansible.builtin.debug:
-      msg: "{{ join_command }}"
+      msg: "{{ kubeadm_join_cmd }}"
     when: node is defined and node == "controller"
 
   - name: Apply Flannel network
