@@ -28,7 +28,7 @@
   - name: Copy flannel.yaml from local to remote
     ansible.builtin.copy:
         src: templates/kube-flannel.yml
-        dest: "{{ ansible_env.HOME }}"
+        dest: "/etc/kubernetes/kube-flannel.yml"
         owner: "{{ ansible_env.USER }}"
         group: "{{ ansible_env.USER }}"
         mode: '0644'
@@ -37,7 +37,7 @@
 # NOTE: 2024-07-08: Downloading the kube-flannel.yml file has been very unreliable, so just checked it into the repo.
   # https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
   - name: Apply Flannel network
-    ansible.builtin.command: kubectl apply -f ./kube-flannel.yml
+    ansible.builtin.command: kubectl apply -f /etc/kubernetes/kube-flannel.yml
     when: node is defined and node == "controller"
 
   - name: Store secrets in Hashicorp Vault
