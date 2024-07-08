@@ -12,7 +12,7 @@
 
   - name: Parse the kubeadm join command ca cert hash
     ansible.builtin.shell:
-        cmd: echo "{{ kubeadm_init.stdout }}" | sed '1,/join any number of worker nodes/d' test.txt | grep 'discovery' | cut -d ':' -f 2
+        cmd: echo "{{ kubeadm_init.stdout }}" | sed '1,/join any number of worker nodes/d' | grep 'discovery' | cut -d ':' -f 2
     register: kubeadm_init_join_ca_cert_hash
     when: node is defined and node == "controller"
 
@@ -89,7 +89,7 @@
 
   - name: Retrieve certificates
     ansible.builtin.slurp:
-        src: "/etc/kubernetes/pki/{{ item }}"
+        src: "/etc/kubernetes/pki/etcd/{{ item }}"
     register: slurped_etcd_certs
     loop: "{{ etcd_cert_files }}"
     no_log: true
