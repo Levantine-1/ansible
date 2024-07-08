@@ -37,7 +37,7 @@
 
   - name: Enable and start cri-dockerd service
     ansible.builtin.systemd:
-      name: cri-dockerd
+      name: cri-docker
       enabled: yes
       state: started
 
