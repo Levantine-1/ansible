@@ -4,10 +4,14 @@
     register: kubeadm_init
     when: node is defined and node == "controller"
 
-  - name: Capture kubeadm join command
-    set_fact:
-      join_command: "{{ kubeadm_init.stdout_lines[-2] }}"
+  - name: Parse kubeadm init output for join command
+    ansible.builtin.shell:
+        # A little janky, but it works. echo ${output} | get all lines matching 'join...' | concat all lines into one | remove backslashes | remove extra spaces
+        # Should get something like: kubeadm join <endpoint>:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+        cmd: echo "{{ kubeadm_init.stdout }}" | sed '1,/join any number of worker nodes/d' | tr '\n' ' ' | sed 's/\\//g' | tr -s " "
+    register: kubeadm_init_join_cmd
     when: node is defined and node == "controller"
+    # kubeadm_init_join_cmd will be used in the follow-up playbook to join the nodes to the cluster: configure_worker_nodes.yml
 
   - name: debug
     ansible.builtin.debug:
