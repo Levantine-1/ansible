@@ -10,6 +10,10 @@
   gather_facts: yes
 
   vars:
+    vault_addr: "{{ hashicorp.vault.address }}"
+    vault_token: "{{ hashicorp_vault_token }}"
+    vault_secret_path: "kv/data/k8clusters/{{ group_names[0] }}" # group_names[0] is the name of the group that the playbook is running against
+                      # It's going to cause problems if the host is in multiple groups, but for now, I'm going to assume that the host is only in one group.
     required_packages:
       - apt-transport-https
       - ca-certificates
