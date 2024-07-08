@@ -16,6 +16,7 @@
         owner: "{{ ansible_env.USER }}"
         group: "{{ ansible_env.USER }}"
         mode: '0644'
+        remote_src: yes
 
   - name: Change ownership of .kube/config
     ansible.builtin.file:
