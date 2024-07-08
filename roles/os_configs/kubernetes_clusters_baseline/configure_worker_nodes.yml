@@ -1,4 +1,7 @@
 ---
-  - name: Configuring Worker Nodes
-    debug:
-      msg: "Power to the workers of the world!"
+#  The join command hostvar is captured in the control plane configuration task: Capture kubeadm join command
+# all.yml -> kubernetes_clusters_baseline/setup_kubernetes_wrapper.yml -> configure_control_plane.yml
+
+  - name: Join node to the cluster
+    ansible.builtin.command: "{{ kubeadm_init.stdout_lines[-2] }} --cri-socket {{ DataGatewayK8Cluster.cri_socket }}"
+    when: node is defined and node == "worker"

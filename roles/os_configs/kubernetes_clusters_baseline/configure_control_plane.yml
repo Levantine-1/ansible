@@ -1,4 +1,14 @@
 ---
-  - name: Configuring Control Plane Nodes
-    debug:
-      msg: "Control Plane"
+  - name: Initialize the Kubernetes control plane
+    ansible.builtin.command: sudo kubeadm init --cri-socket "{{ DataGatewayK8Cluster.cri_socket }}" --control-plane-endpoint "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+    register: kubeadm_init
+    when: node is defined and node == "controller"
+
+  - name: Capture kubeadm join command
+    set_fact:
+      join_command: "{{ kubeadm_init.stdout_lines[-2] }}"
+    when: node is defined and node == "controller"
+
+  - name: Apply Flannel network
+    ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+    when: node is defined and node == "controller"
