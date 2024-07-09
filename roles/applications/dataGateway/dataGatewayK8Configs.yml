@@ -43,12 +43,12 @@
 
 ##### NOTE: The following tasks are just to get the latest image in the ECR >>>>>>>>>>>
       - name: Log in to AWS ECR
-        shell: "aws ecr get-login-password --region {{ default_region }} | docker login --username AWS --password-stdin {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com"
+        shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
         environment: "{{ aws_environment }}"
         when: node is defined and node == "controller"
 
       - name: Get the latest Docker image from ECR
-        shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ default_region }}"
+        shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
         environment: "{{ aws_environment }}"
         register: latest_image
         when: node is defined and node == "controller"
