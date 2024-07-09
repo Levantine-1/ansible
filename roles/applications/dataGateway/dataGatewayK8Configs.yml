@@ -25,12 +25,10 @@
         # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
         set_fact:
           aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-        when: node is defined and node == "controller"
 
       - name: Retrieve Database Credentials from HashiCorp Vault
         set_fact:
           db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-        when: node is defined and node == "controller"
 
       - name: Start a local Docker registry
         docker_container:
@@ -40,30 +38,24 @@
           ports:
             - "5000:5000"
           container_default_behavior: no_defaults
-        when: node is defined and node == "controller"
 
       - name: Log in to AWS ECR
         shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
         environment: "{{ aws_environment }}"
-        when: node is defined and node == "controller"
 
       - name: Get the latest Docker image from ECR
         shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
         environment: "{{ aws_environment }}"
         register: latest_image
-        when: node is defined and node == "controller"
 
       - name: Pull the Docker image from ECR
         command: "docker pull {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-        when: node is defined and node == "controller"
 
       - name: Tag the Docker image
         command: "docker tag {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }} localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-        when: node is defined and node == "controller"
 
       - name: Push the Docker image to local repo
         command: "docker push localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-        when: node is defined and node == "controller"
 
       - name: Create Kubernetes Deployment
         kubernetes.core.k8s:
@@ -86,7 +78,7 @@
                 spec:
                   containers:
                     - name: datagateway
-                      image: "{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+                      image: "localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
                       env:
                         - name: spring.datasource.url
                           value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
