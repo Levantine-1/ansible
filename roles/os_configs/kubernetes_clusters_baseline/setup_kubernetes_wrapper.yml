@@ -19,6 +19,7 @@
       - ca-certificates
       - curl
       - gpg
+      - awscli
     kube_packages:
       - kubeadm
       - kubelet
