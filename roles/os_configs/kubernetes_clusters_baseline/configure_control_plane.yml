@@ -1,6 +1,10 @@
 ---
   - name: Initialize the Kubernetes control plane
-    ansible.builtin.command: kubeadm init --cri-socket "{{ DataGatewayK8Cluster.cri_socket }}" --control-plane-endpoint "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+    ansible.builtin.command: >
+        kubeadm init \
+        --cri-socket "{{ DataGatewayK8Cluster.cri_socket }}" \
+        --control-plane-endpoint "{{ DataGatewayK8Cluster.control_plane_endpoint }}"\
+        --pod-network-cidr "{{ DataGatewayK8Cluster.pod_network_cidr }}"
     register: kubeadm_init
     when: node is defined and node == "controller"
 

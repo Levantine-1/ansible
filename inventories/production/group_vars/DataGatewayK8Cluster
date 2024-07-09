@@ -2,3 +2,4 @@ DataGatewayK8Cluster:
     apt_package_hold_state: fixed     # Value of state must be one of: absent, build-dep, fixed, latest, present
     control_plane_endpoint: kube-c-00.internal.levantine.io
     cri_socket: unix:///var/run/cri-dockerd.sock
+    pod-network-cidr: 10.244.0.0/16
