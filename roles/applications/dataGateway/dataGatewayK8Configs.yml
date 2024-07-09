@@ -102,7 +102,14 @@
               ports:
                 - port: 8080
                   targetPort: 8080
+                  notePort: "{{ DataGatewayK8Cluster.serviceNodePort }}"
                   protocol: TCP
               selector:
                 app: datagateway
+        when: node is defined and node == "controller"
+
+      - name: Setup HA Proxy
+        package:
+          name: haproxy
+          state: present
         when: node is defined and node == "controller"
