@@ -2,12 +2,13 @@ DataGatewayK8Cluster:
     apt_package_hold_state: fixed     # Value of state must be one of: absent, build-dep, fixed, latest, present
     control_plane_endpoint: kube-c-00.internal.levantine.io
     cri_socket: unix:///var/run/cri-dockerd.sock
+    pod_network_cidr: 10.244.0.0/16
 
     aws_ecr_repo_name: datagateway
     vault_aws_iam_key_path: kv/data/aws/iam_access_keys/terraform_datagateway
     vault_secret_path: kv/data/k8clusters/DataGatewayK8Cluster
 
-
     spring_datasource_url: jdbc:mysql://proxysql.internal.levantine.io:6033/datagateway?useSSL=false
     spring_datasource_username: sbuser
     spring_datasource_password_vault_path: kv/data/percona_cluster/proxy_sql
+
