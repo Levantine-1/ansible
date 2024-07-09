@@ -100,3 +100,4 @@
                           value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
                   imagePullSecrets:
                     - name: aws-ecr-credentials
+        when: node is defined and node == "controller"
