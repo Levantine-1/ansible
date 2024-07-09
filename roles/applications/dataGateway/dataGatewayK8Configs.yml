@@ -25,49 +25,37 @@
         # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
         set_fact:
           aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-        when: node is defined and node == "controller"
 
-      - name: Create Kubernetes Secret for AWS ECR
-        kubernetes.core.k8s:
-          state: present
-          definition:
-            apiVersion: v1
-            kind: Secret
-            metadata:
-              name: aws-ecr-credentials
-              namespace: default
-            type: kubernetes.io/dockerconfigjson
-            data:
-              .dockerconfigjson: "{{ ( {'auths': { 'https://index.docker.io/v1/': { 'auth': (aws_creds.access_key + ':' + aws_creds.secret_key) | b64encode } }} ) | to_json | b64encode }}"
-        when: node is defined and node == "controller"
+      - name: Retrieve Database Credentials from HashiCorp Vault
+        set_fact:
+          db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
-##### NOTE: The following tasks are just to get the latest image in the ECR >>>>>>>>>>>
+      - name: Start a local Docker registry
+        docker_container:
+          name: registry
+          image: registry:2
+          state: started
+          ports:
+            - "5000:5000"
+          container_default_behavior: no_defaults
+
       - name: Log in to AWS ECR
         shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
         environment: "{{ aws_environment }}"
-        when: node is defined and node == "controller"
 
       - name: Get the latest Docker image from ECR
         shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
         environment: "{{ aws_environment }}"
         register: latest_image
-        when: node is defined and node == "controller"
 
-      - name: Latest docker image repo path
-        set_fact:
-          ecr_path: "{{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-        when: node is defined and node == "controller"
+      - name: Pull the Docker image from ECR
+        command: "docker pull {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
 
-      - name: Latest docker image
-        debug:
-          msg: "{{ ecr_path }}"
-        when: node is defined and node == "controller"
-#### Latest image identified <<<<<<<<<<<<<<<<<<<<<
+      - name: Tag the Docker image
+        command: "docker tag {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }} localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
 
-      - name: Retrieve Database Credentials from HashiCorp Vault
-        set_fact:
-          db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-        when: node is defined and node == "controller"
+      - name: Push the Docker image to local repo
+        command: "docker push localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
 
       - name: Create Kubernetes Deployment
         kubernetes.core.k8s:
@@ -77,7 +65,7 @@
             kind: Deployment
             metadata:
               name: datagateway
-              namespace: default  # Add the namespace here
+              namespace: default
             spec:
               replicas: 4
               selector:
@@ -90,7 +78,7 @@
                 spec:
                   containers:
                     - name: datagateway
-                      image: "{{ ecr_path }}"
+                      image: "localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
                       env:
                         - name: spring.datasource.url
                           value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
@@ -98,6 +86,44 @@
                           value: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
                         - name: spring.datasource.password
                           value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
-                  imagePullSecrets:
-                    - name: aws-ecr-credentials
+        when: node is defined and node == "controller"
+
+      - name: Create Kubernetes Service
+        kubernetes.core.k8s:
+          state: present
+          definition:
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: datagateway-service
+              namespace: default
+            spec:
+              type: NodePort
+              ports:
+                - port: 8080
+                  targetPort: 8080
+                  notePort: "{{ DataGatewayK8Cluster.serviceNodePort }}"
+                  protocol: TCP
+              selector:
+                app: datagateway
+        when: node is defined and node == "controller"
+
+# This is temporary, I didn't think it was worth the memory to spin up a VM just for this, but I could
+      - name: Install HA Proxy
+        package:
+          name: haproxy
+          state: present
+        when: node is defined and node == "controller"
+
+      - name: Configure HA Proxy
+        template:
+          src: templates/haproxy.cfg.j2
+          dest: /etc/haproxy/haproxy.cfg
+        when: node is defined and node == "controller"
+
+      - name: Restart HA Proxy
+        systemd:
+          name: haproxy
+          enabled: yes
+          state: restarted
         when: node is defined and node == "controller"
