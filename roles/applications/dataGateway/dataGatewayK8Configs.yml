@@ -20,100 +20,100 @@
       - ../../../vault.yml
 
     tasks:
-#
-#      - name: Retrieve AWS Credentials from HashiCorp Vault
-#        # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
-#        set_fact:
-#          aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-#
-#      - name: Retrieve Database Credentials from HashiCorp Vault
-#        set_fact:
-#          db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-#
-#      - name: Start a local Docker registry
-#        docker_container:
-#          name: registry
-#          image: registry:2
-#          state: started
-#          ports:
-#            - "5000:5000"
-#          container_default_behavior: no_defaults
-#
-#      - name: Log in to AWS ECR
-#        shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
-#        environment: "{{ aws_environment }}"
-#
-#      - name: Get the latest Docker image from ECR
-#        shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
-#        environment: "{{ aws_environment }}"
-#        register: latest_image
-#
-#      - name: Pull the Docker image from ECR
-#        command: "docker pull {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-#
-#      - name: Tag the Docker image
-#        command: "docker tag {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }} localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-#
-#      - name: Push the Docker image to local repo
-#        command: "docker push localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-#
-#      - name: Create Kubernetes Deployment
-#        kubernetes.core.k8s:
-#          state: present
-#          definition:
-#            apiVersion: apps/v1
-#            kind: Deployment
-#            metadata:
-#              name: datagateway
-#              namespace: default
-#            spec:
-#              replicas: 4
-#              selector:
-#                matchLabels:
-#                  app: datagateway
-#              template:
-#                metadata:
-#                  labels:
-#                    app: datagateway
-#                spec:
-#                  containers:
-#                    - name: datagateway
-#                      image: "localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
-#                      env:
-#                        - name: spring.datasource.url
-#                          value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
-#                        - name: spring.datasource.username
-#                          value: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
-#                        - name: spring.datasource.password
-#                          value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
-#        when: node is defined and node == "controller"
-#
-#      - name: Create Kubernetes Service
-#        kubernetes.core.k8s:
-#          state: present
-#          definition:
-#            apiVersion: v1
-#            kind: Service
-#            metadata:
-#              name: datagateway-service
-#              namespace: default
-#            spec:
-#              type: NodePort
-#              ports:
-#                - port: 8080
-#                  targetPort: 8080
-#                  notePort: "{{ DataGatewayK8Cluster.serviceNodePort }}"
-#                  protocol: TCP
-#              selector:
-#                app: datagateway
-#        when: node is defined and node == "controller"
-#
-## This is temporary, I didn't think it was worth the memory to spin up a VM just for this, but I could
-#      - name: Install HA Proxy
-#        package:
-#          name: haproxy
-#          state: present
-#        when: node is defined and node == "controller"
+
+      - name: Retrieve AWS Credentials from HashiCorp Vault
+        # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
+        set_fact:
+          aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+      - name: Retrieve Database Credentials from HashiCorp Vault
+        set_fact:
+          db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+      - name: Start a local Docker registry
+        docker_container:
+          name: registry
+          image: registry:2
+          state: started
+          ports:
+            - "5000:5000"
+          container_default_behavior: no_defaults
+
+      - name: Log in to AWS ECR
+        shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
+        environment: "{{ aws_environment }}"
+
+      - name: Get the latest Docker image from ECR
+        shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
+        environment: "{{ aws_environment }}"
+        register: latest_image
+
+      - name: Pull the Docker image from ECR
+        command: "docker pull {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+
+      - name: Tag the Docker image
+        command: "docker tag {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }} localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+
+      - name: Push the Docker image to local repo
+        command: "docker push localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+
+      - name: Create Kubernetes Deployment
+        kubernetes.core.k8s:
+          state: present
+          definition:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: datagateway
+              namespace: default
+            spec:
+              replicas: 4
+              selector:
+                matchLabels:
+                  app: datagateway
+              template:
+                metadata:
+                  labels:
+                    app: datagateway
+                spec:
+                  containers:
+                    - name: datagateway
+                      image: "localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+                      env:
+                        - name: spring.datasource.url
+                          value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
+                        - name: spring.datasource.username
+                          value: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
+                        - name: spring.datasource.password
+                          value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
+        when: node is defined and node == "controller"
+
+      - name: Create Kubernetes Service
+        kubernetes.core.k8s:
+          state: present
+          definition:
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: datagateway-service
+              namespace: default
+            spec:
+              type: NodePort
+              ports:
+                - port: 8080
+                  targetPort: 8080
+                  notePort: "{{ DataGatewayK8Cluster.serviceNodePort }}"
+                  protocol: TCP
+              selector:
+                app: datagateway
+        when: node is defined and node == "controller"
+
+# This is temporary, I didn't think it was worth the memory to spin up a VM just for this, but I could
+      - name: Install HA Proxy
+        package:
+          name: haproxy
+          state: present
+        when: node is defined and node == "controller"
 
       - name: Configure HA Proxy
         template:
