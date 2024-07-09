@@ -27,20 +27,6 @@
           aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
         when: node is defined and node == "controller"
 
-      - name: Create Kubernetes Secret for AWS ECR
-        kubernetes.core.k8s:
-          state: present
-          definition:
-            apiVersion: v1
-            kind: Secret
-            metadata:
-              name: aws-ecr-credentials
-              namespace: default
-            type: kubernetes.io/dockerconfigjson
-            data:
-              .dockerconfigjson: "{{ ( {'auths': { 'https://index.docker.io/v1/': { 'auth': (aws_creds.access_key + ':' + aws_creds.secret_key) | b64encode } }} ) | to_json | b64encode }}"
-        when: node is defined and node == "controller"
-
 ##### NOTE: The following tasks are just to get the latest image in the ECR >>>>>>>>>>>
       - name: Log in to AWS ECR
         shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
@@ -69,6 +55,20 @@
           db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
         when: node is defined and node == "controller"
 
+      - name: Create Kubernetes Secret for AWS ECR
+        kubernetes.core.k8s:
+          state: present
+          definition:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: aws-ecr-credentials
+              namespace: datagateway
+            type: kubernetes.io/dockerconfigjson
+            data:
+              .dockerconfigjson: "{{ ( {'auths': { 'https://index.docker.io/v1/': { 'auth': (aws_creds.access_key + ':' + aws_creds.secret_key) | b64encode } }} ) | to_json | b64encode }}"
+        when: node is defined and node == "controller"
+
       - name: Create Kubernetes Deployment
         kubernetes.core.k8s:
           state: present
@@ -77,7 +77,7 @@
             kind: Deployment
             metadata:
               name: datagateway
-              namespace: default  # Add the namespace here
+              namespace: datagateway
             spec:
               replicas: 4
               selector:
