@@ -2,7 +2,7 @@
 # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
 # https://github.com/kairen/kubeadm-ansible/tree/master/roles/commons/pre-install/tasks
-
+# # https://docs.ansible.com/ansible/latest/collections/kubernetes/core/k8s_module.html#ansible-collections-kubernetes-core-k8s-module-requirements
 ---
 - name: Configure Kubernetes Cluster Baseline
   hosts: DataGatewayK8Cluster
@@ -19,6 +19,9 @@
       - ca-certificates
       - curl
       - gpg
+      - python3-kubernetes
+      - python3-PyYAML
+      - python3-jsonpatch
     kube_packages:
       - kubeadm
       - kubelet
