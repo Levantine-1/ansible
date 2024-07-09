@@ -63,6 +63,7 @@
             kind: Namespace
             metadata:
               name: datagateway
+        when: node is defined and node == "controller"
 
       - name: Create Kubernetes Secret for AWS ECR
         kubernetes.core.k8s:
