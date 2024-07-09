@@ -27,7 +27,20 @@
           aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
         when: node is defined and node == "controller"
 
-##### NOTE: The following tasks are just to get the latest image in the ECR >>>>>>>>>>>
+      - name: Retrieve Database Credentials from HashiCorp Vault
+        set_fact:
+          db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+        when: node is defined and node == "controller"
+
+      - name: Start a local Docker registry
+        docker_container:
+          name: registry
+          image: registry:2
+          state: started
+          ports:
+            - "5000:5000"
+        when: node is defined and node == "controller"
+
       - name: Log in to AWS ECR
         shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
         environment: "{{ aws_environment }}"
@@ -39,44 +52,16 @@
         register: latest_image
         when: node is defined and node == "controller"
 
-      - name: Latest docker image repo path
-        set_fact:
-          ecr_path: "{{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+      - name: Pull the Docker image from ECR
+        command: "docker pull {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
         when: node is defined and node == "controller"
 
-      - name: Latest docker image
-        debug:
-          msg: "{{ ecr_path }}"
-        when: node is defined and node == "controller"
-#### Latest image identified <<<<<<<<<<<<<<<<<<<<<
-
-      - name: Retrieve Database Credentials from HashiCorp Vault
-        set_fact:
-          db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      - name: Tag the Docker image
+        command: "docker tag {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }} localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
         when: node is defined and node == "controller"
 
-      - name: Create namespace
-        kubernetes.core.k8s:
-          state: present
-          definition:
-            apiVersion: v1
-            kind: Namespace
-            metadata:
-              name: datagateway
-        when: node is defined and node == "controller"
-
-      - name: Create Kubernetes Secret for AWS ECR
-        kubernetes.core.k8s:
-          state: present
-          definition:
-            apiVersion: v1
-            kind: Secret
-            metadata:
-              name: aws-ecr-credentials
-              namespace: datagateway
-            type: kubernetes.io/dockerconfigjson
-            data:
-              .dockerconfigjson: "{{ ( {'auths': { 'https://{{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com': { 'auth': (aws_creds.access_key + ':' + aws_creds.secret_key) | b64encode } }} ) | to_json | b64encode }}"
+      - name: Push the Docker image to local repo
+        command: "docker push localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
         when: node is defined and node == "controller"
 
       - name: Create Kubernetes Deployment
@@ -87,7 +72,7 @@
             kind: Deployment
             metadata:
               name: datagateway
-              namespace: datagateway
+              namespace: default
             spec:
               replicas: 4
               selector:
@@ -100,7 +85,7 @@
                 spec:
                   containers:
                     - name: datagateway
-                      image: "{{ ecr_path }}"
+                      image: "localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
                       env:
                         - name: spring.datasource.url
                           value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
@@ -108,6 +93,4 @@
                           value: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
                         - name: spring.datasource.password
                           value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
-                  imagePullSecrets:
-                    - name: aws-ecr-credentials
         when: node is defined and node == "controller"
