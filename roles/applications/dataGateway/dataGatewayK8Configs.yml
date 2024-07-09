@@ -39,6 +39,7 @@
           state: started
           ports:
             - "5000:5000"
+          container_default_behavior: no_defaults
         when: node is defined and node == "controller"
 
       - name: Log in to AWS ECR
@@ -85,7 +86,7 @@
                 spec:
                   containers:
                     - name: datagateway
-                      image: "localhost:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+                      image: "{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
                       env:
                         - name: spring.datasource.url
                           value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
