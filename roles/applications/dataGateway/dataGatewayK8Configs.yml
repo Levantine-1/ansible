@@ -55,6 +55,15 @@
           db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
         when: node is defined and node == "controller"
 
+      - name: Create namespace
+        kubernetes.core.k8s:
+          state: present
+          definition:
+            apiVersion: v1
+            kind: Namespace
+            metadata:
+              name: datagateway
+
       - name: Create Kubernetes Secret for AWS ECR
         kubernetes.core.k8s:
           state: present
