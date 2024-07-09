@@ -20,7 +20,7 @@
       - curl
       - gpg
       - python3-kubernetes
-      - python3-PyYAML
+      - python3-yaml
       - python3-jsonpatch
     kube_packages:
       - kubeadm
