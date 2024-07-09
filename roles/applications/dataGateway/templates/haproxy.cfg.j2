@@ -40,5 +40,5 @@ frontend http_front
 backend http_back
    balance roundrobin
    {% for host in groups['DataGatewayK8Cluster'] %}
-   server {{ hostvars[host].inventory_hostname_short }} {{ hostvars[host].inventory_hostname }}:"{{ DataGatewayK8Cluster.serviceNodePort }}" check
+   server {{ hostvars[host].inventory_hostname_short }} {{ hostvars[host].inventory_hostname }}:{{ DataGatewayK8Cluster.serviceNodePort }} check
    {% endfor %}
