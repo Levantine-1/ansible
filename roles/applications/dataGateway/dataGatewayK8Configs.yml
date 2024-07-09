@@ -98,7 +98,7 @@
               name: datagateway-service
               namespace: default
             spec:
-              type: LoadBalancer
+              type: NodePort
               ports:
                 - port: 8080
                   targetPort: 8080
