@@ -22,6 +22,10 @@
         path: /var/tmp/resize_partition_playbook_lock.txt
       register: lock_file_stat
 
+# NOTE: 2024-07-09: Tasks started breaking here, assuming packages have updated since the playbooks were last updated, may consider getting a new golden image soon.
+    - name: Configure all unpacked but unconfigured packages
+      ansible.builtin.command: dpkg --configure -a
+
     - name: Install Required Packages
       package:
         name: "{{ required_packages }}"
