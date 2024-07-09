@@ -55,7 +55,7 @@
 
       - name: Latest docker image repo path
         set_fact:
-          ecr_path: "{{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
+          ecr_path: "{{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
         when: node is defined and node == "controller"
 #### Latest image identified <<<<<<<<<<<<<<<<<<<<<
 
