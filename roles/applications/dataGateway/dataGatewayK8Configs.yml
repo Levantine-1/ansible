@@ -1,4 +1,9 @@
 # https://docs.ansible.com/ansible/latest/collections/kubernetes/core/k8s_module.html
+#   ansible-galaxy collection install kubernetes.core
+#     python >= 3.9
+#     kubernetes >= 24.2.0
+#     PyYAML >= 3.11
+#     jsonpatch
 
 ---
   - name: Deploy DataGateway Kubernetes Configurations
