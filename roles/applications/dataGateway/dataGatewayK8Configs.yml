@@ -19,7 +19,7 @@
       - name: Retrieve AWS Credentials from HashiCorp Vault
         # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
         set_fact:
-          aws_creds: "{{ lookup('hashi_vault', 'secret={{ vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+          aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
       - name: Create Kubernetes Secret for AWS ECR
         kubernetes.core.k8s:
