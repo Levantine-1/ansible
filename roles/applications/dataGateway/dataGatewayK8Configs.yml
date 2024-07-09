@@ -87,3 +87,22 @@
                         - name: spring.datasource.password
                           value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
         when: node is defined and node == "controller"
+
+      - name: Create Kubernetes Service
+        kubernetes.core.k8s:
+          state: present
+          definition:
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: datagateway-service
+              namespace: default
+            spec:
+              type: LoadBalancer
+              ports:
+                - port: 8080
+                  targetPort: 8080
+                  protocol: TCP
+              selector:
+                app: datagateway
+        when: node is defined and node == "controller"
