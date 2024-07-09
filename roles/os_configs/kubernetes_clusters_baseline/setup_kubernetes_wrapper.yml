@@ -22,6 +22,8 @@
       - python3-kubernetes
       - python3-yaml
       - python3-jsonpatch
+      - awscli
+
     kube_packages:
       - kubeadm
       - kubelet
