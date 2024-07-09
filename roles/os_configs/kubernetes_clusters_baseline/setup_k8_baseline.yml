@@ -18,6 +18,15 @@
       name: "{{ required_packages }}"
       state: present
 
+  - name: Install python packages needed for Ansible to control Kubernetes
+    # https://docs.ansible.com/ansible/latest/collections/kubernetes/core/k8s_module.html#ansible-collections-kubernetes-core-k8s-module-requirements
+    ansible.builtin.pip:
+      name:
+        - kubernetes
+        - PyYAML
+        - jsonpatch
+      state: latest
+
   - name: Download cri-dockerd binary
     get_url:
       url: "https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.14/cri-dockerd_0.3.14.3-0.debian-bookworm_amd64.deb"
