@@ -57,6 +57,11 @@
         set_fact:
           ecr_path: "{{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}:{{ latest_image.stdout }}"
         when: node is defined and node == "controller"
+
+      - name: Latest docker image
+        debug:
+          msg: "{{ ecr_path }}"
+        when: node is defined and node == "controller"
 #### Latest image identified <<<<<<<<<<<<<<<<<<<<<
 
       - name: Retrieve Database Credentials from HashiCorp Vault
@@ -71,27 +76,27 @@
             apiVersion: apps/v1
             kind: Deployment
             metadata:
-              name: spring-boot-app
+              name: datagateway
+              namespace: default  # Add the namespace here
             spec:
               replicas: 4
               selector:
                 matchLabels:
-                  app: spring-boot-app
+                  app: datagateway
               template:
                 metadata:
                   labels:
-                    app: spring-boot-app
+                    app: datagateway
                 spec:
                   containers:
-                  - name: spring-boot-app
-                    image: "{{ ecr_path }}"
-                    env:
-                    - name: spring.datasource.url
-                      value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
-                    - name: spring.datasource.username
-                      value: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
-                    - name: spring.datasource.password
-                      value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
+                    - name: datagateway
+                      image: "{{ ecr_path }}"
+                      env:
+                        - name: spring.datasource.url
+                          value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
+                        - name: spring.datasource.username
+                          value: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
+                        - name: spring.datasource.password
+                          value: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
                   imagePullSecrets:
-                  - name: aws-ecr-credentials
-        when: node is defined and node == "controller"
+                    - name: aws-ecr-credentials
