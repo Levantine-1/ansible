@@ -30,15 +30,6 @@
         set_fact:
           db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
-      - name: Start a local Docker registry
-        docker_container:
-          name: registry
-          image: registry:2
-          state: started
-          ports:
-            - "5000:5000"
-          container_default_behavior: no_defaults
-
       - name: Log in to AWS ECR
         shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
         environment: "{{ aws_environment }}"
