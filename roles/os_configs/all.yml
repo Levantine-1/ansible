@@ -23,7 +23,7 @@
 - import_playbook: install_firefox.yml
 - import_playbook: configure_wireguard_vpn/configure_wireguard_wrapper.yml
 - import_playbook: ../applications/splunk/configure_splunk_forwarders.yml
-- import_playbook: kubernetes_clusters_baseline/setup_kubernetes_wrapper.yml
+#- import_playbook: kubernetes_clusters_baseline/setup_kubernetes_wrapper.yml
 
 ####### CONFIGURE APPLICATIONS #######
 # Only put configure applications after the base OS configuration
