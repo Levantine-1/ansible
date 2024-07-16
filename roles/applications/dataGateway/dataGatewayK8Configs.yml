@@ -93,7 +93,7 @@
               ports:
                 - port: 8080
                   targetPort: 8080
-                  notePort: "{{ DataGatewayK8Cluster.serviceNodePort }}"
+                  nodePort: "{{ DataGatewayK8Cluster.serviceNodePort }}"
                   protocol: TCP
               selector:
                 app: datagateway
