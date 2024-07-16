@@ -51,6 +51,22 @@
     ansible.builtin.command: kubectl apply -f /etc/kubernetes/kube-flannel.yml
     when: node is defined and node == "controller"
 
+    # I didn't think it was worth the memory to spin up a VM just for HAProxy, so I'm bundling it with the control plane.
+  - name: Install HA Proxy
+    package:
+        name: haproxy
+        state: present
+
+  - name: Configure HA Proxy
+    template:
+        src: templates/haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+
+  - name: Restart HA Proxy
+    systemd:
+        name: haproxy
+        enabled: yes
+        state: restarted
+
   - name: Store secrets in Hashicorp Vault
     include_tasks: store_control_plane_secrets.yml
-    when: node is defined and node == "controller"
