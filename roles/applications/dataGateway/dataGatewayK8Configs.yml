@@ -98,23 +98,3 @@
               selector:
                 app: datagateway
         when: node is defined and node == "controller"
-
-# This is temporary, I didn't think it was worth the memory to spin up a VM just for this, but I could
-      - name: Install HA Proxy
-        package:
-          name: haproxy
-          state: present
-        when: node is defined and node == "controller"
-
-      - name: Configure HA Proxy
-        template:
-          src: templates/haproxy.cfg.j2
-          dest: /etc/haproxy/haproxy.cfg
-        when: node is defined and node == "controller"
-
-      - name: Restart HA Proxy
-        systemd:
-          name: haproxy
-          enabled: yes
-          state: restarted
-        when: node is defined and node == "controller"
