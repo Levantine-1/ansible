@@ -50,8 +50,51 @@
   - name: Apply Flannel network
     ansible.builtin.command: kubectl apply -f /etc/kubernetes/kube-flannel.yml
     when: node is defined and node == "controller"
+        
+  - name: Set docker cert directory
+    set_fact:
+        docker_cert_dir: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}/"
 
-    # I didn't think it was worth the memory to spin up a VM just for HAProxy, so I'm bundling it with the control plane.
+  - name: Create certs directory
+    file:
+        path: "{{ docker_cert_dir }}"
+        state: directory
+
+  - name: Generate an OpenSSL private key
+    community.crypto.openssl_privatekey:
+        path: "{{ docker_cert_dir }}/domain.key"
+        size: 4096
+        type: RSA
+
+  - name: Generate a self-signed certificate
+    community.crypto.x509_certificate:
+        path: "{{ docker_cert_dir }}/domain.crt"
+        privatekey_path: "{{ docker_cert_dir }}/domain.key"
+        subject:
+            commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        provider: selfsigned
+        selfsigned_not_after: +365d
+        selfsigned_not_before: now
+        subject_alt_name:
+            - DNS:"{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+
+  - name: Start a local Docker image registry with TLS
+    docker_container:
+        name: registry
+        image: registry:latest
+        state: started
+        restart_policy: always
+        ports:
+            - "443:443"
+        volumes:
+            - "{{ docker_cert_dir }}:/certs"
+        environment:
+            REGISTRY_HTTP_ADDR: "0.0.0.0:443"
+            REGISTRY_HTTP_TLS_CERTIFICATE: "/certs/domain.crt"
+            REGISTRY_HTTP_TLS_KEY: "/certs/domain.key"
+        container_default_behavior: no_defaults
+        
+  # I didn't think it was worth the memory to spin up a VM just for HAProxy, so I'm bundling it with the control plane.
   - name: Install HA Proxy
     package:
         name: haproxy
