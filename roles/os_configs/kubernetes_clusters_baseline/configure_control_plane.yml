@@ -80,7 +80,7 @@
             commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
         provider: selfsigned
         selfsigned_not_after: +365d
-        selfsigned_not_before: now
+        selfsigned_not_before: +0s
         subject_alt_name:
             - DNS:"{{ DataGatewayK8Cluster.control_plane_endpoint }}"
 
