@@ -42,29 +42,29 @@
     # NOTE: Docker will be installed a few steps earlier in the app.yml playbook -- - import_playbook: installDocker.yml
 
       # This isn't perfect, but if kubectl isn't working, there's a good chance it needs to be setup. We can do fancy stuff like check cluster status later
-#    - name: Check if kubectl is installed
-#      ansible.builtin.shell: kubectl version --client
-#      register: kubectl_installed
-#      ignore_errors: yes
-#      changed_when: false
-#
-#    - name: kubectl_installed status
-#      debug:
-#        var: kubectl_installed
-#
-#    - name: Setup Kubernetes Cluster Baseline
-#      include_tasks: "setup_k8_baseline.yml"
-#      when: kubectl_installed.rc != 0
+    - name: Check if kubectl is installed
+      ansible.builtin.shell: kubectl version --client
+      register: kubectl_installed
+      ignore_errors: yes
+      changed_when: false
 
-#    - name: Configure Control Plane Nodes
-#      include_tasks: "configure_control_plane.yml"
-#      when:
-#        - node is defined and node == "controller"
-#        - init_node is defined and init_node == "yes"
-#        # - kubectl_installed.rc != 0
+    - name: kubectl_installed status
+      debug:
+        var: kubectl_installed
+
+    - name: Setup Kubernetes Cluster Baseline
+      include_tasks: "setup_k8_baseline.yml"
+      when: kubectl_installed.rc != 0
+
+    - name: Configure Control Plane Nodes
+      include_tasks: "configure_control_plane.yml"
+      when:
+        - node is defined and node == "controller"
+        - init_node is defined and init_node == "yes"
+        - kubectl_installed.rc != 0
 
     - name: Configure Worker Nodes
       include_tasks: "configure_worker_nodes.yml"
       when:
         - node is defined and node == "worker"
-        # - kubectl_installed.rc != 0
+        - kubectl_installed.rc != 0
