@@ -103,7 +103,7 @@
         container_default_behavior: no_defaults
         
   # I didn't think it was worth the memory to spin up a VM just for HAProxy, so I'm bundling it with the control plane.
-  - name: Install HA Proxy
+  - name: Install HA Proxy to load balance all the worker node ports
     package:
         name: haproxy
         state: present
