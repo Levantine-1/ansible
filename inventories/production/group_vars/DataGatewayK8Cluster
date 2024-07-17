@@ -12,4 +12,4 @@ DataGatewayK8Cluster:
     spring_datasource_username: sbuser
     spring_datasource_password_vault_path: kv/data/percona_cluster/proxy_sql
 
-    serviceNodePort: "30080"
+    serviceNodePort: 30080
