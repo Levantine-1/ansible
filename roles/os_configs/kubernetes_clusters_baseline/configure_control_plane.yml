@@ -77,7 +77,7 @@
         type: RSA
 
   - name: Generate self-signed certificate
-    community.crypto.openssl_certificate:
+    community.crypto.x509_certificate:
         path: "{{ docker_cert_dir }}/domain.crt"
         privatekey_path: "{{ docker_cert_dir }}/domain.key"
         provider: selfsigned
@@ -85,8 +85,8 @@
             commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
         subject_alt_name:
             - "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        selfsigned_not_before: 0
-        selfsigned_not_after: 365
+        selfsigned_not_before: "0"
+        selfsigned_not_after: "365"
         state: present
 
 #  - name: Generate a self-signed certificate
