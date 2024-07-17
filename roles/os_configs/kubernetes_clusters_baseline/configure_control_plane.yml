@@ -77,13 +77,14 @@
         path: "{{ docker_cert_dir }}/domain.crt"
         privatekey_path: "{{ docker_cert_dir }}/domain.key"
         provider: selfsigned
-        common_name: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        subject: "/CN={{ DataGatewayK8Cluster.control_plane_endpoint }}"
         subject_alt_name:
             - "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
         selfsigned_not_after: "+365d"
         state: present
 
-    # NOTE: The above certs are going to be stored in hashicorp vault at the end of this playbook and deployed to worker nodes subsequently.
+
+        # NOTE: The above certs are going to be stored in hashicorp vault at the end of this playbook and deployed to worker nodes subsequently.
 
   - name: Start a local Docker image registry with TLS
     docker_container:
