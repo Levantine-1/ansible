@@ -24,6 +24,9 @@
     ansible.builtin.copy:
         content: "{{ local_reg_certs['data']['data']['domain.crt'] }}"
         dest: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/ca.crt"
+        owner: root
+        group: root
+        mode: '0644'
 
   - name: Join node to the cluster
     ansible.builtin.command: >
