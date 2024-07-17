@@ -108,7 +108,16 @@
 #
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< /RAGE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-ca
+  - name: Start a local Docker image registry
+    docker_container:
+        name: registry
+        image: registry:latest
+        state: started
+        restart_policy: always
+        ports:
+            - "5000:5000"
+        env:
+            REGISTRY_HTTP_ADDR: "0.0.0.0:5000"
 
   # I didn't think it was worth the memory to spin up a VM just for HAProxy, so I'm bundling it with the control plane.
   - name: Install HA Proxy to load balance all the worker node ports

@@ -10,30 +10,31 @@
     register: k8s_tokens
     no_log: true
 
-  - name: Retrieve local registry self signed certs from vault
-    community.hashi_vault.vault_read:
-        url: "{{ vault_addr }}"
-        token: "{{ vault_token }}"
-        path: "{{ vault_local_reg_cert_path }}"
-    register: local_reg_certs
-    no_log: true
-
-  - name: Create local registry cert directory
-    ansible.builtin.file:
-        path: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/"
-        state: directory
-        owner: root
-        mode: '0755'
-
-# https://distribution.github.io/distribution/about/insecure/#use-self-signed-certificates
-# See "Setup local registry to store Docker images to deploy to worker nodes." in configure_control_plane.yml for context
-  - name: Deploy local registry certificates
-    ansible.builtin.copy:
-        content: "{{ local_reg_certs['data']['data']['data']['domain.crt'] }}"
-        dest: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/ca.crt"
-        owner: root
-        group: root
-        mode: '0644'
+# NOTE: 2024-07-17 See configure control plane playbook for more info.
+#  - name: Retrieve local registry self signed certs from vault
+#    community.hashi_vault.vault_read:
+#        url: "{{ vault_addr }}"
+#        token: "{{ vault_token }}"
+#        path: "{{ vault_local_reg_cert_path }}"
+#    register: local_reg_certs
+#    no_log: true
+#
+#  - name: Create local registry cert directory
+#    ansible.builtin.file:
+#        path: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/"
+#        state: directory
+#        owner: root
+#        mode: '0755'
+#
+## https://distribution.github.io/distribution/about/insecure/#use-self-signed-certificates
+## See "Setup local registry to store Docker images to deploy to worker nodes." in configure_control_plane.yml for context
+#  - name: Deploy local registry certificates
+#    ansible.builtin.copy:
+#        content: "{{ local_reg_certs['data']['data']['data']['domain.crt'] }}"
+#        dest: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/ca.crt"
+#        owner: root
+#        group: root
+#        mode: '0644'
 
   - name: Join node to the cluster
     ansible.builtin.command: >
