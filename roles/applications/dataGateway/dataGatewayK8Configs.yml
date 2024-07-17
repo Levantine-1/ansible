@@ -23,28 +23,28 @@
 
     tasks:
       - block: # Everything in this block only runs on the controller node
-#        - name: Retrieve AWS Credentials from HashiCorp Vault
-#          # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
-#          set_fact:
-#            aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-#
-#        - name: Log in to AWS ECR
-#          shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
-#          environment: "{{ aws_environment }}"
-#
-#        - name: Get the latest Docker image from ECR
-#          shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
-#          environment: "{{ aws_environment }}"
-#          register: latest_image
-#
-#        - name: Pull the Docker image from ECR
-#          command: "docker pull {{ aws_ecr_repo_path }}:{{ latest_image.stdout }}"
-#
-#        - name: Tag the Docker image
-#          command: "docker tag {{ aws_ecr_repo_path }}:{{ latest_image.stdout }} {{ local_registry_path }}:datagateway_latest"
-#
-#        - name: Push the Docker image to local repo
-#          command: "docker push {{ local_registry_path }}:datagateway_latest"
+        - name: Retrieve AWS Credentials from HashiCorp Vault
+          # NOTE: The secret path is created in the main terraform repo when the user is created and key stored in vault at path below
+          set_fact:
+            aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+        - name: Log in to AWS ECR
+          shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
+          environment: "{{ aws_environment }}"
+
+        - name: Get the latest Docker image from ECR
+          shell: "aws ecr describe-images --repository-name {{ DataGatewayK8Cluster.aws_ecr_repo_name }} --query 'sort_by(imageDetails, &imagePushedAt) | [-1].imageTags[0]' --output text --region {{ aws.default_region }}"
+          environment: "{{ aws_environment }}"
+          register: latest_image
+
+        - name: Pull the Docker image from ECR
+          command: "docker pull {{ aws_ecr_repo_path }}:{{ latest_image.stdout }}"
+
+        - name: Tag the Docker image
+          command: "docker tag {{ aws_ecr_repo_path }}:{{ latest_image.stdout }} {{ local_registry_path }}:datagateway_latest"
+
+        - name: Push the Docker image to local repo
+          command: "docker push {{ local_registry_path }}:datagateway_latest"
 
         - name: Retrieve Database Credentials from HashiCorp Vault
           set_fact:
@@ -95,7 +95,7 @@
                   - port: 8080
                     targetPort: 8080
                     # nodePort: "{{ DataGatewayK8Cluster.serviceNodePort | int }}"
-                    # For some reason i'm getting a go data type issue if I use the above line
+                    # For some reason I'm getting a "nodePort not an integer" error when I try to use the above line
                     nodePort: 30080
                     protocol: TCP
                 selector:
