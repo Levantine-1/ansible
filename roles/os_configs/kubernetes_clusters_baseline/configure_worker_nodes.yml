@@ -26,7 +26,7 @@
 # See "Setup local registry to store Docker images to deploy to worker nodes." in configure_control_plane.yml for context
   - name: Deploy local registry certificates
     ansible.builtin.copy:
-        content: "{{ local_reg_certs['data']['data']['domain.crt'] }}"
+        content: "{{ local_reg_certs['data']['data']['data']['domain.crt'] }}"
         dest: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/ca.crt"
         owner: root
         group: root
