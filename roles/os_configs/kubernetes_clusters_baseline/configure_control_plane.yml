@@ -108,16 +108,7 @@
         name: haproxy
         state: present
 
-  - name: Configure HA Proxy
-    template:
-        src: templates/haproxy.cfg.j2
-        dest: /etc/haproxy/haproxy.cfg
-
-  - name: Restart HA Proxy
-    systemd:
-        name: haproxy
-        enabled: yes
-        state: restarted
+# HA proxy will be configured in each service's respective playbook, we're just installing the basic package here.
 
   - name: Store secrets in Hashicorp Vault
     include_tasks: store_control_plane_secrets.yml

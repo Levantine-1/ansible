@@ -98,3 +98,17 @@
               selector:
                 app: datagateway
         when: node is defined and node == "controller"
+
+
+      - name: Configure HA Proxy
+        template:
+            src: templates/haproxy.cfg.j2
+            dest: /etc/haproxy/haproxy.cfg
+        register: haproxy_config
+
+      - name: Restart HA Proxy
+        systemd:
+            name: haproxy
+            enabled: yes
+            state: restarted
+        when: haproxy_config.changed
