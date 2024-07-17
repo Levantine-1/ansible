@@ -22,6 +22,8 @@
     ansible.builtin.file:
         path: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/"
         state: directory
+        owner: root
+        mode: '0755'
 
 # https://distribution.github.io/distribution/about/insecure/#use-self-signed-certificates
 # See "Setup local registry to store Docker images to deploy to worker nodes." in configure_control_plane.yml for context
