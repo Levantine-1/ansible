@@ -28,10 +28,6 @@
 #          set_fact:
 #            aws_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.vault_aws_iam_key_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 #
-#        - name: Retrieve Database Credentials from HashiCorp Vault
-#          set_fact:
-#            db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-#
 #        - name: Log in to AWS ECR
 #          shell: "aws ecr get-login-password --region {{ aws.default_region }} | docker login --username AWS --password-stdin {{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com"
 #          environment: "{{ aws_environment }}"
@@ -49,6 +45,10 @@
 #
 #        - name: Push the Docker image to local repo
 #          command: "docker push {{ local_registry_path }}:datagateway_latest"
+
+        - name: Retrieve Database Credentials from HashiCorp Vault
+          set_fact:
+            db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
         - name: Create Kubernetes Deployment
           kubernetes.core.k8s:
