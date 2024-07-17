@@ -75,3 +75,19 @@
       name: kubelet
       enabled: yes
       state: started
+
+  # NOTE: 2024-07-17: I'm giving up on getting self-signed certs working for the local registry for now. See configure control plane playbook for more info.
+  - name: Add insecure-registries to daemon.json
+    copy:
+      content: |
+        {
+          "insecure-registries" : ["{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000"]
+        }
+      dest: /etc/docker/daemon.json
+    register: daemon_json
+
+  - name: Restart Docker
+    systemd:
+      name: docker
+      state: restarted
+    when: daemon_json.changed
