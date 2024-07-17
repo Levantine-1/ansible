@@ -61,6 +61,10 @@
     set_fact:
         docker_cert_dir: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}/"
 
+  - name: Set docker cert directory
+    set_fact:
+        docker_cert_dir: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}/"
+
   - name: Create certs directory
     file:
         path: "{{ docker_cert_dir }}"
@@ -72,18 +76,17 @@
         size: 4096
         type: RSA
 
-  - name: Generate CSR and certificate
+  - name: Generate self-signed certificate
     community.crypto.openssl_certificate:
         path: "{{ docker_cert_dir }}/domain.crt"
         privatekey_path: "{{ docker_cert_dir }}/domain.key"
         provider: selfsigned
-        csr_commonname: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        csr_subject:
+        subject:
             commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        attributes:
-            - { O: "DataGateway" }
-        san: "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        days: 365
+        subject_alt_name:
+            - "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        selfsigned_not_before: 0
+        selfsigned_not_after: 365
         state: present
 
 #  - name: Generate a self-signed certificate
