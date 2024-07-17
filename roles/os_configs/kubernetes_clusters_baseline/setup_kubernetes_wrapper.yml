@@ -56,15 +56,15 @@
       include_tasks: "setup_k8_baseline.yml"
       when: kubectl_installed.rc != 0
 
-    - name: Configure Control Plane Nodes
-      include_tasks: "configure_control_plane.yml"
-      when:
-        - node is defined and node == "controller"
-        - init_node is defined and init_node == "yes"
-        - kubectl_installed.rc != 0
-
-    - name: Configure Worker Nodes
-      include_tasks: "configure_worker_nodes.yml"
-      when:
-        - node is defined and node == "worker"
-        - kubectl_installed.rc != 0
+#    - name: Configure Control Plane Nodes
+#      include_tasks: "configure_control_plane.yml"
+#      when:
+#        - node is defined and node == "controller"
+#        - init_node is defined and init_node == "yes"
+#        - kubectl_installed.rc != 0
+#
+#    - name: Configure Worker Nodes
+#      include_tasks: "configure_worker_nodes.yml"
+#      when:
+#        - node is defined and node == "worker"
+#        - kubectl_installed.rc != 0
