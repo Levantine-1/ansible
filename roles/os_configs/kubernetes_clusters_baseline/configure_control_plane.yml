@@ -51,54 +51,65 @@
     ansible.builtin.command: kubectl apply -f /etc/kubernetes/kube-flannel.yml
     when: node is defined and node == "controller"
 
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>     OH MY GOD WHY DOESN'T THIS WORK?!   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        # THIS FOLLOWS THE REGISTRY SERVER DOCUMENTATION EXACTLY BUT I KEEP GETTING THIS DAMN ERROR
+        #  Get "https://kube-c-00.internal.levantine.io:5000/v2/": tls: failed to verify certificate: x509: certificate is not valid for any names, but wanted to match kube-c-00.internal.levantine.io
+        # WHAT THE EVER LOVING F*CK, ALL THE HOURS WASTED TROUBLESHOOTING
+        # I'm just going to forego SSL here GOD DAMN
+# ----------------------------------------------------------------------------------------------------------------------
     # Setup local registry to store Docker images to deploy to worker nodes.
     # I'm doing it this way to save on AWS ECR Egress costs. $0.10/GB O_o...
     # https://distribution.github.io/distribution/about/deploying/
     # And because I don't have a way for letsencrypt to validate an internal only DNS, I'm going to use self signed certs
     # https://distribution.github.io/distribution/about/insecure/
 
-  - name: Set docker cert directory
-    set_fact:
-        docker_cert_dir: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}/"
+#  - name: Set docker cert directory
+#    set_fact:
+#        docker_cert_dir: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}/"
+#
+#  - name: Create certs directory
+#    file:
+#        path: "{{ docker_cert_dir }}"
+#        state: directory
+#
+#  - name: Generate an OpenSSL private key
+#    community.crypto.openssl_privatekey:
+#        path: "{{ docker_cert_dir }}/domain.key"
+#        size: 4096
+#        type: RSA
+#
+#  - name: Generate self-signed certificate
+#    community.crypto.x509_certificate:
+#        path: "{{ docker_cert_dir }}/domain.crt"
+#        privatekey_path: "{{ docker_cert_dir }}/domain.key"
+#        provider: selfsigned
+#        subject_alt_name: "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+#        selfsigned_not_after: "+365d"
+#        state: present
+#
+#        # NOTE: The above certs are going to be stored in hashicorp vault at the end of this playbook and deployed to worker nodes subsequently.
+#
+#  - name: Start a local Docker image registry with TLS
+#    docker_container:
+#        name: registry
+#        image: registry:latest
+#        state: started
+#        restart_policy: always
+#        ports:
+#            - "5000:5000"
+#        volumes:
+#            - "{{ docker_cert_dir }}:/certs"
+#        env:
+#            REGISTRY_HTTP_ADDR: "0.0.0.0:5000"
+#            REGISTRY_HTTP_TLS_CERTIFICATE: "/certs/domain.crt"
+#            REGISTRY_HTTP_TLS_KEY: "/certs/domain.key"
+#        container_default_behavior: no_defaults
+#
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< /RAGE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-  - name: Create certs directory
-    file:
-        path: "{{ docker_cert_dir }}"
-        state: directory
+ca
 
-  - name: Generate an OpenSSL private key
-    community.crypto.openssl_privatekey:
-        path: "{{ docker_cert_dir }}/domain.key"
-        size: 4096
-        type: RSA
-
-  - name: Generate self-signed certificate
-    community.crypto.x509_certificate:
-        path: "{{ docker_cert_dir }}/domain.crt"
-        privatekey_path: "{{ docker_cert_dir }}/domain.key"
-        provider: selfsigned
-        subject_alt_name: "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        selfsigned_not_after: "+365d"
-        state: present
-
-        # NOTE: The above certs are going to be stored in hashicorp vault at the end of this playbook and deployed to worker nodes subsequently.
-
-  - name: Start a local Docker image registry with TLS
-    docker_container:
-        name: registry
-        image: registry:latest
-        state: started
-        restart_policy: always
-        ports:
-            - "5000:5000"
-        volumes:
-            - "{{ docker_cert_dir }}:/certs"
-        env:
-            REGISTRY_HTTP_ADDR: "0.0.0.0:5000"
-            REGISTRY_HTTP_TLS_CERTIFICATE: "/certs/domain.crt"
-            REGISTRY_HTTP_TLS_KEY: "/certs/domain.key"
-        container_default_behavior: no_defaults
-        
   # I didn't think it was worth the memory to spin up a VM just for HAProxy, so I'm bundling it with the control plane.
   - name: Install HA Proxy to load balance all the worker node ports
     package:
