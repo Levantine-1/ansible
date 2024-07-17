@@ -77,16 +77,12 @@
         path: "{{ docker_cert_dir }}/domain.crt"
         privatekey_path: "{{ docker_cert_dir }}/domain.key"
         provider: selfsigned
-        common_name: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        alt_names:
+        subject:
+            commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        subject_alt_name:
             - "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
-        selfsigned_not_before: "+0s"
         selfsigned_not_after: "+365d"
         state: present
-        select_crypto_backend: auto
-        selfsigned_create_subject_key_identifier: create_if_not_provided
-        selfsigned_digest: sha256
-        selfsigned_version: 3
 
 #  - name: Generate a self-signed certificate
 #    community.crypto.x509_certificate:
