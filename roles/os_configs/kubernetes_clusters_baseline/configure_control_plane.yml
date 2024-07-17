@@ -97,7 +97,7 @@
         volumes:
             - "{{ docker_cert_dir }}:/certs"
         env:
-            REGISTRY_HTTP_ADDR: "0.0.0.0:443"
+            REGISTRY_HTTP_ADDR: "0.0.0.0:5000"
             REGISTRY_HTTP_TLS_CERTIFICATE: "/certs/domain.crt"
             REGISTRY_HTTP_TLS_KEY: "/certs/domain.key"
         container_default_behavior: no_defaults
