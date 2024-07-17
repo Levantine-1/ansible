@@ -42,7 +42,6 @@ backend http_back
    {% for host in groups['DataGatewayK8Cluster'] %}
    {% if hostvars[host].node == 'worker' %}
    server {{ hostvars[host].inventory_hostname_short }} {{ hostvars[host].inventory_hostname }}:{{ DataGatewayK8Cluster.serviceNodePort }} check
+
    {% endif %}
    {% endfor %}
-
-# Ensuring a line feed here
