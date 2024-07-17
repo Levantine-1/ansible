@@ -72,17 +72,31 @@
         size: 4096
         type: RSA
 
-  - name: Generate a self-signed certificate
-    community.crypto.x509_certificate:
+  - name: Generate CSR and certificate
+    community.crypto.openssl_certificate:
         path: "{{ docker_cert_dir }}/domain.crt"
         privatekey_path: "{{ docker_cert_dir }}/domain.key"
-        subject:
-            commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
         provider: selfsigned
-        selfsigned_not_after: +365d
-        selfsigned_not_before: +0s
-        subject_alt_name:
-            - DNS:"{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        csr_commonname: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        csr_subject:
+            commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        attributes:
+            - { O: "DataGateway" }
+        san: "DNS:{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+        days: 365
+        state: present
+
+#  - name: Generate a self-signed certificate
+#    community.crypto.x509_certificate:
+#        path: "{{ docker_cert_dir }}/domain.crt"
+#        privatekey_path: "{{ docker_cert_dir }}/domain.key"
+#        subject:
+#            commonName: "{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+#        provider: selfsigned
+#        selfsigned_not_after: +365d
+#        selfsigned_not_before: +0s
+#        subject_alt_name:
+#            - DNS:"{{ DataGatewayK8Cluster.control_plane_endpoint }}"
 
     # NOTE: The above certs are going to be stored in hashicorp vault at the end of this playbook and deployed to worker nodes subsequently.
 
