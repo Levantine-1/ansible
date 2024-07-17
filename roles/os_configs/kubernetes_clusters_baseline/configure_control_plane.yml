@@ -50,7 +50,13 @@
   - name: Apply Flannel network
     ansible.builtin.command: kubectl apply -f /etc/kubernetes/kube-flannel.yml
     when: node is defined and node == "controller"
-        
+
+    # Setup local registry to store Docker images to deploy to worker nodes.
+    # I'm doing it this way to save on AWS ECR Egress costs. $0.10/GB O_o...
+    # https://distribution.github.io/distribution/about/deploying/
+    # And because I don't have a way for letsencrypt to validate an internal only DNS, I'm going to use self signed certs
+    # https://distribution.github.io/distribution/about/insecure/
+
   - name: Set docker cert directory
     set_fact:
         docker_cert_dir: "/etc/docker/certs.d/{{ DataGatewayK8Cluster.control_plane_endpoint }}/"
@@ -77,6 +83,8 @@
         selfsigned_not_before: now
         subject_alt_name:
             - DNS:"{{ DataGatewayK8Cluster.control_plane_endpoint }}"
+
+    # NOTE: The above certs are going to be stored in hashicorp vault at the end of this playbook and deployed to worker nodes subsequently.
 
   - name: Start a local Docker image registry with TLS
     docker_container:

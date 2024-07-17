@@ -14,6 +14,12 @@
     vault_token: "{{ hashicorp_vault_token }}"
     vault_secret_path: "kv/data/k8clusters/{{ group_names[0] }}" # group_names[0] is the name of the group that the playbook is running against
                       # It's going to cause problems if the host is in multiple groups, but for now, I'm going to assume that the host is only in one group.
+
+    vault_token_path: "{{ vault_secret_path }}/tokens"
+    vault_kube_cert_path: "{{ vault_secret_path }}/certificates"
+    vault_etcd_cert_path: "{{ vault_secret_path }}/etcd_certificates"
+    vault_local_reg_cert_path: "{{ vault_secret_path }}/local_registry_certificates"
+
     required_packages:
       - apt-transport-https
       - ca-certificates
