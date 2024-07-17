@@ -93,7 +93,7 @@
         state: started
         restart_policy: always
         ports:
-            - "443:443"
+            - "5000:5000"
         volumes:
             - "{{ docker_cert_dir }}:/certs"
         env:
