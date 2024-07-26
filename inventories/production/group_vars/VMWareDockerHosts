@@ -20,6 +20,7 @@ supported_containers:
       VIRTUAL_HOST: thisper.levantine.io
       JENKINS_SERVER: jenkins.internal.levantine.io
       DATA_GATEWAY_API_KEY_PATH: kv/data/k8clusters/DataGatewayK8Cluster/thisperAPIKey
+      DATA_GATEWAY_URL: http://kube-c-00.internal.levantine.io:30080
 
   education-platform:
     env_vars:
