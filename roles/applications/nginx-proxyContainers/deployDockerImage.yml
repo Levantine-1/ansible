@@ -67,6 +67,10 @@
         env_vars: "{{ supported_containers[container_name]['env_vars'] | combine({'DATA_GATEWAY_API_KEY': datagateway_creds.api_key}) }}"
       when: retrieve_dgw_secrets is defined
 
+    - name: debug env_vars
+      debug:
+        var: env_vars
+
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
