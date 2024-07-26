@@ -52,6 +52,7 @@
       set_fact:
         datagateway_creds: "{{ lookup('hashi_vault', 'secret={{ DATA_GATEWAY_API_KEY_PATH }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
       when: supported_containers[container_name]['env_vars'][DATA_GATEWAY_API_KEY_PATH] is defined
+
       register: retrieve_dgw_secrets
 
     - name: Extract DataGateway API Key from DGW Secrets and add to env_vars
