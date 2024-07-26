@@ -11,46 +11,42 @@
     - ../../../vault.yml
 
   tasks:
-#    - name: Validate Supported Container
-#      debug:
-#        msg: "Checking to see if container is supported"
-#      failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
-#
-#    - name: Copy docker image tarball from ansible host to remote host
-#      copy:
-#        src: "/tmp/{{ container_name }}_latest.tar"
-#        dest: "/tmp/{{ container_name }}_latest.tar"
-#
-#    - name: Stop the old Docker container (if exists)
-#      docker_container:
-#        name: "{{ container_name }}"
-#        state: stopped
-#        timeout: 30
-#        container_default_behavior: no_defaults
-#      ignore_errors: yes
-#
-#    - name: Extract image name and tag from tarball
-#      shell: "docker load --input /tmp/{{ container_name }}_latest.tar | awk '{print $3}'"
-#      register: loaded_image_name
-#
-#    - name: Loaded docker image name
-#      debug:
-#        msg: "{{ loaded_image_name.stdout }}"
-#
-#    - name: Load Docker Image from Tarball
-#      docker_image:
-#        name: "{{ loaded_image_name.stdout }}"
-#        load_path: "/tmp/{{ container_name }}_latest.tar"
-#        source: load
-#
-#    - name: Retrieve SplunkForwarder Token from HashiCorp Vault
-#      # NOTE: This token is created manually under splunk>settings>data inputs>HTTP Event Collector and stored in vault at path below
-#      set_fact:
-#        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/http_access_tokens/docker token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-
-    - name: debug group var
+    - name: Validate Supported Container
       debug:
-        var: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH']
+        msg: "Checking to see if container is supported"
+      failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
+
+    - name: Copy docker image tarball from ansible host to remote host
+      copy:
+        src: "/tmp/{{ container_name }}_latest.tar"
+        dest: "/tmp/{{ container_name }}_latest.tar"
+
+    - name: Stop the old Docker container (if exists)
+      docker_container:
+        name: "{{ container_name }}"
+        state: stopped
+        timeout: 30
+        container_default_behavior: no_defaults
+      ignore_errors: yes
+
+    - name: Extract image name and tag from tarball
+      shell: "docker load --input /tmp/{{ container_name }}_latest.tar | awk '{print $3}'"
+      register: loaded_image_name
+
+    - name: Loaded docker image name
+      debug:
+        msg: "{{ loaded_image_name.stdout }}"
+
+    - name: Load Docker Image from Tarball
+      docker_image:
+        name: "{{ loaded_image_name.stdout }}"
+        load_path: "/tmp/{{ container_name }}_latest.tar"
+        source: load
+
+    - name: Retrieve SplunkForwarder Token from HashiCorp Vault
+      # NOTE: This token is created manually under splunk>settings>data inputs>HTTP Event Collector and stored in vault at path below
+      set_fact:
+        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/http_access_tokens/docker token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
     - name: Retrieve DataGateway Secrets from HashiCorp Vault
       set_fact:
@@ -58,18 +54,10 @@
       when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is defined
       register: retrieve_dgw_secrets
 
-    - name: debug datagateway_creds
-      debug:
-        var: datagateway_creds
-
     - name: Extract DataGateway API Key from DGW Secrets and add to env_vars
       set_fact:
         env_vars: "{{ supported_containers[container_name]['env_vars'] | combine({'DATA_GATEWAY_API_KEY': datagateway_creds.api_key}) }}"
       when: retrieve_dgw_secrets is defined
-
-    - name: debug env_vars
-      debug:
-        var: env_vars
 
     - name: Run Docker Container
       docker_container:
