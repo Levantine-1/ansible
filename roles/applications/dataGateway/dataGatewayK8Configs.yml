@@ -60,7 +60,7 @@
                 name: datagateway
                 namespace: default
               spec:
-                replicas: 4
+                replicas: 1
                 selector:
                   matchLabels:
                     app: datagateway
