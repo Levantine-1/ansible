@@ -48,6 +48,10 @@
       set_fact:
         splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/http_access_tokens/docker token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
+    - name: debug group var
+      debug:
+        var: supported_containers[container_name]['env_vars']
+
     - name: Retrieve DataGateway Secrets from HashiCorp Vault
       set_fact:
         datagateway_creds: "{{ lookup('hashi_vault', 'secret={{ DATA_GATEWAY_API_KEY_PATH }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
