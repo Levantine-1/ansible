@@ -50,17 +50,13 @@
 
     - name: Retrieve DataGateway Secrets from HashiCorp Vault
       set_fact:
-        datagateway_creds: "{{ lookup('hashi_vault', 'secret={{ DATA_GATEWAY_API_KEY_PATH }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+        datagateway_creds: "{{ lookup('hashi_vault', 'secret=' + supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address) }}"
       when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is defined
       register: retrieve_dgw_secrets
 
-    - name: debug datagateway_creds
-      debug:
-        var: datagateway_creds
-
     - name: Extract DataGateway API Key from DGW Secrets and add to env_vars
       set_fact:
-        env_vars: "{{ supported_containers[container_name]['env_vars'] | combine({'DATA_GATEWAY_API_KEY': datagateway_creds.data.api_key}) }}"
+        env_vars: "{{ supported_containers[container_name]['env_vars'] | combine({'DATA_GATEWAY_API_KEY': datagateway_creds.api_key}) }}"
       when: retrieve_dgw_secrets is defined
 
     - name: Run Docker Container
