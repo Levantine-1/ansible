@@ -18,6 +18,8 @@ supported_containers:
   thisper:
     env_vars:
       VIRTUAL_HOST: thisper.levantine.io
+      JENKINS_SERVER: jenkins.internal.levantine.io
+      DATA_GATEWAY_API_KEY_PATH: kv/data/k8clusters/DataGatewayK8Cluster/thisperAPIKey
 
   education-platform:
     env_vars:
