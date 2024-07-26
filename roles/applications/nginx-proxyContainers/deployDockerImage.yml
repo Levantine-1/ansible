@@ -50,7 +50,7 @@
 
     - name: debug group var
       debug:
-        var: supported_containers[container_name]['env_vars']
+        var: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH']
 
     - name: Retrieve DataGateway Secrets from HashiCorp Vault
       set_fact:
