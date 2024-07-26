@@ -40,11 +40,8 @@
         - name: Pull the Docker image from ECR
           command: "docker pull {{ aws_ecr_repo_path }}:{{ latest_image.stdout }}"
 
-        - name: Tag the Docker image
-          command: "docker tag {{ aws_ecr_repo_path }}:{{ latest_image.stdout }} {{ local_registry_path }}:datagateway_latest"
-
         - name: Push the Docker image to local repo
-          command: "docker push {{ local_registry_path }}:datagateway_latest"
+          command: "docker push {{ local_registry_path }}:{{ latest_image.stdout }}"
 
         - name: Retrieve Database Credentials from HashiCorp Vault
           set_fact:
@@ -71,7 +68,7 @@
                   spec:
                     containers:
                       - name: datagateway
-                        image: "{{ local_registry_path }}:datagateway_latest"
+                        image: "{{ local_registry_path }}:{{ latest_image.stdout }}"
                         env:
                           - name: spring.datasource.url
                             value: "{{ DataGatewayK8Cluster.spring_datasource_url }}"
