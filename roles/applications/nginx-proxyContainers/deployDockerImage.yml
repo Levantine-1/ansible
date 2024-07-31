@@ -58,6 +58,11 @@
         env_vars: "{{ supported_containers[container_name]['env_vars'] | combine({'DATA_GATEWAY_API_KEY': datagateway_creds.api_key}) }}"
       when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is defined
 
+    - name: Set env_vars without DataGateway API Key # 2024-07-31 This is temporary, will find a more elegant solution later
+      set_fact:
+        env_vars: "{{ supported_containers[container_name]['env_vars'] }}"
+      when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is not defined
+
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
