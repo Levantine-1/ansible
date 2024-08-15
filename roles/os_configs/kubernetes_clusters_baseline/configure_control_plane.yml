@@ -108,6 +108,9 @@
 #
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< /RAGE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+# NOTE: 2024-08-14: This is the original place that starts the local registry, but due to a disk usage issue,
+  #  I'm going to temporarily add steps to delete and recreate this registry container in the deploy playbooks.
+  # See dataGatewayK8Configs.yml for details.
   - name: Start a local Docker image registry
     docker_container:
         name: registry

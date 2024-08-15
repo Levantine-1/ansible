@@ -43,8 +43,32 @@
         - name: Tag the Docker image
           command: "docker tag {{ aws_ecr_repo_path }}:{{ latest_image.stdout }} {{ local_registry_path }}:{{ latest_image.stdout }}"
 
+        # NOTE: 2024-08-14 Temporary Work around for disk consumption issues due to images pushed to the container not being deleted.
+        # The images are stored within the container and I don't know how to do it through ansible at this time.
+        # FYI, Ideally the local registry should be created by the provisioning playbook: configure_control_plane.yml
+        # >>>>>>>>>>>>> START OF WORK AROUND >>>>>>>>>>>>>>>>>>
+        - name: Delete the local Docker image registry
+          docker_container:
+            name: registry
+            state: absent
+
+        - name: Recreate the local Docker image registry
+          docker_container:
+            name: registry
+            image: registry:latest
+            state: started
+            restart_policy: always
+            ports:
+              - "5000:5000"
+            env:
+              REGISTRY_HTTP_ADDR: "0.0.0.0:5000"
+        # <<<<<<<<<<<<<<<< END OF WORK AROUND <<<<<<<<<<<<<<<<<<<<
+
         - name: Push the Docker image to local repo
           command: "docker push {{ local_registry_path }}:{{ latest_image.stdout }}"
+
+        - name: Prune Docker
+          command: docker system prune -af
 
         - name: Retrieve Database Credentials from HashiCorp Vault
           set_fact:
