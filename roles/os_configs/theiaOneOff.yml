@@ -3,6 +3,16 @@
   hosts: Theia
   become: yes
 
+  vars_files:
+    - ../../vault.yml
+
+  vars:
+    ssl_certs: # These will be filled in by the HashiCorp Vault lookup in this playbook
+      cert: "{{ ssl_certs.cert }}"
+      chain: "{{ ssl_certs.chain }}"
+      fullchain: "{{ ssl_certs.fullchain }}"
+      privkey: "{{ ssl_certs.privkey }}"
+
   tasks:
     - name: Ensure Cert Directory Exists
       file:
@@ -10,12 +20,29 @@
         state: directory
       loop: "{{ domains }}"
 
-    - name: Copy SSL Certs
+    - name: Retrieving SSL Certs for levantine.io
+      set_fact:
+        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/levantine_io token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Configure SSL Certs for levantine.io
       copy:
-        src: "/home/jenkins/certs/{{ item }}"
-        dest: "/etc/apache2/certs/"
-        remote_src: no
-      loop: "{{ domains }}"
+        content: "{{ ssl_certs[item] }}"
+        dest: /etc/apache2/certs/levantine.io{{ item }}.pem
+      with_items:
+        "{{ ssl_certs }}"
+      register: levantine_certs
+
+    - name: Retrieving SSL Certs for nhitruong.com
+      set_fact:
+        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/nhitruong_com token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Configure SSL Certs for nhitruong.com
+      copy:
+        content: "{{ ssl_certs[item] }}"
+        dest: /etc/apache2/certs/nhitruong.com/{{ item }}.pem
+      with_items:
+        "{{ ssl_certs }}"
+      register: nhitruong_certs
 
     - name: Copy apache configs
       copy:
@@ -23,11 +50,13 @@
         dest: "/etc/apache2/sites-available/000-default.conf"
         remote_src: no
       loop: "{{ domains }}"
+      register: apache_configs
 
     - name: restart apache
       service:
         name: apache2
         state: restarted
+      when: apache_configs.changed or levantine_certs.changed or nhitruong_certs.changed
 
     - name: Copy nightly restart script
       copy:
