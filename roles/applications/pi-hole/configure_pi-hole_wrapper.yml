@@ -1,0 +1,13 @@
+---
+- name: Configure Pi-hole on Debian
+  hosts: PiHole
+  become: yes
+  tasks:
+    - name: Configure setupVars.conf
+      template:
+        src: "templates/setupVars.conf.j2"
+        dest: "/etc/pihole/setupVars.conf"
+        owner: root
+        group: root
+        mode: '0644'
+        
