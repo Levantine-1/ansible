@@ -23,10 +23,6 @@
     - ../../../vault.yml
 
   tasks:
-    - name: Update apt repository cache
-      ansible.builtin.apt:
-        update_cache: yes
-
     - name: Install Required Packages
       package:
         name: "{{ prerequisite_packages }}"

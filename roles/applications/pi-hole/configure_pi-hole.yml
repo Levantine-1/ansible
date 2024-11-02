@@ -1,0 +1,37 @@
+# https://pi-hole.net/
+# Be sure to give the pihole host a static IP address and register it with the DNS server in router configs
+---
+- name: Configure Pi-hole on Debian
+  hosts: PiHole
+  become: yes
+  tasks:
+    - name: Ensure /etc/pihole directory exists
+      file:
+        path: /etc/pihole
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    # https://unix.stackexchange.com/questions/423715/install-pi-hole-without-user-interaction
+    - name: Update setupVars.conf
+      template:
+        src: "templates/setupVars.conf.j2"
+        dest: "/etc/pihole/setupVars.conf"
+        owner: root
+        group: root
+        mode: '0644'
+
+    # Script originally from here: https://raw.githubusercontent.com/pi-hole/pi-hole/master/automated%20install/basic-install.sh
+    # I just didn't want to deal with issues if this script is updated, so I saved it in my repo.
+    - name: Update pi-hole install script
+      copy:
+        src: "templates/basic-install.sh"
+        dest: "/etc/pihole/basic-install.sh"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Apply pi-hole configuration
+      shell: "bash /etc/pihole/basic-install.sh --unattended"
+      changed_when: true
