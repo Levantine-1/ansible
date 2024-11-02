@@ -1,0 +1,3 @@
+PiHole_Configs:
+  IP_V4_ADDRESS: 10.69.69.0/24
+  PIHOLE_INTERFACE: ens192
