@@ -1,3 +1,5 @@
+# https://pi-hole.net/
+# Be sure to give the pihole host a static IP address and register it with the DNS server in router configs
 ---
 - name: Configure Pi-hole on Debian
   hosts: PiHole
