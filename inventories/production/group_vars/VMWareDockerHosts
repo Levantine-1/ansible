@@ -22,6 +22,10 @@ supported_containers:
       DATA_GATEWAY_API_KEY_PATH: kv/data/k8clusters/DataGatewayK8Cluster/thisperAPIKey
       DATA_GATEWAY_URL: http://kube-c-00.internal.levantine.io:30080
 
+  processmining:
+    env_vars:
+      VIRTUAL_HOST: processmining.levantine.io
+
   education-platform:
     env_vars:
       VIRTUAL_HOST: education-platform.nhitruong.com
