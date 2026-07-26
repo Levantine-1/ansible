@@ -43,6 +43,17 @@
       ansible.builtin.shell: percona-release setup pxc80
       when: proxysql_installed.rc != 0
 
+    # NOTE: pxc80 setup above only provides the percona-xtradb-cluster-client package.
+    # proxysql2 lives in its own repo component and was silently missing until this was added.
+    - name: Enable the release repository for ProxySQL
+      ansible.builtin.shell: percona-release enable proxysql
+      when: proxysql_installed.rc != 0
+
+    - name: Update apt repository cache after enabling proxysql repo
+      ansible.builtin.apt:
+        update_cache: yes
+      when: proxysql_installed.rc != 0
+
     - name: Install Required Packages
       package:
         name: "{{ required_packages }}"
