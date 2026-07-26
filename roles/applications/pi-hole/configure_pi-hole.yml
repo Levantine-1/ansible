@@ -22,15 +22,17 @@
         group: root
         mode: '0644'
 
-    # Script originally from here: https://raw.githubusercontent.com/pi-hole/pi-hole/master/automated%20install/basic-install.sh
-    # I just didn't want to deal with issues if this script is updated, so I saved it in my repo.
-    - name: Update pi-hole install script
-      copy:
-        src: "templates/basic-install.sh"
+    # NOTE: The previously-pinned copy of this script (templates/basic-install.sh) hardcoded
+    # the FTL binary download URL, which broke when upstream renamed the release asset in v6.7.
+    # Fetching live avoids re-pinning against a moving upstream target.
+    - name: Fetch current pi-hole install script
+      get_url:
+        url: https://raw.githubusercontent.com/pi-hole/pi-hole/master/automated%20install/basic-install.sh
         dest: "/etc/pihole/basic-install.sh"
         owner: root
         group: root
         mode: '0644'
+        force: true
 
     - name: Apply pi-hole configuration
       shell: "bash /etc/pihole/basic-install.sh --unattended"
