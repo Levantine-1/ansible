@@ -15,3 +15,10 @@ wg_clients:
     jenkins:
         PublicKey: Ry8AtMARkVmKOPNXzM1+mMpgcPh4h08wOoH5TK6ouik=
         Address: 10.0.0.4/32
+    service:
+        PublicKey: Uknn59X+dOOjxfEzyNpaBS67EBg20abWxi2Pm3nWcHI=
+        Address: 10.0.0.5/32
+    # personal-device (Levantine) - not a managed host, client keypair generated
+    # 2026-07-26 for personal SSH/VPN access from anywhere; not applied by ansible.
+    # PublicKey: bageUf6PQG7za+hB9pIAD0UWSJhZsqFMrcOLOgnw0H8=
+    # Address: 10.0.0.6/32
