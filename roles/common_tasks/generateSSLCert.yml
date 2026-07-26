@@ -30,7 +30,6 @@
       loop: "{{ domains }}"
       register: cert_generation
 
-# NOTE: For further automation, this will need access to R53 to read/create/modify DNS records
-# For now, just take the generate command and run it manually since it will prompt for DNS changes and that's not something we can do automatically at this time
-#   sudo certbot certonly --agree-tos --email "letsencrypt@levantine.io" --manual --preferred-challenges=dns --domain "*.levantine.io, levantine.io"
-#   sudo certbot certonly --agree-tos --email "letsencrypt@levantine.io" --manual --preferred-challenges=dns --domain "*.nhitruong.com, nhitruong.com"
+# NOTE: superseded by /usr/local/bin/renew_levantine_ssl.sh on Jenkins, which uses
+# certbot-dns-route53 for fully non-interactive renewal, pushes the cert to Vault,
+# and deploys it via deploySSLCerts.yml on a systemd timer (levantine-ssl-renew.timer).

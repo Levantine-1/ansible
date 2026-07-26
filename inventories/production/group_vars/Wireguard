@@ -9,9 +9,6 @@ wg_server:
         ListenPort: 51820
 
 wg_clients:
-    splunk:
-        PublicKey: qkybUqsnHYjVdmiR4zZv1bunbPg0oyqGWgKyyX8WlHg=
-        Address: 10.0.0.2/32
     vmwarebastion:
         PublicKey: SmaCQ9sR9138k+nuwVntVegadg7H7FEUQZvudxsPoUI=
         Address: 10.0.0.3/32

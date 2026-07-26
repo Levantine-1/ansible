@@ -2,7 +2,6 @@ env_context: prod
 
 domains:
     - levantine.io
-    - nhitruong.com
 
 aws:
     default_region: us-west-2

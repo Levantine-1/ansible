@@ -7,14 +7,6 @@ supported_containers:
     env_vars:
       VIRTUAL_HOST: levantine.io
 
-  booking-movie-ticket:
-    env_vars:
-      VIRTUAL_HOST: bmt.nhitruong.com
-
-  real-estate:
-    env_vars:
-      VIRTUAL_HOST: real-estate.nhitruong.com
-
   thisper:
     env_vars:
       VIRTUAL_HOST: thisper.levantine.io
@@ -25,15 +17,3 @@ supported_containers:
   processmining:
     env_vars:
       VIRTUAL_HOST: processmining.levantine.io
-
-  education-platform:
-    env_vars:
-      VIRTUAL_HOST: education-platform.nhitruong.com
-
-  dental-care:
-    env_vars:
-      VIRTUAL_HOST: dental-care.nhitruong.com
-
-  pet-care:
-    env_vars:
-      VIRTUAL_HOST: pet-care.nhitruong.com
