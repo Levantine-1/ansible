@@ -78,12 +78,15 @@
       no_log: true
 
     # I know this is not very secure, but I'm no DBA, and I'm pressed for time at the moment. Will fix this later.
+    # NOTE: host_all only modifies *existing* host grant rows for the user, it does not create new
+    # ones. Since only root@localhost exists on a fresh install, that never actually produced a
+    # wildcard grant. Using host: '%' explicitly so the grant is actually created.
     - name: Create MySQL root user and allow access from any host and grant privileges
       mysql_user:
         login_user: root
         login_password: "{{ percona_creds.root_password }}"
         name: root
-        host_all: yes
+        host: '%'
         password: "{{ percona_creds.root_password }}"
         priv: "*.*:ALL,GRANT"
         state: present
