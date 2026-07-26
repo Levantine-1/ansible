@@ -17,3 +17,24 @@ The `applications` category contains playbooks for setting up and configuring sp
 # Note:
 ### SSL Certificates:
 The SSL certificates are stored in hashicorp vault so the playbook will need access to retrieve the certificates from vault and deploy them to the hosts.
+
+## The `service` host (control plane)
+
+`service.internal.levantine.io` is the permanent control plane: it holds this repo and the `terraform` repo (cloned under `/home/automation/`), runs `terraform` and `ansible-playbook` directly, and is where recurring automation jobs live. Credentials on `service`:
+
+- `/root/.aws/credentials` — `[default]` (`terraform_admin`) and `[delegate]` (subdomain-delegation account for the `levantine.io` Route53 zone), fetched from Vault, never stored anywhere else.
+- `/etc/vault-approle.env` — a scoped Vault AppRole (policy `service-host`: read on `kv/data/aws/iam_access_keys/*`, `kv/data/splunk/*`, `kv/data/k8clusters/*`, read/write on `kv/data/ssl_certs/*`) for `service`'s own ongoing use. The Vault *root* token is not stored long-term on `service` — it's only used interactively to bootstrap things like this.
+- `/etc/proxmox-token.env` — a dedicated Proxmox API token (`terraform@pve`, `PVEAdmin` role) for terraform's Proxmox provider.
+- `/etc/ansible-vault-password.txt` (owned by `automation`, 0600) — the ansible-vault password, referenced by `ansible.cfg`'s `vault_password_file` (that file is gitignored — it's machine-specific). This means playbooks that `vars_files: vault.yml` run **unmodified** from `service`; no need for the extra-var workarounds used earlier in this repo's history.
+- `service` has its own WireGuard client identity (see `inventories/production/group_vars/Wireguard`) so it's reachable over the tunnel from anywhere, not just the home network.
+
+### Job scheduler convention
+
+Recurring jobs on `service` are plain **systemd timers**, not a separate scheduling system. Each job is a pair:
+
+- `/etc/systemd/system/<name>.service` — `Type=oneshot`, `ExecStart=/usr/local/bin/<name>.sh`, secrets via `EnvironmentFile=/etc/<name>.env` (root-only, 0600, never committed anywhere).
+- `/etc/systemd/system/<name>.timer` — an `OnCalendar=` schedule with `RandomizedDelaySec=` to avoid thundering-herd, `Persistent=true` so a missed run (e.g. host was down) fires on next boot.
+
+Logs go to journald (`journalctl -u <name>.service`) — no separate log aggregation for job output. `levantine-ssl-renew.service`/`.timer` (`/usr/local/bin/renew_levantine_ssl.sh`) is the reference example: renews the `levantine.io` cert via `certbot-dns-route53`, pushes it to Vault, deploys it to the `Nginx` group via `roles/os_configs/deploySSLCerts.yml`.
+
+This is deliberately the same pattern a future automation/incident-response agent on `service` would plug into — same SSH access, same credentials, same job convention.
