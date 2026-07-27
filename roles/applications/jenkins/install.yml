@@ -45,18 +45,23 @@
         update_cache: yes
 
     - name: Download Jenkins apt GPG key
+      # pkg.jenkins.io rotates this key every few years via a dated
+      # filename, and the old one actually expires (not just gets
+      # superseded) -- pinning "-2023" broke silently once that key
+      # expired 2026-03-26. There's no dateless "always current" alias:
+      # jenkins.io.key (no date) is a separate, even-older key that
+      # expired back in 2023. -2026 is the current one (valid until
+      # 2028-12-21); this will need bumping again after that.
       get_url:
-        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-        dest: /tmp/jenkins.io-2023.key
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /tmp/jenkins.io-2026.key
         mode: "0644"
 
     - name: Dearmor Jenkins apt GPG key
       # apt's signed-by= needs a binary GPG keyring, not the ASCII-armored
       # .key file pkg.jenkins.io serves -- without this conversion apt
       # can't parse it and every install fails with NO_PUBKEY.
-      command: gpg --batch --yes --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins.io-2023.key
-      args:
-        creates: /usr/share/keyrings/jenkins-keyring.gpg
+      command: gpg --batch --yes --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins.io-2026.key
 
     - name: Add Jenkins apt repository
       apt_repository:
