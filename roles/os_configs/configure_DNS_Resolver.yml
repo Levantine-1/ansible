@@ -10,10 +10,17 @@
         state: present
 
     - name: Create DNS resolver configuration file
+      # resolvconf(8) only reads the specific filenames head/base/tail out
+      # of /etc/resolvconf/resolv.conf.d/ -- an arbitrary name like the
+      # previous "opnsense_router" is silently ignored by `resolvconf -u`,
+      # so this never actually took effect on a from-scratch boot (only
+      # looked like it worked because existing hosts already had a correct
+      # resolv.conf from before this playbook existed). "head" is prepended
+      # ahead of DHCP-supplied nameservers, so the internal resolver wins.
       copy:
         content: |
           nameserver 192.168.1.1
-        dest: /etc/resolvconf/resolv.conf.d/opnsense_router
+        dest: /etc/resolvconf/resolv.conf.d/head
 
     - name: Update resolvconf
       command: resolvconf -u
