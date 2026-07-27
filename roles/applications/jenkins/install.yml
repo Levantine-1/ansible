@@ -19,7 +19,13 @@
     - ../../../vault.yml
 
   vars:
-    jenkins_version: "2.452.3"
+    # Bumped from the originally-captured 2.452.3: plugins.txt was captured
+    # from the live instance's actual installed plugin versions, which
+    # require a much newer core (several need >= 2.504.1) than 2.452.3 --
+    # the live instance had clearly been upgraded well past that pin at
+    # some point without this role being updated to match. 2.504.3 is the
+    # latest patch of the LTS line that satisfies every plugin's minimum.
+    jenkins_version: "2.504.3"
     automation_ssh_public_key: "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAlK9SYgHttisI9NMozvE0HNroEK2bBG406szUfIGz1Xq+CGTdW1x197nBh36zqa5gYbhQCM/uGKOaGCPB+6R6gW0CpaHjPvcKW+pKAUaEWkQzeRYaS1yEJjD4Fh+DFqgaYKh+VTCH7RC2c6N+YdKKJkaSan2iaI9Z5nLjAxJloepbJBTDnhPQVasqNUykh6ZbYyYM5p3EEhYPrw5bMZJJkyHV44UexfqBmroSgbA87PtyUw/+9T9aG3yYwtAafUZJlZpWbeHdMRW/SVYmt/wCze5x+IAxqjk+48b8HeltR5Nys33VSQybuKNrcnumDNzthLFMQvF4ABO66yCTQ5NaBQ== automation"
 
   tasks:
