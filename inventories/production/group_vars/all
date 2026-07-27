@@ -26,10 +26,25 @@ splunk:
 # /etc/hosts block is still the thing that actually makes internal hostname
 # resolution work fleet-wide. Kept in sync here so every host in all.yml's
 # bootstrap gets it, instead of only whichever hosts had it hand-added.
+#
+# Must be kept in sync with terraform/proxmox/vms.tf's locals.vms map (IPs
+# here match each entry's ip_address) plus jenkins.tf/service.tf. Missing
+# entries here broke the first real rebuild-fleet.sh run: `service` (the
+# ansible controller) couldn't resolve kube-c-00/kube-w-00/kube-w-01/
+# pxdbc1-3/proxysql/splunk at all, since only a partial list had been
+# added by hand for hosts worked with directly earlier in the project.
 host_entries: |
     192.168.1.10 vmwarebastion.internal.levantine.io
     192.168.1.20 jenkins.internal.levantine.io
+    192.168.1.21 splunk.internal.levantine.io
     192.168.1.30 theia.internal.levantine.io
     192.168.1.31 dockerhost1.internal.levantine.io
     192.168.1.41 vault.internal.levantine.io
     192.168.1.50 service.internal.levantine.io
+    192.168.1.61 pxdbc1.internal.levantine.io
+    192.168.1.62 pxdbc2.internal.levantine.io
+    192.168.1.63 pxdbc3.internal.levantine.io
+    192.168.1.71 proxysql.internal.levantine.io
+    192.168.1.80 kube-c-00.internal.levantine.io
+    192.168.1.90 kube-w-00.internal.levantine.io
+    192.168.1.91 kube-w-01.internal.levantine.io
