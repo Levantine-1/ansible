@@ -41,6 +41,19 @@
         state: present
         update_cache: yes
 
+    - name: Enable required Apache modules
+      # theiaOneOff.yml's vhost config reverse-proxies to the Flask app and
+      # websocket-upgrades to the tailon log viewer -- needs these enabled,
+      # which apt install alone doesn't do.
+      apache2_module:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - proxy
+        - proxy_http
+        - proxy_wstunnel
+        - rewrite
+
     - name: Install pm2 globally
       npm:
         name: pm2
