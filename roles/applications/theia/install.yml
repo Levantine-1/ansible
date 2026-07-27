@@ -38,6 +38,7 @@
           - git
           - nodejs
           - npm
+          - cron
         state: present
         update_cache: yes
 
