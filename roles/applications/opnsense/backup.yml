@@ -1,0 +1,88 @@
+---
+# Sets up automated weekly backups of OPNsense's config.xml on the `service`
+# control-plane host. OPNsense itself is explicitly EXCLUDED from the
+# terraform destroy/rebuild cycle -- it's a firewall appliance, not a
+# disposable cloud-init VM, and rebuilding it from scratch isn't automated.
+# This is its safety net instead: if it's ever lost, restore by hand from
+# the latest roles/applications/opnsense/backups/config.xml committed here.
+- name: Set up automated OPNsense config backups
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Configure automation user's git identity
+      become_user: automation
+      command: "git config --global {{ item.key }} '{{ item.value }}'"
+      loop:
+        - { key: "user.name", value: "automation" }
+        - { key: "user.email", value: "automation@levantine.io" }
+      changed_when: true
+
+    - name: Deploy git credential helper (fetches GitHub PAT from Vault)
+      copy:
+        src: files/git-credential-vault-github.sh
+        dest: /usr/local/bin/git-credential-vault-github
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure git to use the Vault-backed credential helper for GitHub
+      become_user: automation
+      command: git config --global credential.https://github.com.helper "!/usr/local/bin/git-credential-vault-github"
+      changed_when: true
+
+    - name: Install Python requests (used by the backup script)
+      pip:
+        name: requests
+        executable: pip3
+        extra_args: --break-system-packages
+
+    - name: Deploy OPNsense config backup script
+      copy:
+        src: files/backup_opnsense_config.py
+        dest: /usr/local/bin/backup_opnsense_config.py
+        owner: automation
+        group: automation
+        mode: "0755"
+
+    - name: Deploy opnsense-config-backup systemd service
+      copy:
+        dest: /etc/systemd/system/opnsense-config-backup.service
+        content: |
+          [Unit]
+          Description=Backup OPNsense config.xml into the ansible repo
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=automation
+          EnvironmentFile=/etc/vault-approle.env
+          ExecStart=/usr/local/bin/backup_opnsense_config.py
+      register: backup_service_unit
+
+    - name: Deploy opnsense-config-backup systemd timer
+      copy:
+        dest: /etc/systemd/system/opnsense-config-backup.timer
+        content: |
+          [Unit]
+          Description=Weekly OPNsense config backup
+
+          [Timer]
+          OnCalendar=weekly
+          RandomizedDelaySec=1h
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+      register: backup_timer_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: backup_service_unit.changed or backup_timer_unit.changed
+
+    - name: Enable and start the OPNsense config backup timer
+      systemd:
+        name: opnsense-config-backup.timer
+        enabled: yes
+        state: started
