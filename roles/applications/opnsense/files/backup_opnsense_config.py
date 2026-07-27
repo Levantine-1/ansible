@@ -93,7 +93,12 @@ def main():
     with open(BACKUP_FILE, "wb") as f:
         f.write(r.content)
 
-    subprocess.run(["git", "-C", REPO_DIR, "pull", "--rebase"], check=True)
+    # Deliberately not doing an upfront `git pull --rebase` here: this repo
+    # sees other manual work too, and this job only owns one file -- it
+    # shouldn't fail a scheduled run just because something unrelated
+    # elsewhere in the working tree happens to be dirty. Only fall back to
+    # pull+rebase (with --autostash, so it can't be blocked the same way)
+    # if the push below is actually rejected for being behind.
     subprocess.run(
         ["git", "-C", REPO_DIR, "add", "roles/applications/opnsense/backups/config.xml"],
         check=True,
@@ -115,7 +120,12 @@ def main():
         ],
         check=True,
     )
-    subprocess.run(["git", "-C", REPO_DIR, "push"], check=True)
+    push = subprocess.run(["git", "-C", REPO_DIR, "push"])
+    if push.returncode != 0:
+        subprocess.run(
+            ["git", "-C", REPO_DIR, "pull", "--rebase", "--autostash"], check=True
+        )
+        subprocess.run(["git", "-C", REPO_DIR, "push"], check=True)
     print(f"committed and pushed updated config.xml ({timestamp})")
 
 
