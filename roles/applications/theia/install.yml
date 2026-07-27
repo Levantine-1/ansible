@@ -1,0 +1,148 @@
+---
+# Fresh-install role for Theia -- an informal SJSU class project (a custom
+# Flask app + RabbitMQ worker, NOT the Eclipse Theia IDE despite the name).
+# Source: https://github.com/huynhp24/Project-Theia -- multiple students
+# made live changes directly on the machine rather than always going through
+# source control, so this repo may not perfectly match what was actually
+# running. This is the best available source of truth.
+#
+# Needs a local MySQL DB and local RabbitMQ broker (config.ini points both
+# at 127.0.0.1/localhost) plus optional AWS/Azure API keys for a couple of
+# demo features (speech-to-text/translate/image-label under serverside/) --
+# those are left blank unless real values exist in Vault, since they're
+# tied to the original project's own cloud accounts, not necessarily yours.
+#
+# Assumes the bone-stock Debian 12 baseline from all.yml has already run.
+- name: Install and configure Theia
+  hosts: Theia
+  become: yes
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+    - name: Retrieve Theia secrets from HashiCorp Vault
+      set_fact:
+        theia_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/theia/app token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Install system packages
+      apt:
+        name:
+          - apache2
+          - python3
+          - python3-pip
+          - python3-venv
+          - mariadb-server
+          - python3-mysqldb
+          - rabbitmq-server
+          - git
+          - nodejs
+          - npm
+        state: present
+        update_cache: yes
+
+    - name: Install pm2 globally
+      npm:
+        name: pm2
+        global: yes
+
+    - name: Install tailon (log viewer used by the tailon pm2 process)
+      pip:
+        name: tailon
+        executable: pip3
+
+    - name: Clone Project-Theia into /opt/theia
+      git:
+        repo: https://github.com/huynhp24/Project-Theia.git
+        dest: /opt/theia
+        version: master
+        force: no
+
+    - name: Install Python dependencies for the app
+      pip:
+        executable: pip3
+        name:
+          - flask
+          - flask-cors
+          - pika
+          - werkzeug
+          - mysql-connector-python
+          - boto3
+          - Pillow
+          - requests
+
+    - name: Ensure MariaDB is running
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Create Theia database
+      mysql_db:
+        name: "{{ theia_secrets.db_name }}"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create Theia database user
+      mysql_user:
+        name: "{{ theia_secrets.db_user }}"
+        password: "{{ theia_secrets.db_password }}"
+        priv: "{{ theia_secrets.db_name }}.*:ALL"
+        host: "127.0.0.1"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Check if schema already loaded
+      command: >
+        mysql -u{{ theia_secrets.db_user }} -p{{ theia_secrets.db_password }}
+        -h 127.0.0.1 {{ theia_secrets.db_name }} -e "SHOW TABLES"
+      register: theia_tables
+      changed_when: false
+      failed_when: false
+
+    - name: Load database schema (serverside/init_db.sql)
+      mysql_db:
+        name: "{{ theia_secrets.db_name }}"
+        state: import
+        target: /opt/theia/serverside/init_db.sql
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      when: theia_tables.stdout is defined and theia_tables.stdout == ""
+
+    - name: Ensure RabbitMQ is running
+      service:
+        name: rabbitmq-server
+        state: started
+        enabled: yes
+
+    - name: Create RabbitMQ user
+      rabbitmq_user:
+        user: "{{ theia_secrets.rmq_username }}"
+        password: "{{ theia_secrets.rmq_password }}"
+        vhost: /
+        configure_priv: ".*"
+        write_priv: ".*"
+        read_priv: ".*"
+        state: present
+
+    - name: Deploy app config.ini
+      template:
+        src: templates/config.ini.j2
+        dest: /opt/theia/config.ini
+        owner: automation
+        group: sudo_all
+        mode: "0644"
+
+    - name: Ensure /opt/theia is owned by automation
+      file:
+        path: /opt/theia
+        owner: automation
+        group: sudo_all
+        recurse: yes
+
+    - name: Ensure logs directory exists
+      file:
+        path: /opt/theia/logs
+        state: directory
+        owner: automation
+        group: sudo_all
+        mode: "0755"

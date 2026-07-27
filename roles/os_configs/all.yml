@@ -16,6 +16,7 @@
 - import_playbook: configure_DNS_Resolver.yml
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: deploySSLCerts.yml
+- import_playbook: ../applications/theia/install.yml
 - import_playbook: theiaOneOff.yml
 - import_playbook: ../applications/jenkins/deployReverseProxy.yml
 - import_playbook: installDocker.yml

@@ -1,0 +1,41 @@
+[default]
+image_upload_folder = /opt/theia/rabbitMQ
+image_allowed_file_extensions = {'png', 'jpg', 'jpeg'}
+
+[logging]
+logdir = /opt/theia/logs
+loglevel = info
+log_stream_to_console = true
+
+[database]
+host = 127.0.0.1
+port = 3306
+user = {{ theia_secrets.db_user }}
+password = {{ theia_secrets.db_password }}
+dbname = {{ theia_secrets.db_name }}
+
+[azure]
+subscription_key = {{ theia_secrets.azure_subscription_key | default('') }}
+region = eastus
+audio_file_output_location = ./
+fetch_token_url = {{ theia_secrets.azure_fetch_token_url | default('') }}
+text_to_speech_url = {{ theia_secrets.azure_text_to_speech_url | default('') }}
+
+[amazon]
+bucket = project-theia-test
+region = us-west-1
+accessKey = {{ theia_secrets.aws_access_key | default('') }}
+secretKey = {{ theia_secrets.aws_secret_key | default('') }}
+
+[rabbitmq]
+rmq_server = localhost
+rmq_port = 5672
+rmq_username = {{ theia_secrets.rmq_username }}
+rmq_password = {{ theia_secrets.rmq_password }}
+rmq_url_image_q = image_url
+rmq_image_upload_q = image_path
+
+[api_path]
+api_route = /theia/api/v1.0/img_url
+api_route_file = /theia/api/v1.0/img_path
+info_path = /theia/api/v1.0/get_info
