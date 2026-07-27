@@ -44,10 +44,14 @@
     - name: Enable required Apache modules
       # theiaOneOff.yml's vhost config reverse-proxies to the Flask app and
       # websocket-upgrades to the tailon log viewer -- needs these enabled,
-      # which apt install alone doesn't do.
-      apache2_module:
-        name: "{{ item }}"
-        state: present
+      # which apt install alone doesn't do. Using a2enmod directly (not the
+      # apache2_module module) because that module runs `apache2ctl
+      # configtest` internally, which fails on a re-run once the vhost
+      # config referencing these modules is already in place -- a2enmod
+      # just symlinks the module into mods-enabled without validating.
+      command: "a2enmod {{ item }}"
+      args:
+        creates: "/etc/apache2/mods-enabled/{{ item }}.load"
       loop:
         - proxy
         - proxy_http
