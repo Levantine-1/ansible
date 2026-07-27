@@ -10,10 +10,14 @@
 - import_playbook: resize_main_diskPartitionWrapper.yml
 - import_playbook: configure_time.yml
 # - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by OPNSense
-# - import_playbook: configureHostFile.yml # NOTE: This is deprecated by OPNSense
 - import_playbook: configureHostname.yml
 - import_playbook: configureDHCP.yml
 - import_playbook: configure_DNS_Resolver.yml
+# NOTE: 2026-07-27 un-deprecated -- OPNsense's resolver has no records for
+# internal.levantine.io (confirmed via direct query: NXDOMAIN), so this
+# static /etc/hosts block is still what actually makes internal hostname
+# resolution work. Entries come from group_vars/all's host_entries.
+- import_playbook: configureHostFile.yml
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: deploySSLCerts.yml
 - import_playbook: ../applications/theia/install.yml
