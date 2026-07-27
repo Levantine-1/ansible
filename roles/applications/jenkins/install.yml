@@ -75,6 +75,13 @@
         filename: jenkins
         state: present
 
+    - name: Unhold Jenkins package
+      # A re-run that bumps jenkins_version needs to actually change a held
+      # package -- apt refuses that non-interactively without this.
+      dpkg_selections:
+        name: jenkins
+        selection: install
+
     - name: Install Jenkins (pinned version)
       apt:
         name: "jenkins={{ jenkins_version }}"
