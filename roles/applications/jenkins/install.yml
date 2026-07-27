@@ -44,15 +44,23 @@
         state: present
         update_cache: yes
 
-    - name: Add Jenkins apt GPG key
+    - name: Download Jenkins apt GPG key
       get_url:
         url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-        dest: /usr/share/keyrings/jenkins-keyring.asc
+        dest: /tmp/jenkins.io-2023.key
         mode: "0644"
+
+    - name: Dearmor Jenkins apt GPG key
+      # apt's signed-by= needs a binary GPG keyring, not the ASCII-armored
+      # .key file pkg.jenkins.io serves -- without this conversion apt
+      # can't parse it and every install fails with NO_PUBKEY.
+      command: gpg --batch --yes --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins.io-2023.key
+      args:
+        creates: /usr/share/keyrings/jenkins-keyring.gpg
 
     - name: Add Jenkins apt repository
       apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
         filename: jenkins
         state: present
 
