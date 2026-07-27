@@ -48,6 +48,14 @@
       apt:
         name: openjdk-17-jdk
         state: present
+
+    - name: Install gnupg (needed to dearmor the Jenkins apt key below)
+      # Not present on a truly fresh Debian 12 image -- only worked in
+      # earlier testing because gnupg had already been pulled in as a
+      # dependency of something else by that point.
+      apt:
+        name: gnupg
+        state: present
         update_cache: yes
 
     - name: Download Jenkins apt GPG key

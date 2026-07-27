@@ -91,10 +91,19 @@ for host in $HOSTS; do
   fi
 done
 
-log "running full OS bootstrap (all.yml) fleet-wide -- covers jenkins (JCasC/plugins/jobs) and theia install too"
+log "running full OS bootstrap (all.yml), limited to the hosts just rebuilt -- covers jenkins (JCasC/plugins/jobs) and theia install too"
 cd "$ANSIBLE_DIR"
 git pull
+# --limit to exactly the rebuilt hosts, not the whole inventory: running
+# unrestricted here hit a real dpkg-lock race (the inventory has a
+# `[localhost]` group alongside `[service]`, both resolving to this same
+# machine, so an unscoped `hosts: all` run apt-upgrades it twice at once)
+# and dragged in pre-existing, unrelated breakage on the AWS bastion.
+# Neither `service` nor the AWS side were touched by this rebuild, so they
+# have no business being reconfigured by it either.
+LIMIT=$(echo "$HOSTS" | paste -sd, -)
 ansible-playbook -i "$INVENTORY" roles/os_configs/all.yml \
+  --limit "$LIMIT" \
   --user automation --private-key "$SSH_KEY" \
   --extra-vars "hashicorp_vault_token=${TOKEN}"
 

@@ -18,8 +18,14 @@
 # static /etc/hosts block is still what actually makes internal hostname
 # resolution work. Entries come from group_vars/all's host_entries.
 - import_playbook: configureHostFile.yml
-- import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
+# deploySSLCerts.yml must run BEFORE deployRPConfigs.yml: nginx's reverse
+# proxy config references /etc/nginx/certs/<domain>/fullchain.pem, and
+# nginx fails to restart if that file doesn't exist yet. Only ever worked
+# in the old order because existing hosts already had certs on disk from
+# a prior run -- broke immediately on vmwarebastion's first true from-
+# scratch rebuild (nginx -t: "no such file or directory" on fullchain.pem).
 - import_playbook: deploySSLCerts.yml
+- import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: ../applications/theia/install.yml
 - import_playbook: theiaOneOff.yml
 - import_playbook: ../applications/jenkins/install.yml
