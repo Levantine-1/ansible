@@ -246,6 +246,21 @@
         - { file: Refresh_OS_Baseline.xml, name: Refresh_OS_Baseline }
       notify: restart jenkins
 
+    - name: Ensure JENKINS_HOME itself is owned by jenkins
+      # /var/lib/jenkins ends up root:root on a re-run against an already-
+      # provisioned host (dpkg re-processing the package's postinst
+      # apparently resets it), even though the subdirectories this role
+      # creates directly (casc_configs/jobs/plugins) stay jenkins-owned.
+      # Jenkins then fails to boot: "Permission denied" creating temp files
+      # directly in JENKINS_HOME. Only touching the directory itself
+      # (not recursive) since plugins/ owns thousands of files not worth
+      # re-walking every run.
+      file:
+        path: /var/lib/jenkins
+        owner: jenkins
+        group: jenkins
+        mode: "0755"
+
     - name: Start and enable Jenkins
       service:
         name: jenkins
