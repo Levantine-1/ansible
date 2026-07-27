@@ -13,6 +13,15 @@
       privkey: "{{ ssl_certs.privkey }}"
 
   tasks:
+    - name: Install Nginx
+      # This play restarts nginx below, so it needs the package installed
+      # regardless of ordering relative to deployRPConfigs.yml (which also
+      # installs it) -- broke on a from-scratch host when SSL cert
+      # deployment was moved to run before the reverse-proxy config play.
+      package:
+        name: nginx
+        state: present
+
     - name: Ensure Cert Directory Exists for Each Domain
       file:
         path: "/etc/nginx/certs/{{ item }}"
