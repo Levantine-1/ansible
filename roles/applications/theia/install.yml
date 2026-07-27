@@ -103,11 +103,13 @@
       failed_when: false
 
     - name: Load database schema (serverside/init_db.sql)
-      mysql_db:
-        name: "{{ theia_secrets.db_name }}"
-        state: import
-        target: /opt/theia/serverside/init_db.sql
-        login_unix_socket: /var/run/mysqld/mysqld.sock
+      # init_db.sql opens with its own `create database theia;`, which
+      # collides with the mysql_db task above that already created it --
+      # run it via the client with -f so that one statement's error is
+      # ignored and the rest of the schema (the actual tables) still loads.
+      command: >
+        mysql -f -u{{ theia_secrets.db_user }} -p{{ theia_secrets.db_password }}
+        -h 127.0.0.1 -e "source /opt/theia/serverside/init_db.sql"
       when: theia_tables.stdout is defined and theia_tables.stdout == ""
 
     - name: Ensure RabbitMQ is running
