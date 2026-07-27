@@ -70,6 +70,16 @@
         executable: pip3
         extra_args: --break-system-packages
 
+    # tailon pins tornado<5, which crashes on Python 3.11's collections.abc
+    # move (AttributeError: module 'collections' has no attribute
+    # 'MutableMapping'). tornado 6.x fixes it and tailon runs fine against
+    # it despite the pinned constraint pip warns about.
+    - name: Upgrade tornado past tailon's pinned (broken on py3.11) version
+      pip:
+        name: "tornado>=6"
+        executable: pip3
+        extra_args: --break-system-packages
+
     - name: Clone Project-Theia into /opt/theia
       git:
         repo: https://github.com/huynhp24/Project-Theia.git
