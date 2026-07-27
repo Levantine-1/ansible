@@ -31,3 +31,27 @@
         name: "{{ service_host_packages }}"
         state: present
       when: "'service' in group_names"
+
+    - name: Check whether this is a cloud-init provisioned host
+      stat:
+        path: /etc/cloud
+      register: cloud_dir
+
+    - name: Stop cloud-init from re-provisioning network/hosts on every boot
+      # Every VM in this fleet is cloud-init provisioned (terraform's
+      # proxmox module regenerates the cloud-init ISO on any config change,
+      # and Proxmox re-runs it on qm start). Without this override,
+      # cloud-init treats the instance as "new" on that next boot and wipes
+      # manually-applied network/hosts customization -- this took down
+      # WireGuard/K8s/DNS across 5 VMs in one incident. Applying fleet-wide
+      # instead of per-host so no future VM regresses into this.
+      copy:
+        dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        content: |
+          network: {config: disabled}
+          manage_etc_hosts: false
+          manage_resolv_conf: false
+        owner: root
+        group: root
+        mode: "0644"
+      when: cloud_dir.stat.exists
