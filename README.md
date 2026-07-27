@@ -41,6 +41,12 @@ Logs go to journald (`journalctl -u <name>.service`) — no separate log aggrega
 
 This is deliberately the same pattern a future automation/incident-response agent on `service` would plug into — same SSH access, same credentials, same job convention.
 
+### The "one button" fleet rebuild
+
+`rebuild-fleet.service` (`/usr/local/bin/rebuild_fleet.sh`, deployed by `roles/os_configs/deploy_fleet_rebuild_job.yml`) is the one exception to "every job gets a timer" — it's **on-demand only**, triggered manually with `systemctl start rebuild-fleet.service` and watched with `journalctl -u rebuild-fleet.service -f`. It `terraform destroy`s every Proxmox VM except `service` itself (target list built dynamically from `terraform state list`, so it stays in sync as VMs are added/removed from `proxmox/vms.tf`), `terraform apply`s to rebuild them, waits for SSH, then runs `roles/os_configs/all.yml` fleet-wide (which now covers Jenkins's full JCasC/plugin/job install and Theia's install, not just base OS bootstrap).
+
+`service` can't destroy itself while orchestrating its own destruction — a full rebuild including `service` has to be kicked off from somewhere else. **`pxdbc1-3` (Percona), `splunk`, and the `kube-*` nodes have no persistent-disk separation or backup/restore step** — this script wipes their data on every run. Don't use it expecting that state to survive; that's tracked as unresolved follow-up work, not something this script handles.
+
 ### OPNsense: backup only, not part of destroy/rebuild
 
 OPNsense (the firewall/router VM) is **explicitly excluded** from the terraform destroy/rebuild cycle — it's a hand-configured appliance, not a disposable cloud-init VM, and there's no automation to rebuild it from scratch. Its only safety net is the weekly `config.xml` backup above: if it's ever lost, the router has to be reinstalled by hand and its config restored from the latest commit under `roles/applications/opnsense/backups/config.xml`.

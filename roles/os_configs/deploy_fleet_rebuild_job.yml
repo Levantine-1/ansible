@@ -1,0 +1,41 @@
+---
+# Deploys the "one button" fleet destroy/rebuild as an on-demand systemd
+# job on `service` -- deliberately NOT a recurring timer (unlike the other
+# jobs in this convention). This one takes down and recreates most of the
+# Proxmox fleet, including stateful hosts (Percona, Splunk, Kubernetes)
+# that have no backup/restore step yet -- it must only ever run when
+# someone explicitly decides to, via:
+#   systemctl start rebuild-fleet.service
+# then watch progress with:
+#   journalctl -u rebuild-fleet.service -f
+- name: Deploy the fleet destroy/rebuild orchestration job
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Deploy rebuild_fleet.sh
+      copy:
+        src: files/rebuild_fleet.sh
+        dest: /usr/local/bin/rebuild_fleet.sh
+        owner: automation
+        group: automation
+        mode: "0750"
+
+    - name: Deploy rebuild-fleet systemd service (on-demand only, no timer)
+      copy:
+        dest: /etc/systemd/system/rebuild-fleet.service
+        content: |
+          [Unit]
+          Description=Destroy/rebuild the Proxmox fleet and reconfigure via ansible (on-demand only)
+
+          [Service]
+          Type=oneshot
+          User=automation
+          TimeoutStartSec=3600
+          ExecStart=/usr/local/bin/rebuild_fleet.sh
+      register: rebuild_service_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: rebuild_service_unit.changed
