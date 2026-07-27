@@ -182,12 +182,32 @@
         mode: "0640"
       notify: restart jenkins
 
-    - name: Point Jenkins at the JCasC config via JAVA_ARGS
-      lineinfile:
-        path: /etc/default/jenkins
-        regexp: '^JAVA_ARGS='
-        line: 'JAVA_ARGS="-Djava.awt.headless=true -Dcasc.jenkins.config=/var/lib/jenkins/casc_configs/jenkins.yaml"'
+    - name: Create systemd override directory for jenkins.service
+      file:
+        path: /etc/systemd/system/jenkins.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Point Jenkins at the JCasC config via a systemd override
+      # The current jenkins.service unit (ExecStart=/usr/bin/jenkins,
+      # Type=notify) hardcodes JAVA_OPTS directly in the unit file and
+      # does NOT source /etc/default/jenkins's JAVA_ARGS at all -- editing
+      # that file (the old approach) silently did nothing, so Jenkins kept
+      # falling through to its own first-run setup wizard instead of the
+      # JCasC-declared config. A systemd drop-in is the mechanism that
+      # actually reaches the JVM on this packaging.
+      copy:
+        dest: /etc/systemd/system/jenkins.service.d/casc.conf
+        content: |
+          [Service]
+          Environment="CASC_JENKINS_CONFIG=/var/lib/jenkins/casc_configs/jenkins.yaml"
+      register: casc_override
       notify: restart jenkins
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: casc_override.changed
 
     - name: Ensure jobs directories exist
       file:
