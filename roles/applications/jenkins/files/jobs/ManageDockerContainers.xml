@@ -1,0 +1,74 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>action</name>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>restart</string>
+              <string>start</string>
+              <string>stop</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+        <com.cwctravel.hudson.plugins.extended__choice__parameter.ExtendedChoiceParameterDefinition plugin="extended-choice-parameter@381.v360a_25ea_017c">
+          <name>services</name>
+          <description>Warning! If you stop nginx-proxy, you also must stop all other containers before restarting nginx-proxy. Nginx poxy must be the first container up before any others.</description>
+          <quoteValue>false</quoteValue>
+          <saveJSONParameterToFile>false</saveJSONParameterToFile>
+          <visibleItemCount>5</visibleItemCount>
+          <type>PT_CHECKBOX</type>
+          <value>nginx-proxy, portfolio, real-estate, booking-movie-ticket, thisper, education-platform, dental-care, pet-care, processmining</value>
+          <defaultValue>nginx-proxy, portfolio, real-estate, booking-movie-ticket, thisper, education-platform, dental-care, pet-care, processmining</defaultValue>
+          <multiSelectDelimiter>,</multiSelectDelimiter>
+          <projectName>ManageDockerContainers</projectName>
+        </com.cwctravel.hudson.plugins.extended__choice__parameter.ExtendedChoiceParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/Levantine-1/ansible.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers>
+    <hudson.triggers.TimerTrigger>
+      <spec>H 3 * * *</spec>
+    </hudson.triggers.TimerTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>export ANSIBLE_HOST_KEY_CHECKING=False
+playbook=&quot;roles/applications/nginx-proxyContainers/manageDockerContainerState.yml&quot;
+inventory=&quot;inventories/production/production.ini&quot;
+hosts=&quot;VMWareDockerHosts&quot;
+
+ansible-playbook &quot;${playbook}&quot; -i &quot;${inventory}&quot; -l &quot;${hosts}&quot; -e &quot;container_names_string=${services}&quot; -e &quot;container_action_string=${action}&quot; -u automation --private-key &quot;~/.ssh/automation.pem&quot;
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
