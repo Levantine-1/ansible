@@ -57,7 +57,12 @@
         repo: https://github.com/huynhp24/Project-Theia.git
         dest: /opt/theia
         version: master
-        force: no
+        # The upstream repo commits a config.ini with placeholder/real
+        # values directly, which our templated config.ini (below) then
+        # overwrites -- from git's perspective that's a "local
+        # modification" that would otherwise block re-runs. This directory
+        # is fully ansible-managed, so force is safe here.
+        force: yes
 
     - name: Install Python dependencies for the app
       pip:
