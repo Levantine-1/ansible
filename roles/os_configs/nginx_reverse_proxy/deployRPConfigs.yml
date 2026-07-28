@@ -43,6 +43,35 @@
         remote_src: no
       when: rp_flow is defined and rp_flow == "upstream"
 
+    - name: Create systemd override directory for nginx.service
+      file:
+        path: /etc/systemd/system/nginx.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Give nginx a restart policy via a systemd override
+      # Stock Debian nginx.service has Restart=no -- if nginx fails to
+      # start (e.g. a transient DNS lookup failure for an upstream host
+      # name at boot), it just stays down forever until someone notices.
+      # This is exactly what happened to vmwarebastion's nginx: it failed
+      # once during the fleet-wide /etc/hosts gap and never recovered on
+      # its own, silently taking levantine.io down for hours.
+      copy:
+        dest: /etc/systemd/system/nginx.service.d/restart-policy.conf
+        content: |
+          [Service]
+          Restart=on-failure
+          RestartSec=10
+        owner: root
+        group: root
+        mode: "0644"
+      register: nginx_restart_override
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: nginx_restart_override.changed
+
     - name: Restart Nginx
       service:
         name: nginx
