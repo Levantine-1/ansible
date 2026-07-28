@@ -12,7 +12,13 @@ services:
     environment:
       SEMAPHORE_PORT: "3000"
       SEMAPHORE_DB_DIALECT: sqlite
-      SEMAPHORE_DB: /etc/semaphore/semaphore.sqlite
+      # SEMAPHORE_DB (not SEMAPHORE_DB_HOST) is not a real Semaphore env
+      # var -- it silently fell back to its own default path
+      # (/var/lib/semaphore/database.sqlite), which is NOT under the
+      # mounted volume below. Every container restart was wiping all
+      # state (projects, keys, templates) and silently rebootstrapping a
+      # fresh admin account, undetected until a restart actually happened.
+      SEMAPHORE_DB_HOST: /etc/semaphore/semaphore.sqlite
       SEMAPHORE_ADMIN: admin
       SEMAPHORE_ADMIN_NAME: admin
       SEMAPHORE_ADMIN_EMAIL: admin@levantine.io
