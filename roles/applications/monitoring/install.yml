@@ -30,7 +30,7 @@
         dest: "/opt/monitoring/{{ item }}"
         owner: automation
         group: automation
-        mode: "0640"
+        mode: "0644"
       loop:
         - alertmanager.yml
         - alert_rules.yml
@@ -44,10 +44,15 @@
         dest: /opt/monitoring/prometheus.yml
         owner: automation
         group: automation
-        mode: "0640"
+        mode: "0644"
       register: prometheus_config
 
     - name: Deploy docker-compose.yml
+      # 0640 not 0644 like the other configs above: this file has the
+      # Grafana admin password interpolated directly into it (env var
+      # passed to the container, not a bind-mounted file the container
+      # process needs to read itself, so it doesn't need to be world-
+      # readable the way the bind-mounted configs above do).
       template:
         src: templates/docker-compose.yml.j2
         dest: /opt/monitoring/docker-compose.yml
