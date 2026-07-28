@@ -1,0 +1,17 @@
+route:
+  receiver: zammad
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  # zammad-relay is a native systemd service on this same host (see
+  # zammad_relay.py + zammad-relay.service in this role), listening on
+  # 127.0.0.1 -- alertmanager uses network_mode: host so localhost reaches
+  # it directly. It turns each alert into a Zammad ticket, deduplicated by
+  # fingerprint, and closes the ticket when the alert resolves.
+  - name: zammad
+    webhook_configs:
+      - url: http://localhost:9099/alert
+        send_resolved: true

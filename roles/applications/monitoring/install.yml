@@ -16,6 +16,10 @@
       set_fact:
         monitoring_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/monitoring/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
+    - name: Retrieve Zammad secrets from HashiCorp Vault
+      set_fact:
+        zammad_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/zammad/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
     - name: Create /opt/monitoring directory
       file:
         path: /opt/monitoring
@@ -32,11 +36,19 @@
         group: automation
         mode: "0644"
       loop:
-        - alertmanager.yml
         - alert_rules.yml
         - blackbox.yml
         - loki-config.yml
         - grafana-datasources.yml
+
+    - name: Deploy alertmanager.yml (templated to point at zammad-relay)
+      template:
+        src: templates/alertmanager.yml.j2
+        dest: /opt/monitoring/alertmanager.yml
+        owner: automation
+        group: automation
+        mode: "0644"
+      register: alertmanager_config
 
     - name: Deploy prometheus.yml (templated scrape targets)
       template:
@@ -78,3 +90,66 @@
       # container restart re-establishes the mount against the new file.
       command: docker restart prometheus
       when: prometheus_config.changed
+
+    - name: Restart Alertmanager if its config changed
+      command: docker restart alertmanager
+      when: alertmanager_config.changed
+
+    # zammad-relay: turns Alertmanager webhook notifications into Zammad
+    # tickets (dedup'd by alert fingerprint, auto-closed on resolve). A
+    # native systemd service, not a container -- it's a tiny stdlib-only
+    # script and doesn't need Docker's overhead.
+    - name: Deploy zammad-relay script
+      copy:
+        src: files/zammad_relay.py
+        dest: /usr/local/bin/zammad_relay.py
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy zammad-relay environment file
+      template:
+        src: templates/zammad-relay.env.j2
+        dest: /etc/zammad-relay.env
+        owner: root
+        group: root
+        mode: "0600"
+      register: zammad_relay_env
+
+    - name: Deploy zammad-relay systemd unit
+      copy:
+        dest: /etc/systemd/system/zammad-relay.service
+        content: |
+          [Unit]
+          Description=Alertmanager to Zammad ticket relay
+          After=network.target docker.service
+
+          [Service]
+          EnvironmentFile=/etc/zammad-relay.env
+          ExecStart=/usr/bin/python3 /usr/local/bin/zammad_relay.py
+          Restart=on-failure
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: zammad_relay_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: zammad_relay_unit.changed
+
+    - name: Enable and start zammad-relay
+      systemd:
+        name: zammad-relay
+        enabled: yes
+        state: started
+
+    - name: Restart zammad-relay if its config changed
+      systemd:
+        name: zammad-relay
+        state: restarted
+      when: zammad_relay_env.changed or zammad_relay_unit.changed
