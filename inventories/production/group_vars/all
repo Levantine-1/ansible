@@ -39,3 +39,23 @@ host_entries: |
     192.168.1.80 kube-c-00.internal.levantine.io
     192.168.1.90 kube-w-00.internal.levantine.io
     192.168.1.91 kube-w-01.internal.levantine.io
+
+# Single source of truth for Prometheus scrape targets (node_exporter +
+# cAdvisor, deployed fleet-wide by roles/os_configs/monitoring_agents.yml)
+# and for Blackbox Exporter uptime probes. Kept separate from host_entries
+# above since not every host we resolve by name is necessarily monitored
+# (e.g. bastion.prod.levantine.io, the AWS EC2 host, isn't in this list).
+monitored_hosts:
+    - { name: vmwarebastion, host: vmwarebastion.internal.levantine.io }
+    - { name: jenkins, host: jenkins.internal.levantine.io }
+    - { name: theia, host: theia.internal.levantine.io }
+    - { name: dockerhost1, host: dockerhost1.internal.levantine.io }
+    - { name: vault, host: vault.internal.levantine.io }
+    - { name: service, host: service.internal.levantine.io }
+    - { name: pxdbc1, host: pxdbc1.internal.levantine.io }
+    - { name: pxdbc2, host: pxdbc2.internal.levantine.io }
+    - { name: pxdbc3, host: pxdbc3.internal.levantine.io }
+    - { name: proxysql, host: proxysql.internal.levantine.io }
+    - { name: kube-c-00, host: kube-c-00.internal.levantine.io }
+    - { name: kube-w-00, host: kube-w-00.internal.levantine.io }
+    - { name: kube-w-01, host: kube-w-01.internal.levantine.io }

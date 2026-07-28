@@ -1,0 +1,73 @@
+---
+# Prometheus + Grafana + Alertmanager + Loki + Blackbox Exporter -- the
+# monitoring/logging stack, replacing Splunk and the earlier Beszel/Uptime
+# Kuma plan (needed custom app metrics, log tracking, and game-server
+# uptime probing that Beszel can't do). Runs on `service` alongside the
+# rest of the ops stack. All containers use host networking so they can
+# reach fleet hosts by hostname via service's own /etc/hosts, and so
+# node_exporter/cAdvisor (deployed separately, fleet-wide) don't need any
+# extra Docker network plumbing to be scraped.
+- name: Deploy monitoring stack
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Retrieve monitoring secrets from HashiCorp Vault
+      set_fact:
+        monitoring_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/monitoring/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Create /opt/monitoring directory
+      file:
+        path: /opt/monitoring
+        state: directory
+        owner: automation
+        group: automation
+        mode: "0750"
+
+    - name: Deploy static config files
+      copy:
+        src: "files/{{ item }}"
+        dest: "/opt/monitoring/{{ item }}"
+        owner: automation
+        group: automation
+        mode: "0640"
+      loop:
+        - alertmanager.yml
+        - alert_rules.yml
+        - blackbox.yml
+        - loki-config.yml
+        - grafana-datasources.yml
+
+    - name: Deploy prometheus.yml (templated scrape targets)
+      template:
+        src: templates/prometheus.yml.j2
+        dest: /opt/monitoring/prometheus.yml
+        owner: automation
+        group: automation
+        mode: "0640"
+      register: prometheus_config
+
+    - name: Deploy docker-compose.yml
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: /opt/monitoring/docker-compose.yml
+        owner: automation
+        group: automation
+        mode: "0640"
+
+    - name: Pull monitoring stack images
+      command: docker compose pull
+      args:
+        chdir: /opt/monitoring
+
+    - name: Start monitoring stack via docker compose
+      command: docker compose up -d
+      args:
+        chdir: /opt/monitoring
+
+    - name: Reload Prometheus config if it changed and stack was already running
+      command: docker compose exec -T prometheus kill -HUP 1
+      args:
+        chdir: /opt/monitoring
+      when: prometheus_config.changed
+      ignore_errors: yes
