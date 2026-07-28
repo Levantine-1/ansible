@@ -1,6 +1,13 @@
 ---
+# hosts: service, not localhost -- this needs a real docker/aws-cli/sudo
+# environment. That was implicitly true when Jenkins ran ansible-playbook
+# directly on its own host, but Semaphore executes ansible-playbook from
+# inside its own minimal container, where "localhost" has none of that.
+# deployDockerImage.yml's copy task fetches the resulting tarball off of
+# `service` explicitly rather than assuming it shares a filesystem with
+# wherever ansible-playbook itself happens to run.
 - name: Download Docker Image
-  hosts: localhost
+  hosts: service
   gather_facts: true
   become: true
 

@@ -16,7 +16,18 @@
         msg: "Checking to see if container is supported"
       failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
 
-    - name: Copy docker image tarball from ansible host to remote host
+    - name: Fetch tarball from service to the ansible controller
+      # downloadDockerImage.yml saves the tarball on `service` (not
+      # necessarily the same filesystem as wherever ansible-playbook
+      # itself runs -- e.g. inside Semaphore's own container), so pull it
+      # here explicitly rather than assuming a shared local filesystem.
+      fetch:
+        src: "/tmp/{{ container_name }}_latest.tar"
+        dest: "/tmp/{{ container_name }}_latest.tar"
+        flat: yes
+      delegate_to: service.internal.levantine.io
+
+    - name: Copy docker image tarball from ansible controller to remote host
       copy:
         src: "/tmp/{{ container_name }}_latest.tar"
         dest: "/tmp/{{ container_name }}_latest.tar"
