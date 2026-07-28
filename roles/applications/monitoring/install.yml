@@ -125,6 +125,7 @@
           After=network.target docker.service
 
           [Service]
+          Environment=PYTHONUNBUFFERED=1
           EnvironmentFile=/etc/zammad-relay.env
           ExecStart=/usr/bin/python3 /usr/local/bin/zammad_relay.py
           Restart=on-failure
