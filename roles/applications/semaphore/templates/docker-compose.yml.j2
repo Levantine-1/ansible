@@ -3,9 +3,14 @@ services:
     image: semaphoreui/semaphore:latest
     container_name: semaphore
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # network_mode: host, not a port mapping -- Semaphore's ansible-playbook
+    # runs need to resolve fleet hostnames (theia.internal.levantine.io
+    # etc.) via service's own /etc/hosts. Docker's default bridge network
+    # doesn't see that file, which surfaced as "Name does not resolve" on
+    # the very first real template run.
+    network_mode: host
     environment:
+      SEMAPHORE_PORT: "3000"
       SEMAPHORE_DB_DIALECT: sqlite
       SEMAPHORE_DB: /etc/semaphore/semaphore.sqlite
       SEMAPHORE_ADMIN: admin
