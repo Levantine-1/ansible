@@ -106,6 +106,7 @@
         owner: root
         group: root
         mode: "0755"
+      register: zammad_relay_script
 
     - name: Deploy zammad-relay environment file
       template:
@@ -149,8 +150,8 @@
         enabled: yes
         state: started
 
-    - name: Restart zammad-relay if its config changed
+    - name: Restart zammad-relay if its script or config changed
       systemd:
         name: zammad-relay
         state: restarted
-      when: zammad_relay_env.changed or zammad_relay_unit.changed
+      when: zammad_relay_script.changed or zammad_relay_env.changed or zammad_relay_unit.changed
