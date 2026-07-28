@@ -20,14 +20,13 @@ hashicorp:
 # bootstrap gets it, instead of only whichever hosts had it hand-added.
 #
 # Must be kept in sync with terraform/proxmox/vms.tf's locals.vms map (IPs
-# here match each entry's ip_address) plus jenkins.tf/service.tf. Missing
-# entries here broke the first real rebuild-fleet.sh run: `service` (the
-# ansible controller) couldn't resolve kube-c-00/kube-w-00/kube-w-01/
-# pxdbc1-3/proxysql/splunk at all, since only a partial list had been
-# added by hand for hosts worked with directly earlier in the project.
+# here match each entry's ip_address) plus service.tf. Missing entries
+# here broke the first real rebuild-fleet.sh run: `service` (the ansible
+# controller) couldn't resolve kube-c-00/kube-w-00/kube-w-01/pxdbc1-3/
+# proxysql/splunk at all, since only a partial list had been added by
+# hand for hosts worked with directly earlier in the project.
 host_entries: |
     192.168.1.10 vmwarebastion.internal.levantine.io
-    192.168.1.20 jenkins.internal.levantine.io
     192.168.1.30 theia.internal.levantine.io
     192.168.1.31 dockerhost1.internal.levantine.io
     192.168.1.41 vault.internal.levantine.io
@@ -47,7 +46,6 @@ host_entries: |
 # (e.g. bastion.prod.levantine.io, the AWS EC2 host, isn't in this list).
 monitored_hosts:
     - { name: vmwarebastion, host: vmwarebastion.internal.levantine.io }
-    - { name: jenkins, host: jenkins.internal.levantine.io }
     - { name: theia, host: theia.internal.levantine.io }
     - { name: dockerhost1, host: dockerhost1.internal.levantine.io }
     - { name: vault, host: vault.internal.levantine.io }

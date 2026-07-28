@@ -91,7 +91,7 @@ for host in $HOSTS; do
   fi
 done
 
-log "running full OS bootstrap (all.yml), limited to the hosts just rebuilt -- covers jenkins (JCasC/plugins/jobs) and theia install too"
+log "running full OS bootstrap (all.yml), limited to the hosts just rebuilt -- covers theia install too"
 cd "$ANSIBLE_DIR"
 git pull
 # --limit to exactly the rebuilt hosts, not the whole inventory: running

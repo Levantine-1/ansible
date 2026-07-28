@@ -12,10 +12,8 @@
     - name: Remove stock default site
       # Not strictly required here since reverse_proxy.j2 doesn't declare
       # default_server itself, but removing Debian's stock default_server
-      # site is the same cleanup applied in jenkins/deployReverseProxy.yml
-      # (where it *does* conflict) -- keeping both roles consistent so a
-      # future from-scratch nginx host doesn't depend on this file having
-      # been removed by hand outside of ansible.
+      # site avoids depending on it having been removed by hand outside
+      # of ansible on a future from-scratch nginx host.
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent

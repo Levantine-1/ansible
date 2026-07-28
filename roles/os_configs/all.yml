@@ -28,8 +28,6 @@
 - import_playbook: nginx_reverse_proxy/deployRPConfigs.yml
 - import_playbook: ../applications/theia/install.yml
 - import_playbook: theiaOneOff.yml
-- import_playbook: ../applications/jenkins/install.yml
-- import_playbook: ../applications/jenkins/deployReverseProxy.yml
 - import_playbook: installDocker.yml
 - import_playbook: monitoring_agents.yml
 - import_playbook: configure_gui.yml

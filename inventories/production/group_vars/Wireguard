@@ -12,9 +12,6 @@ wg_clients:
     vmwarebastion:
         PublicKey: SmaCQ9sR9138k+nuwVntVegadg7H7FEUQZvudxsPoUI=
         Address: 10.0.0.3/32
-    jenkins:
-        PublicKey: Ry8AtMARkVmKOPNXzM1+mMpgcPh4h08wOoH5TK6ouik=
-        Address: 10.0.0.4/32
     service:
         PublicKey: Uknn59X+dOOjxfEzyNpaBS67EBg20abWxi2Pm3nWcHI=
         Address: 10.0.0.5/32
