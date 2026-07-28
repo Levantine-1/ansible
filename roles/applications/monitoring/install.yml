@@ -70,9 +70,11 @@
       args:
         chdir: /opt/monitoring
 
-    - name: Reload Prometheus config if it changed and stack was already running
-      command: docker compose exec -T prometheus kill -HUP 1
-      args:
-        chdir: /opt/monitoring
+    - name: Restart Prometheus if its config changed
+      # Not a `kill -HUP` reload: ansible's template module atomically
+      # replaces the file (write-temp + rename), which changes the inode.
+      # The container's bind mount stays pinned to the old inode, so a
+      # same-process reload silently keeps reading stale config -- only a
+      # container restart re-establishes the mount against the new file.
+      command: docker restart prometheus
       when: prometheus_config.changed
-      ignore_errors: yes
