@@ -44,11 +44,14 @@ def find_open_ticket(fingerprint_tag):
         "GET",
         f"/api/v1/tickets/search?query={urllib.parse.quote(fingerprint_tag)}&limit=5",
     )
+    # /api/v1/tickets/search returns a bare list of full ticket objects
+    # (not {"tickets": [...]}), loosely matched -- confirm the fingerprint
+    # tag is actually a prefix of the title rather than trusting the
+    # search match alone.
     if not result:
         return None
-    for ticket_id in result.get("tickets", []):
-        ticket = zammad_request("GET", f"/api/v1/tickets/{ticket_id}")
-        if ticket and ticket.get("state_id") not in (4, 5):  # not closed/merged
+    for ticket in result:
+        if ticket.get("title", "").startswith(fingerprint_tag) and ticket.get("state_id") not in (4, 5):
             return ticket
     return None
 
