@@ -73,4 +73,42 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Vault's UI also has no subpath config and *also* serves its assets
+    # from an absolute-root /ui/ path -- same problem as OPNsense, but
+    # OPNsense already owns the real /ui/ location on this server block.
+    # Rewritten to /vault-ui/ via sub_filter (HTML only; Vault's compiled
+    # JS calls the API at /v1/... directly, which doesn't collide with
+    # anything else here so it's proxied unchanged).
+    location /vault/ {
+        proxy_pass http://vault.internal.levantine.io:8200/ui/;
+        proxy_set_header Host vault.internal.levantine.io;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Accept-Encoding "";
+        sub_filter '/ui/' '/vault-ui/';
+        sub_filter_once off;
+        sub_filter_types text/html application/javascript;
+    }
+
+    location /vault-ui/ {
+        proxy_pass http://vault.internal.levantine.io:8200/ui/;
+        proxy_set_header Host vault.internal.levantine.io;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Accept-Encoding "";
+        sub_filter '/ui/' '/vault-ui/';
+        sub_filter_once off;
+        sub_filter_types text/html application/javascript;
+    }
+
+    location /v1/ {
+        proxy_pass http://vault.internal.levantine.io:8200/v1/;
+        proxy_set_header Host vault.internal.levantine.io;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
