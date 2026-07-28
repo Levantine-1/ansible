@@ -1,0 +1,56 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root /var/www/ops-dashboard;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Grafana, Prometheus, and Alertmanager all natively support being
+    # served from a subpath (GF_SERVER_SERVE_FROM_SUB_PATH / --web.route-
+    # prefix, set in roles/applications/monitoring), so these are true
+    # path-based proxies -- the full request path (including the prefix)
+    # is forwarded through unstripped, matching what each app expects.
+    location /grafana/ {
+        proxy_pass http://127.0.0.1:3001/grafana/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /prometheus/ {
+        proxy_pass http://127.0.0.1:9090/prometheus/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /alertmanager/ {
+        proxy_pass http://127.0.0.1:9093/alertmanager/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # OPNsense's web UI has no subpath-serving support (absolute-root
+    # asset paths), so this proxy exists purely to make it *reachable*
+    # from the home LAN at all -- service is dual-homed onto OPNsense's
+    # internal 192.168.1.0/24 LAN and the home LAN can't reach that
+    # network directly otherwise. Expect some broken CSS/JS; this is a
+    # known limitation of reverse-proxying OPNsense/pfSense-style UIs
+    # under a subpath, not a bug in this config.
+    location /opnsense/ {
+        proxy_pass https://192.168.1.1/;
+        proxy_ssl_verify off;
+        proxy_set_header Host 192.168.1.1;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

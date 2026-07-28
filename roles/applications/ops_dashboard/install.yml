@@ -1,0 +1,62 @@
+---
+# A single landing page on `service` (port 80) linking to every ops app
+# running there, so nobody has to remember port numbers. Grafana/
+# Prometheus/Alertmanager get true subpath reverse-proxying (they
+# natively support it); Semaphore/Zammad/OPNsense get direct-port/IP
+# links on the same page instead, since their frontends don't support
+# being served from a subpath cleanly.
+- name: Deploy ops dashboard
+  hosts: service
+  become: yes
+
+  vars:
+    ops_dashboard_title: "Homelab Ops"
+
+  tasks:
+    - name: Install nginx
+      package:
+        name: nginx
+        state: present
+
+    - name: Remove stock default site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: reload nginx
+
+    - name: Create ops-dashboard web root
+      file:
+        path: /var/www/ops-dashboard
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0755"
+
+    - name: Deploy landing page
+      template:
+        src: templates/index.html.j2
+        dest: /var/www/ops-dashboard/index.html
+        owner: www-data
+        group: www-data
+        mode: "0644"
+
+    - name: Deploy ops-dashboard nginx site config
+      template:
+        src: templates/ops-dashboard.conf.j2
+        dest: /etc/nginx/conf.d/ops-dashboard.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload nginx
+
+    - name: Ensure nginx is enabled and running
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded

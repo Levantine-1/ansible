@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ ops_dashboard_title | default('Homelab Ops') }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --muted: #666;
+    --border: #e0e0e0;
+    --accent: #3b6ef5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --card-bg: #1e2127;
+      --text: #e8e8e8;
+      --muted: #9aa0aa;
+      --border: #2c3038;
+      --accent: #6d93ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2.5rem 1.5rem;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  p.subtitle { color: var(--muted); margin-top: 0; margin-bottom: 2rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+  a.card {
+    display: block;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  a.card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .card .name { font-weight: 600; font-size: 1.02rem; }
+  .card .desc { color: var(--muted); font-size: 0.85rem; margin-top: 0.3rem; }
+  .section-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 2rem 0 0.75rem;
+  }
+  .section-label:first-of-type { margin-top: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>{{ ops_dashboard_title | default('Homelab Ops') }}</h1>
+  <p class="subtitle">Jump straight in -- no ports to remember.</p>
+
+  <div class="section-label">Ops &amp; automation</div>
+  <div class="grid" id="proxied"></div>
+
+  <div class="section-label">Direct-port links</div>
+  <p class="subtitle" style="margin-top: -0.5rem; font-size: 0.8rem;">These apps don't support subpath proxying cleanly, so these open the app directly on its own port.</p>
+  <div class="grid" id="direct"></div>
+</div>
+
+<script>
+  const host = window.location.hostname;
+
+  const proxied = [
+    { name: "Grafana", desc: "Dashboards", path: "/grafana/" },
+    { name: "Prometheus", desc: "Metrics & targets", path: "/prometheus/" },
+    { name: "Alertmanager", desc: "Active alerts", path: "/alertmanager/" },
+    { name: "OPNsense", desc: "Firewall / router admin", path: "/opnsense/" },
+  ];
+
+  const direct = [
+    { name: "Semaphore", desc: "Ansible job runner", port: 3000 },
+    { name: "Zammad", desc: "Ticketing", port: 8080 },
+  ];
+
+  function card(item, href) {
+    const a = document.createElement("a");
+    a.className = "card";
+    a.href = href;
+    a.innerHTML = `<div class="name">${item.name}</div><div class="desc">${item.desc}</div>`;
+    return a;
+  }
+
+  const proxiedEl = document.getElementById("proxied");
+  proxied.forEach(item => proxiedEl.appendChild(card(item, item.path)));
+
+  const directEl = document.getElementById("direct");
+  direct.forEach(item => directEl.appendChild(card(item, `http://${host}:${item.port}`)));
+</script>
+</body>
+</html>
