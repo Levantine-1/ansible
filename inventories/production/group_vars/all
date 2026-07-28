@@ -12,14 +12,6 @@ hashicorp:
         address: http://vault.internal.levantine.io:8200
         # Token in ansible-vault
 
-splunk:
-    server:
-        host: splunk.internal.levantine.io
-        port: 9997
-    forwarders:
-        insecureskipverify: "true"
-        http_event_collector_port: 8088
-
 # OPNsense's DNS resolver has no records for internal.levantine.io (queries
 # for e.g. vault.internal.levantine.io NXDOMAIN there) -- despite
 # configureHostFile.yml being marked "deprecated by OPNsense", this static
@@ -36,7 +28,6 @@ splunk:
 host_entries: |
     192.168.1.10 vmwarebastion.internal.levantine.io
     192.168.1.20 jenkins.internal.levantine.io
-    192.168.1.21 splunk.internal.levantine.io
     192.168.1.30 theia.internal.levantine.io
     192.168.1.31 dockerhost1.internal.levantine.io
     192.168.1.41 vault.internal.levantine.io

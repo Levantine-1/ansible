@@ -2,8 +2,8 @@
 # Deploys the "one button" fleet destroy/rebuild as an on-demand systemd
 # job on `service` -- deliberately NOT a recurring timer (unlike the other
 # jobs in this convention). This one takes down and recreates most of the
-# Proxmox fleet, including stateful hosts (Percona, Splunk, Kubernetes)
-# that have no backup/restore step yet -- it must only ever run when
+# Proxmox fleet, including stateful hosts (Percona, Kubernetes) that have
+# no backup/restore step yet -- it must only ever run when
 # someone explicitly decides to, via:
 #   systemctl start rebuild-fleet.service
 # then watch progress with:

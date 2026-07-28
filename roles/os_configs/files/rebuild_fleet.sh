@@ -14,12 +14,12 @@
 # predate this module) so they're untouched by construction, not because of
 # anything special in this script.
 #
-# DATA-LOSS WARNING: pxdbc1-3 (Percona), splunk, and the kube-* nodes have
-# no persistent-disk separation or backup/restore step yet (tracked as
+# DATA-LOSS WARNING: pxdbc1-3 (Percona) and the kube-* nodes have no
+# persistent-disk separation or backup/restore step yet (tracked as
 # unresolved investigation in the IaC reconciliation plan) -- destroying
 # and recreating them WIPES their data. There is currently no automated
 # recovery for that beyond OS/app reinstall from scratch. Don't run this
-# expecting Percona/Splunk/Kubernetes state to survive.
+# expecting Percona/Kubernetes state to survive.
 set -euo pipefail
 
 TERRAFORM_DIR=/home/automation/terraform
