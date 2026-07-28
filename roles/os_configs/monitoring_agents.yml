@@ -198,6 +198,14 @@
         group: promtail
         mode: "0750"
 
+    - name: Create promtail config directory
+      file:
+        path: /etc/promtail
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
     - name: Deploy promtail config
       copy:
         dest: /etc/promtail/config.yml
