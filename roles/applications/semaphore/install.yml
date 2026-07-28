@@ -1,0 +1,35 @@
+---
+# Semaphore UI -- replaces Jenkins for triggering ansible/terraform jobs
+# (app deploys, the fleet rebuild, etc.) via a web UI + REST API. Runs on
+# `service` alongside the rest of the ops stack rather than a separate VM.
+- name: Deploy Semaphore UI
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Retrieve Semaphore secrets from HashiCorp Vault
+      set_fact:
+        semaphore_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/semaphore/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Create /opt/semaphore directory
+      file:
+        path: /opt/semaphore
+        state: directory
+        owner: automation
+        group: automation
+        mode: "0750"
+
+    - name: Deploy docker-compose.yml
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: /opt/semaphore/docker-compose.yml
+        owner: automation
+        group: automation
+        mode: "0640"
+      register: compose_file
+
+    - name: Start Semaphore via docker compose
+      community.docker.docker_compose_v2:
+        project_src: /opt/semaphore
+        state: present
+        pull: always

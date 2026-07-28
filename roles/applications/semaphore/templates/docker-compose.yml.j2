@@ -1,0 +1,20 @@
+services:
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    container_name: semaphore
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SEMAPHORE_DB_DIALECT: sqlite
+      SEMAPHORE_DB: /etc/semaphore/semaphore.sqlite
+      SEMAPHORE_ADMIN: admin
+      SEMAPHORE_ADMIN_NAME: admin
+      SEMAPHORE_ADMIN_EMAIL: admin@levantine.io
+      SEMAPHORE_ADMIN_PASSWORD: "{{ semaphore_secrets.admin_password }}"
+      SEMAPHORE_ACCESS_KEY_ENCRYPTION: "{{ semaphore_secrets.access_key_encryption }}"
+    volumes:
+      - semaphore-data:/etc/semaphore
+
+volumes:
+  semaphore-data:
