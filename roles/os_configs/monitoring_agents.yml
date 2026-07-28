@@ -109,6 +109,11 @@
       when: not cadvisor_bin.stat.exists
 
     - name: Deploy cAdvisor systemd unit
+      # Port 8081, not cAdvisor's default 8080 -- Jenkins' own web UI already
+      # binds 8080 on the jenkins host, which silently left cadvisor down
+      # there on the first fleet rollout. Kept consistent across every host
+      # (rather than special-casing Jenkins) to match a single scrape port
+      # in prometheus.yml.j2.
       copy:
         dest: /etc/systemd/system/cadvisor.service
         content: |
@@ -118,7 +123,7 @@
 
           [Service]
           User=root
-          ExecStart=/usr/local/bin/cadvisor -port=8080 -docker_only=false
+          ExecStart=/usr/local/bin/cadvisor -port=8081 -docker_only=false
           Restart=on-failure
 
           [Install]
@@ -138,6 +143,12 @@
         name: cadvisor
         enabled: yes
         state: started
+
+    - name: Restart cAdvisor if unit changed
+      systemd:
+        name: cadvisor
+        state: restarted
+      when: cadvisor_unit.changed
 
 - name: Deploy promtail (log shipping agent to Loki)
   hosts: BastionHosts:!bastion.prod.levantine.io:Jenkins:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster

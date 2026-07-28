@@ -32,7 +32,7 @@ scrape_configs:
     static_configs:
       - targets:
 {% for h in monitored_hosts %}
-          - "{{ h.host }}:8080"
+          - "{{ h.host }}:8081"
 {% endfor %}
         labels:
           job: cadvisor
