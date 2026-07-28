@@ -28,8 +28,12 @@
         mode: "0640"
       register: compose_file
 
+    - name: Pull latest Semaphore image
+      command: docker compose pull
+      args:
+        chdir: /opt/semaphore
+
     - name: Start Semaphore via docker compose
-      community.docker.docker_compose_v2:
-        project_src: /opt/semaphore
-        state: present
-        pull: always
+      command: docker compose up -d
+      args:
+        chdir: /opt/semaphore
