@@ -39,6 +39,7 @@
         volumes:
           - "/var/run/docker.sock:/tmp/docker.sock:ro"
         detach: yes
+        restart_policy: unless-stopped
         container_default_behavior: no_defaults
       # Also fixed: this used to only run `when: image_pull.changed`, which
       # meant a from-scratch host that had already pulled the image once

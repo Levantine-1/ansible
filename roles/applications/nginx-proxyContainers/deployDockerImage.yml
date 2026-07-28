@@ -61,11 +61,17 @@
     # NOTE: 2026-07-26 Splunk logging disabled -- HEC was never set up on the
     # rebuilt Splunk host post-migration (see ansible README). Containers use
     # Docker's default json-file logging until that's addressed.
+    # restart_policy: without it, a crashed container just stays dead until
+    # someone notices and redeploys -- this is exactly how the `portfolio`
+    # container ended up silently missing from dockerhost1 entirely,
+    # causing a 502 on levantine.io that went unnoticed until the new
+    # Alertmanager->Zammad pipeline caught it.
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
         image: "{{ loaded_image_name.stdout }}"
         env: "{{ env_vars }}"
+        restart_policy: unless-stopped
 
     - name: Prune Docker
       command: docker system prune -af

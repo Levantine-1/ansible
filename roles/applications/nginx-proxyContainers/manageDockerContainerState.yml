@@ -37,6 +37,7 @@
           - /var/run/docker.sock:/tmp/docker.sock:ro
         ports:
           - "80:80"
+        restart_policy: unless-stopped
       when:
         - container_action in ['start', 'restart']
         - "'nginx-proxy' in container_names"
@@ -46,6 +47,7 @@
         name: "{{ item }}"
         state: started
         env: "{{ supported_containers[item].env_vars | default([]) }}"
+        restart_policy: unless-stopped
       loop: "{{ container_names }}"
       when:
         - container_action in ['start', 'restart']
