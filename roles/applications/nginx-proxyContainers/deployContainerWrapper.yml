@@ -1,0 +1,7 @@
+---
+# Combines download (from ECR, runs on localhost/the ansible controller)
+# and deploy (onto VMWareDockerHosts) into one playbook so this is a
+# single Semaphore template, matching the original Jenkins DeployContainer
+# job which ran both steps from one parameterized build.
+- import_playbook: downloadDockerImage.yml
+- import_playbook: deployDockerImage.yml

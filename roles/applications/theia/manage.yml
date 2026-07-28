@@ -1,0 +1,10 @@
+---
+# Wraps start/stop/deploy.yml behind a single `theia_action` var so this is
+# one Semaphore template with a choice survey variable, matching the
+# original Jenkins Manage_Theia_Services job's job_parameter choice.
+- import_playbook: start.yml
+  when: theia_action == 'start'
+- import_playbook: stop.yml
+  when: theia_action == 'stop'
+- import_playbook: deploy.yml
+  when: theia_action == 'deploy'
