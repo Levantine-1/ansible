@@ -24,12 +24,12 @@
         tag: latest
       register: image_pull
 
-    - name: Retrieve SplunkForwarder Token from HashiCorp Vault
-      # NOTE: This token is created manually under splunk>settings>data inputs>HTTP Event Collector and stored in vault at path below
-      set_fact:
-        splunk_creds: "{{ lookup('hashi_vault', 'secret=kv/data/splunk/http_access_tokens/docker token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
-      when: image_pull.changed
-
+    # NOTE: 2026-07-26 Splunk logging disabled -- HEC was never set up on the
+    # rebuilt Splunk host post-migration (see ansible README). Containers use
+    # Docker's default json-file logging until that's addressed. This matches
+    # the same fix already applied in deployDockerImage.yml; this task hadn't
+    # been updated to match, which caused container start to fail outright
+    # ("connect: connection refused" to Splunk's HEC) on a from-scratch host.
     - name: Run nginx-proxy container
       docker_container:
         name: nginx-proxy
@@ -40,13 +40,12 @@
           - "/var/run/docker.sock:/tmp/docker.sock:ro"
         detach: yes
         container_default_behavior: no_defaults
-        log_driver: splunk
-        log_options:
-          splunk-token: "{{ splunk_creds.token }}"
-          splunk-url: "http://{{ splunk.server.host }}:{{ splunk.forwarders.http_event_collector_port }}"
-          splunk-insecureskipverify: "{{ splunk.forwarders.insecureskipverify }}"
-          splunk-source: "nginx-proxy"
-      when: image_pull.changed
+      # Also fixed: this used to only run `when: image_pull.changed`, which
+      # meant a from-scratch host that had already pulled the image once
+      # (e.g. a retried run) would never actually start the container --
+      # silently "skipped" instead of failed, masking the gap. Now starts
+      # it whenever it isn't already running, regardless of image pull state.
+      when: image_pull.changed or 'nginx-proxy' not in running_containers_raw.stdout
       register: container_start
 
     - name: Restart nginx-proxy container if image was pulled
