@@ -1,0 +1,112 @@
+---
+# Based on the official zammad-docker-compose project's docker-compose.yml
+# (https://github.com/zammad/zammad-docker-compose), trimmed to drop
+# zammad-elasticsearch and zammad-backup: ES is optional and only buys
+# fast fuzzy full-text search at scale, which this low-ticket-volume
+# homelab doesn't need -- Postgres's built-in search is adequate.
+# ELASTICSEARCH_ENABLED: "false" below tells the rails app not to expect
+# one. No network_mode: host here (unlike the semaphore/monitoring
+# stacks) -- these containers need Docker's own internal DNS to reach
+# each other by service name (zammad-postgresql, zammad-redis, etc), and
+# only zammad-nginx's port needs to be reachable from the host.
+x-shared:
+  zammad-service: &zammad-service
+    environment: &zammad-environment
+      MEMCACHE_SERVERS: zammad-memcached:11211
+      POSTGRESQL_DB: zammad_production
+      POSTGRESQL_HOST: zammad-postgresql
+      POSTGRESQL_USER: zammad
+      POSTGRESQL_PASS: "{{ zammad_secrets.postgres_password }}"
+      POSTGRESQL_PORT: 5432
+      REDIS_URL: redis://zammad-redis:6379
+      ELASTICSEARCH_ENABLED: "false"
+      TZ: UTC
+    image: ghcr.io/zammad/zammad:latest
+    restart: unless-stopped
+    volumes:
+      - zammad-storage:/opt/zammad/storage
+    depends_on:
+      zammad-memcached:
+        condition: service_healthy
+      zammad-postgresql:
+        condition: service_healthy
+      zammad-redis:
+        condition: service_healthy
+
+services:
+  zammad-init:
+    <<: *zammad-service
+    command: ["zammad-init"]
+    restart: on-failure
+    user: 0:0
+
+  zammad-memcached:
+    command: memcached -m 256M
+    image: memcached:1.6.45-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "11211"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  zammad-nginx:
+    <<: *zammad-service
+    command: ["zammad-nginx"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      zammad-railsserver:
+        condition: service_healthy
+
+  zammad-postgresql:
+    environment:
+      POSTGRES_DB: zammad_production
+      POSTGRES_USER: zammad
+      POSTGRES_PASSWORD: "{{ zammad_secrets.postgres_password }}"
+    image: postgres:17.10-alpine
+    restart: unless-stopped
+    volumes:
+      - zammad-postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+  zammad-railsserver:
+    <<: *zammad-service
+    command: ["zammad-railsserver"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  zammad-redis:
+    image: redis:8.8-alpine
+    restart: unless-stopped
+    volumes:
+      - zammad-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  zammad-scheduler:
+    <<: *zammad-service
+    command: ["zammad-scheduler"]
+
+  zammad-websocket:
+    <<: *zammad-service
+    command: ["zammad-websocket"]
+
+volumes:
+  zammad-postgresql-data:
+  zammad-redis-data:
+  zammad-storage:

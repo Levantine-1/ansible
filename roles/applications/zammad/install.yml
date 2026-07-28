@@ -1,0 +1,41 @@
+---
+# Zammad -- FOSS ticketing, no Elasticsearch (see docker-compose.yml.j2).
+# Runs on `service` alongside Semaphore and the monitoring stack. Once
+# deployed, Alertmanager's webhook receiver is pointed at Zammad's API to
+# turn alerts into tickets (roles/applications/monitoring/files/
+# alertmanager.yml's placeholder receiver).
+- name: Deploy Zammad
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Retrieve Zammad secrets from HashiCorp Vault
+      set_fact:
+        zammad_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/zammad/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    - name: Create /opt/zammad directory
+      file:
+        path: /opt/zammad
+        state: directory
+        owner: automation
+        group: automation
+        mode: "0750"
+
+    - name: Deploy docker-compose.yml
+      # 0640 not 0644: has the Postgres password interpolated directly in.
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: /opt/zammad/docker-compose.yml
+        owner: automation
+        group: automation
+        mode: "0640"
+
+    - name: Pull Zammad stack images
+      command: docker compose pull
+      args:
+        chdir: /opt/zammad
+
+    - name: Start Zammad via docker compose
+      command: docker compose up -d
+      args:
+        chdir: /opt/zammad
