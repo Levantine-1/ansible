@@ -1,5 +1,15 @@
 apiVersion: 1
 
+# The original provisioning (before this file pinned an explicit uid)
+# left a "Prometheus" datasource in Grafana's DB with an auto-generated
+# uid. Re-provisioning with uid: prometheus without this directive
+# crash-looped Grafana on startup ("Datasource provisioning error: data
+# source not found") trying to reconcile the identity change in place --
+# deleteDatasources forces a clean delete-then-recreate instead.
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
 datasources:
   - name: Prometheus
     uid: prometheus
