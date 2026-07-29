@@ -56,6 +56,8 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - /opt/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - /opt/monitoring/grafana-dashboards-provider.yml:/etc/grafana/provisioning/dashboards/provider.yml:ro
+      - /opt/monitoring/dashboards:/var/lib/grafana/dashboards:ro
 
   loki:
     image: grafana/loki:latest

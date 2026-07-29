@@ -40,6 +40,28 @@
         - blackbox.yml
         - loki-config.yml
         - grafana-datasources.yml
+        - grafana-dashboards-provider.yml
+      register: static_configs
+
+    - name: Create Grafana dashboards directory
+      file:
+        path: /opt/monitoring/dashboards
+        state: directory
+        owner: automation
+        group: automation
+        mode: "0755"
+
+    - name: Deploy Grafana dashboard JSON files
+      copy:
+        src: "files/dashboards/{{ item }}"
+        dest: "/opt/monitoring/dashboards/{{ item }}"
+        owner: automation
+        group: automation
+        mode: "0644"
+      loop:
+        - fleet-overview.json
+        - host-detail.json
+      register: dashboard_files
 
     - name: Deploy alertmanager.yml (templated to point at zammad-relay)
       template:
@@ -94,6 +116,14 @@
     - name: Restart Alertmanager if its config changed
       command: docker restart alertmanager
       when: alertmanager_config.changed
+
+    - name: Restart Grafana if its datasource/dashboard config changed
+      # Same bind-mount-inode issue as Prometheus/Alertmanager above --
+      # datasource provisioning in particular is only read at Grafana's
+      # own startup, so a stale mount here means dashboards silently
+      # query a Prometheus URL that 404s instead of erroring loudly.
+      command: docker restart grafana
+      when: static_configs.changed or dashboard_files.changed
 
     # zammad-relay: turns Alertmanager webhook notifications into Zammad
     # tickets (dedup'd by alert fingerprint, auto-closed on resolve). A
