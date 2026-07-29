@@ -62,7 +62,11 @@ server {
         # Confirmed live: the POST request carried no Cookie header at
         # all. Stripping Secure here (safe on our home/VPN-only network)
         # lets the session actually round-trip.
-        proxy_cookie_flags * nosecure;
+        # The wildcard form (`* nosecure`) silently didn't rewrite
+        # anything -- confirmed live against OPNsense's duplicate
+        # same-name Set-Cookie headers. Exact cookie names work.
+        proxy_cookie_flags PHPSESSID nosecure;
+        proxy_cookie_flags cookie_test nosecure;
     }
 
     location /ui/ {
@@ -72,7 +76,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cookie_flags * nosecure;
+        # The wildcard form (`* nosecure`) silently didn't rewrite
+        # anything -- confirmed live against OPNsense's duplicate
+        # same-name Set-Cookie headers. Exact cookie names work.
+        proxy_cookie_flags PHPSESSID nosecure;
+        proxy_cookie_flags cookie_test nosecure;
     }
 
     location /api/ {
@@ -82,7 +90,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cookie_flags * nosecure;
+        # The wildcard form (`* nosecure`) silently didn't rewrite
+        # anything -- confirmed live against OPNsense's duplicate
+        # same-name Set-Cookie headers. Exact cookie names work.
+        proxy_cookie_flags PHPSESSID nosecure;
+        proxy_cookie_flags cookie_test nosecure;
     }
 
     # Vault's UI also has no subpath config and *also* serves its assets
