@@ -54,6 +54,15 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # OPNsense sets its PHPSESSID cookie with the Secure flag (it's
+        # normally HTTPS-only). This frontend is plain HTTP, so browsers
+        # correctly refuse to ever send a Secure cookie back over it --
+        # every POST looked like a brand-new session with no valid CSRF
+        # token, hence "CSRF check failed" on every login attempt.
+        # Confirmed live: the POST request carried no Cookie header at
+        # all. Stripping Secure here (safe on our home/VPN-only network)
+        # lets the session actually round-trip.
+        proxy_cookie_flags * nosecure;
     }
 
     location /ui/ {
@@ -63,6 +72,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cookie_flags * nosecure;
     }
 
     location /api/ {
@@ -72,6 +82,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cookie_flags * nosecure;
     }
 
     # Vault's UI also has no subpath config and *also* serves its assets
