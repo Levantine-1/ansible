@@ -38,12 +38,20 @@ host_entries: |
     192.168.1.80 kube-c-00.internal.levantine.io
     192.168.1.90 kube-w-00.internal.levantine.io
     192.168.1.91 kube-w-01.internal.levantine.io
+    10.69.69.139 3800xt.internal.levantine.io
+    10.69.69.116 fx8200.internal.levantine.io
 
 # Single source of truth for Prometheus scrape targets (node_exporter +
 # cAdvisor, deployed fleet-wide by roles/os_configs/monitoring_agents.yml)
 # and for Blackbox Exporter uptime probes. Kept separate from host_entries
 # above since not every host we resolve by name is necessarily monitored
 # (e.g. bastion.prod.levantine.io, the AWS EC2 host, isn't in this list).
+#
+# The two ProxmoxHosts entries use raw IPs, not the .internal.levantine.io
+# names added to host_entries above -- Prometheus runs in a Docker
+# container on `service` and doesn't automatically see the host's
+# /etc/hosts, so resolving these by name here would silently break
+# scraping rather than just being a cosmetic inconsistency.
 monitored_hosts:
     - { name: vmwarebastion, host: vmwarebastion.internal.levantine.io }
     - { name: theia, host: theia.internal.levantine.io }
@@ -57,3 +65,5 @@ monitored_hosts:
     - { name: kube-c-00, host: kube-c-00.internal.levantine.io }
     - { name: kube-w-00, host: kube-w-00.internal.levantine.io }
     - { name: kube-w-01, host: kube-w-01.internal.levantine.io }
+    - { name: 3800xt, host: "10.69.69.139" }
+    - { name: fx8200, host: "10.69.69.116" }

@@ -69,10 +69,21 @@ log "rebuilding fleet"
 sudo terraform apply -auto-approve \
   -var-file="$TFVARS" -var "vault_token=${TOKEN}"
 
+# Re-discover from state *after* apply, not the pre-destroy TARGETS list --
+# a resource that's brand-new to state this run (e.g. a whole new resource
+# block just added to vms.tf) wouldn't be in the pre-apply capture, so
+# reusing it here would silently skip SSH-waiting/provisioning newly
+# created VMs even though terraform just created them. This keeps the
+# script correct for that case without needing a throwaway first apply.
+log "discovering current VM resources (post-apply, includes anything new this run)"
+CURRENT_TARGETS=$(sudo terraform state list \
+  | grep '^module\.proxmox_resources\.proxmox_virtual_environment_vm\.' \
+  | grep -v '\.service$')
+
 log "waiting for SSH on rebuilt hosts"
-HOSTS=$(echo "$TARGETS" \
+HOSTS=$(echo "$CURRENT_TARGETS" \
   | sed 's/^module\.proxmox_resources\.proxmox_virtual_environment_vm\.//' \
-  | sed -E 's/vms\["([^"]+)"\]/\1/' \
+  | sed -E 's/.*\["([^"]+)"\]$/\1/' \
   | sed 's/$/.internal.levantine.io/')
 for host in $HOSTS; do
   log "waiting for $host..."
