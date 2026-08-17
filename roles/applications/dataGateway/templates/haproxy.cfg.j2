@@ -40,8 +40,10 @@ frontend http_front
 backend http_back
    balance roundrobin
    {% for host in groups['DataGatewayK8Cluster'] %}
-   {% if hostvars[host].node == 'worker' %}
+   {# NodePort is exposed on every cluster node's IP regardless of node role
+      or which node the pod actually lands on, so all nodes are valid
+      backends here -- not just workers. Matters when the cluster is
+      scaled down to a single control-plane-only node (see production.ini),
+      where a worker-only filter would render an empty backend. #}
    server {{ hostvars[host].inventory_hostname_short }} {{ hostvars[host].inventory_hostname }}:{{ DataGatewayK8Cluster.serviceNodePort }} check
-
-   {% endif %}
    {% endfor %}

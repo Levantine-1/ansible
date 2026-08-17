@@ -51,6 +51,14 @@
     ansible.builtin.command: kubectl apply -f /etc/kubernetes/kube-flannel.yml
     when: node is defined and node == "controller"
 
+  - name: Allow the control-plane node to run workloads too
+    # kubeadm taints the control plane NoSchedule by default. Needed so a
+    # single-node cluster (workers scaled down for the portfolio demo, see
+    # production.ini) can actually schedule pods -- harmless to leave
+    # applied even when scaled back up to the full 3-node demo state.
+    ansible.builtin.command: kubectl taint nodes {{ ansible_hostname }} node-role.kubernetes.io/control-plane:NoSchedule-
+    when: node is defined and node == "controller"
+
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>     OH MY GOD WHY DOESN'T THIS WORK?!   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
         # THIS FOLLOWS THE REGISTRY SERVER DOCUMENTATION EXACTLY BUT I KEEP GETTING THIS DAMN ERROR
