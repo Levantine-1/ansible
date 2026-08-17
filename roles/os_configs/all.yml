@@ -13,11 +13,12 @@
 - import_playbook: configureHostname.yml
 - import_playbook: configureDHCP.yml
 - import_playbook: configure_DNS_Resolver.yml
-# NOTE: 2026-07-27 un-deprecated -- OPNsense's resolver has no records for
-# internal.levantine.io (confirmed via direct query: NXDOMAIN), so this
-# static /etc/hosts block is still what actually makes internal hostname
-# resolution work. Entries come from group_vars/all's host_entries.
-- import_playbook: configureHostFile.yml
+# configureHostFile.yml (the /etc/hosts workaround briefly "un-deprecated"
+# on 2026-07-27 because OPNsense had no records for internal.levantine.io)
+# is retired as of 2026-08-17: the actual gap is fixed now, via Unbound
+# Host Overrides in OPNsense itself (all 15 fleet hosts, confirmed
+# resolving via direct DNS query). No host needs a static /etc/hosts
+# entry for internal hostname resolution anymore.
 # deploySSLCerts.yml must run BEFORE deployRPConfigs.yml: nginx's reverse
 # proxy config references /etc/nginx/certs/<domain>/fullchain.pem, and
 # nginx fails to restart if that file doesn't exist yet. Only ever worked

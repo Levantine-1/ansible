@@ -12,46 +12,21 @@ hashicorp:
         address: http://vault.internal.levantine.io:8200
         # Token in ansible-vault
 
-# OPNsense's DNS resolver has no records for internal.levantine.io (queries
-# for e.g. vault.internal.levantine.io NXDOMAIN there) -- despite
-# configureHostFile.yml being marked "deprecated by OPNsense", this static
-# /etc/hosts block is still the thing that actually makes internal hostname
-# resolution work fleet-wide. Kept in sync here so every host in all.yml's
-# bootstrap gets it, instead of only whichever hosts had it hand-added.
-#
-# Must be kept in sync with terraform/proxmox/vms.tf's locals.vms map (IPs
-# here match each entry's ip_address) plus service.tf. Missing entries
-# here broke the first real rebuild-fleet.sh run: `service` (the ansible
-# controller) couldn't resolve kube-c-00/kube-w-00/kube-w-01/pxdbc1-3/
-# proxysql/splunk at all, since only a partial list had been added by
-# hand for hosts worked with directly earlier in the project.
-host_entries: |
-    192.168.1.10 vmwarebastion.internal.levantine.io
-    192.168.1.30 theia.internal.levantine.io
-    192.168.1.31 dockerhost1.internal.levantine.io
-    192.168.1.41 vault.internal.levantine.io
-    192.168.1.50 service.internal.levantine.io
-    192.168.1.61 pxdbc1.internal.levantine.io
-    192.168.1.62 pxdbc2.internal.levantine.io
-    192.168.1.63 pxdbc3.internal.levantine.io
-    192.168.1.71 proxysql.internal.levantine.io
-    192.168.1.80 kube-c-00.internal.levantine.io
-    192.168.1.90 kube-w-00.internal.levantine.io
-    192.168.1.91 kube-w-01.internal.levantine.io
-    10.69.69.139 3800xt.internal.levantine.io
-    10.69.69.116 fx8200.internal.levantine.io
-
 # Single source of truth for Prometheus scrape targets (node_exporter +
 # cAdvisor, deployed fleet-wide by roles/os_configs/monitoring_agents.yml)
-# and for Blackbox Exporter uptime probes. Kept separate from host_entries
-# above since not every host we resolve by name is necessarily monitored
-# (e.g. bastion.prod.levantine.io, the AWS EC2 host, isn't in this list).
+# and for Blackbox Exporter uptime probes -- not every host we can resolve
+# by name is necessarily monitored (e.g. bastion.prod.levantine.io, the
+# AWS EC2 host, isn't in this list).
 #
-# The two ProxmoxHosts entries use raw IPs, not the .internal.levantine.io
-# names added to host_entries above -- Prometheus runs in a Docker
-# container on `service` and doesn't automatically see the host's
-# /etc/hosts, so resolving these by name here would silently break
-# scraping rather than just being a cosmetic inconsistency.
+# The two ProxmoxHosts entries use raw IPs rather than hostnames --
+# Prometheus runs in a Docker container on `service`, which doesn't
+# automatically inherit the host's DNS config the same way a native
+# process would, so resolving these by name here would risk silently
+# breaking scraping rather than just being a cosmetic inconsistency.
+# (Internal hostname resolution itself is real DNS now -- Unbound Host
+# Overrides in OPNsense -- not an /etc/hosts workaround; see
+# roles/os_configs/all.yml's comment where configureHostFile.yml used to
+# be imported.)
 monitored_hosts:
     - { name: vmwarebastion, host: vmwarebastion.internal.levantine.io }
     - { name: theia, host: theia.internal.levantine.io }
