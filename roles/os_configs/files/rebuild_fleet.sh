@@ -61,12 +61,19 @@ while IFS= read -r addr; do
 done <<< "$TARGETS"
 
 log "destroying fleet"
-sudo terraform destroy -auto-approve \
+sudo terraform destroy -auto-approve -parallelism=3 \
   -var-file="$TFVARS" -var "vault_token=${TOKEN}" \
   "${TARGET_ARGS[@]}"
 
 log "rebuilding fleet"
-sudo terraform apply -auto-approve \
+# -parallelism=3 (default 10): 8 VMs landing on FX8200's local-lvm at once
+# blew past Proxmox's own LVM lock handling -- "trying to acquire lock...
+# got timeout" on the thin pool, with cascading "hotplug problem" errors on
+# the VMs queued behind the timed-out one. Found running this for real
+# against both hosts; the original host's SSD1TB storage handled the
+# lower VM count on it fine even at default parallelism, but there's no
+# reason to risk the same failure mode there as the fleet grows.
+sudo terraform apply -auto-approve -parallelism=3 \
   -var-file="$TFVARS" -var "vault_token=${TOKEN}"
 
 # Re-discover from state *after* apply, not the pre-destroy TARGETS list --
