@@ -4,7 +4,13 @@ global:
 
 alerting:
   alertmanagers:
-    - static_configs:
+    # Alertmanager runs with --web.route-prefix=/alertmanager/, which
+    # (like Prometheus's own --web.route-prefix) covers its entire HTTP
+    # surface, API included -- without path_prefix here Prometheus was
+    # posting alerts to the unprefixed /api/v2/alerts, which 404s. Alert
+    # delivery was silently broken until this was added.
+    - path_prefix: /alertmanager
+      static_configs:
         - targets: ["localhost:9093"]
 
 rule_files:
@@ -12,10 +18,14 @@ rule_files:
 
 scrape_configs:
   - job_name: prometheus
+    # Prometheus itself also runs with --web.route-prefix=/prometheus/,
+    # so its own /metrics lives under that prefix too.
+    metrics_path: /prometheus/metrics
     static_configs:
       - targets: ["localhost:9090"]
 
   - job_name: alertmanager
+    metrics_path: /alertmanager/metrics
     static_configs:
       - targets: ["localhost:9093"]
 
