@@ -17,3 +17,23 @@ supported_containers:
   processmining:
     env_vars:
       VIRTUAL_HOST: processmining.levantine.io
+
+  pet-care:
+    env_vars:
+      VIRTUAL_HOST: pet-care.levantine.io
+
+  dental-care:
+    env_vars:
+      VIRTUAL_HOST: dental-care.levantine.io
+
+  education-platform:
+    env_vars:
+      VIRTUAL_HOST: education-platform.levantine.io
+
+  real-estate:
+    env_vars:
+      VIRTUAL_HOST: real-estate.levantine.io
+
+  booking-movie-ticket:
+    env_vars:
+      VIRTUAL_HOST: booking-movie-ticket.levantine.io
