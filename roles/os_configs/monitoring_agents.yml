@@ -27,9 +27,19 @@
         shell: /usr/sbin/nologin
         create_home: no
 
-    - name: Download and extract node_exporter
+    - name: Download node_exporter tarball
+      # curl, not unarchive's remote_src HTTP fetch -- ansible-core 2.14's
+      # bundled module_utils/urls.py passes cert_file/key_file to
+      # http.client.HTTPSConnection, which Python 3.12+ removed entirely.
+      # Bit everyone on Proxmox 9 (Trixie, Python 3.13) hosts. curl sidesteps
+      # ansible's HTTP-fetch code path altogether, regardless of target
+      # Python version.
+      command: curl -sL -o /tmp/node_exporter.tar.gz "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+      when: not node_exporter_bin.stat.exists
+
+    - name: Extract node_exporter tarball
       unarchive:
-        src: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        src: /tmp/node_exporter.tar.gz
         dest: /tmp
         remote_src: yes
       when: not node_exporter_bin.stat.exists
@@ -46,8 +56,11 @@
 
     - name: Clean up extracted archive
       file:
-        path: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
+        - /tmp/node_exporter.tar.gz
       when: not node_exporter_bin.stat.exists
 
     - name: Deploy node_exporter systemd unit
@@ -100,9 +113,14 @@
       # it just reports host/cgroup metrics and skips container-specific
       # ones on those hosts. On hosts that do have Docker, it auto-detects
       # /var/run/docker.sock and reports full container metrics too.
-      get_url:
-        url: "https://github.com/google/cadvisor/releases/download/v{{ cadvisor_version }}/cadvisor-v{{ cadvisor_version }}-linux-amd64"
-        dest: /usr/local/bin/cadvisor
+      # curl, not get_url -- see the node_exporter download task above for
+      # why (ansible-core 2.14 / Python 3.12+ HTTPSConnection incompatibility).
+      command: curl -sL -o /usr/local/bin/cadvisor "https://github.com/google/cadvisor/releases/download/v{{ cadvisor_version }}/cadvisor-v{{ cadvisor_version }}-linux-amd64"
+      when: not cadvisor_bin.stat.exists
+
+    - name: Set cAdvisor binary permissions
+      file:
+        path: /usr/local/bin/cadvisor
         owner: root
         group: root
         mode: "0755"
@@ -169,9 +187,15 @@
         state: present
       when: not promtail_bin.stat.exists
 
-    - name: Download and extract promtail
+    - name: Download promtail archive
+      # curl, not unarchive's remote_src HTTP fetch -- see the node_exporter
+      # download task above for why.
+      command: curl -sL -o /tmp/promtail-linux-amd64.zip "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-linux-amd64.zip"
+      when: not promtail_bin.stat.exists
+
+    - name: Extract promtail archive
       unarchive:
-        src: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-linux-amd64.zip"
+        src: /tmp/promtail-linux-amd64.zip
         dest: /tmp
         remote_src: yes
       when: not promtail_bin.stat.exists
@@ -188,8 +212,11 @@
 
     - name: Clean up extracted binary
       file:
-        path: /tmp/promtail-linux-amd64
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /tmp/promtail-linux-amd64
+        - /tmp/promtail-linux-amd64.zip
       when: not promtail_bin.stat.exists
 
     - name: Create promtail user
