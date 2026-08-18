@@ -3,9 +3,9 @@
 # environment. That was implicitly true when Jenkins ran ansible-playbook
 # directly on its own host, but Semaphore executes ansible-playbook from
 # inside its own minimal container, where "localhost" has none of that.
-# deployDockerImage.yml's copy task fetches the resulting tarball off of
-# `service` explicitly rather than assuming it shares a filesystem with
-# wherever ansible-playbook itself happens to run.
+# deployDockerImage.yml pulls the resulting image from the local registry
+# below rather than assuming it shares a filesystem with wherever
+# ansible-playbook itself happens to run.
 - name: Download Docker Image
   hosts: service
   gather_facts: true
@@ -53,13 +53,38 @@
       debug:
         msg: "{{ pulled_image.stdout }}"
 
-    - name: Save Docker Image to Tarball
-      shell: "docker save {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}:{{ latest_image.stdout }} -o /tmp/{{ container_name }}_latest.tar"
+    # Moves the image to dockerhost1 via a local registry push/pull instead
+    # of ansible's fetch+copy (which base64-encodes the whole file into a
+    # single JSON blob over SSH -- fails outright on large images, confirmed
+    # on processmining's ~400MB image). Mirrors the pattern already proven
+    # in dataGateway/dataGatewayK8Configs.yml. Deleted and recreated every
+    # run (same disk-consumption workaround documented there) since this
+    # registry is purely a transit mechanism, not persistent storage.
+    - name: Delete the local Docker image registry
+      docker_container:
+        name: registry
+        state: absent
 
-    - name: Set read permissions on the file
-      file:
-        path: "/tmp/{{ container_name }}_latest.tar"
-        mode: "a+r"
+    - name: Recreate the local Docker image registry
+      docker_container:
+        name: registry
+        image: registry:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "5000:5000"
+        env:
+          REGISTRY_HTTP_ADDR: "0.0.0.0:5000"
+
+    - name: Tag the Docker image for the local registry
+      # localhost:5000, not the FQDN -- Docker trusts 127.0.0.0/8 registries
+      # as insecure by default, so no daemon.json change is needed here for
+      # the push half (dockerhost1's pull half does need one, see
+      # installDocker.yml).
+      command: "docker tag {{ account_id }}.dkr.ecr.{{ default_region }}.amazonaws.com/{{ container_name }}:{{ latest_image.stdout }} localhost:5000/{{ container_name }}:{{ latest_image.stdout }}"
+
+    - name: Push the Docker image to the local registry
+      command: "docker push localhost:5000/{{ container_name }}:{{ latest_image.stdout }}"
 
     - name: Prune Docker
       command: docker system prune -af

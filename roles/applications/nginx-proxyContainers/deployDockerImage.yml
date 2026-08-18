@@ -16,21 +16,15 @@
         msg: "Checking to see if container is supported"
       failed_when: container_name == 'nginx-proxy' or container_name not in supported_containers
 
-    - name: Fetch tarball from service to the ansible controller
-      # downloadDockerImage.yml saves the tarball on `service` (not
-      # necessarily the same filesystem as wherever ansible-playbook
-      # itself runs -- e.g. inside Semaphore's own container), so pull it
-      # here explicitly rather than assuming a shared local filesystem.
-      fetch:
-        src: "/tmp/{{ container_name }}_latest.tar"
-        dest: "/tmp/{{ container_name }}_latest.tar"
-        flat: yes
-      delegate_to: service.internal.levantine.io
-
-    - name: Copy docker image tarball from ansible controller to remote host
-      copy:
-        src: "/tmp/{{ container_name }}_latest.tar"
-        dest: "/tmp/{{ container_name }}_latest.tar"
+    - name: Set local registry image reference
+      # Pulled from service's local registry (populated by
+      # downloadDockerImage.yml) instead of fetched/copied as a tarball --
+      # see the comment there for why. Reusing the tag downloadDockerImage.yml
+      # just pushed (via hostvars, not a fresh ECR lookup) guarantees this
+      # pulls exactly what was just built, not whatever happens to be
+      # "latest" in ECR by the time this play runs.
+      set_fact:
+        local_registry_image: "service.internal.levantine.io:5000/{{ container_name }}:{{ hostvars['service.internal.levantine.io']['latest_image']['stdout'] }}"
 
     - name: Stop the old Docker container (if exists)
       docker_container:
@@ -40,19 +34,10 @@
         container_default_behavior: no_defaults
       ignore_errors: yes
 
-    - name: Extract image name and tag from tarball
-      shell: "docker load --input /tmp/{{ container_name }}_latest.tar | awk '{print $3}'"
-      register: loaded_image_name
-
-    - name: Loaded docker image name
-      debug:
-        msg: "{{ loaded_image_name.stdout }}"
-
-    - name: Load Docker Image from Tarball
+    - name: Pull Docker Image from local registry
       docker_image:
-        name: "{{ loaded_image_name.stdout }}"
-        load_path: "/tmp/{{ container_name }}_latest.tar"
-        source: load
+        name: "{{ local_registry_image }}"
+        source: pull
 
     - name: Retrieve DataGateway Secrets from HashiCorp Vault
       set_fact:
@@ -80,7 +65,7 @@
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
-        image: "{{ loaded_image_name.stdout }}"
+        image: "{{ local_registry_image }}"
         env: "{{ env_vars }}"
         restart_policy: unless-stopped
 
