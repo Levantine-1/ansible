@@ -1,0 +1,74 @@
+---
+# Included once per entry in install.yml's runner_instances, with `runner`
+# as the loop var. Idempotency is gated entirely on the presence of
+# .runner (written by config.sh on successful registration) -- every task
+# below only runs on a genuinely fresh instance.
+- name: "Create runner directory ({{ runner.name }})"
+  file:
+    path: "/opt/actions-runner/{{ runner.name }}"
+    state: directory
+    owner: automation
+    group: automation
+    mode: "0755"
+
+- name: "Check if runner is already registered ({{ runner.name }})"
+  stat:
+    path: "/opt/actions-runner/{{ runner.name }}/.runner"
+  register: runner_registered
+
+- name: "Download and extract the runner package ({{ runner.name }})"
+  # Plain curl, not get_url/unarchive -- those hit an ansible-core/
+  # Python 3.12+ incompatibility on this fleet (see monitoring_agents.yml).
+  shell: >
+    curl -sL
+    https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz
+    | tar xz -C /opt/actions-runner/{{ runner.name }}
+  args:
+    creates: "/opt/actions-runner/{{ runner.name }}/run.sh"
+  when: not runner_registered.stat.exists
+
+- name: "Set ownership of runner directory ({{ runner.name }})"
+  file:
+    path: "/opt/actions-runner/{{ runner.name }}"
+    owner: automation
+    group: automation
+    recurse: yes
+  when: not runner_registered.stat.exists
+
+- name: "Get a fresh runner registration token ({{ runner.name }})"
+  # Registration tokens expire in ~1hr -- always fetched fresh, never
+  # stored. The PAT that creates them is the durable credential (Vault).
+  uri:
+    url: "https://api.github.com/repos/{{ runner.repo }}/actions/runners/registration-token"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ github_pats[runner.pat_vault_path] }}"
+      Accept: "application/vnd.github+json"
+    status_code: 201
+    body_format: json
+  register: registration_token
+  when: not runner_registered.stat.exists
+
+- name: "Configure the runner ({{ runner.name }})"
+  command: >
+    ./config.sh --unattended --replace
+    --url https://github.com/{{ runner.repo }}
+    --token {{ registration_token.json.token }}
+    --name dockerhost1-{{ runner.name }}
+    --labels self-hosted,dockerhost1
+  args:
+    chdir: "/opt/actions-runner/{{ runner.name }}"
+  become_user: automation
+  when: not runner_registered.stat.exists
+
+- name: "Install the runner as a systemd service ({{ runner.name }})"
+  command: ./svc.sh install automation
+  args:
+    chdir: "/opt/actions-runner/{{ runner.name }}"
+  when: not runner_registered.stat.exists
+
+- name: "Start the runner service ({{ runner.name }})"
+  command: ./svc.sh start
+  args:
+    chdir: "/opt/actions-runner/{{ runner.name }}"
+  when: not runner_registered.stat.exists
