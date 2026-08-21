@@ -89,10 +89,12 @@ deliberately testing that the IaC still works).
      roles/applications/dataGateway/dataGatewayK8Configs.yml \
      --extra-vars "hashicorp_vault_token=<token>"
    ```
-   This also exercises the `createDatabaseIfNotExist`/`ddl-auto=update`
-   self-healing schema creation — the `datagateway` database won't exist on
-   a freshly-bootstrapped cluster, and shouldn't need a manual `CREATE
-   DATABASE` this time.
+   This now creates the `datagateway` database explicitly (an `mysql_db`
+   task — the JDBC `createDatabaseIfNotExist=true` flag doesn't actually
+   work through ProxySQL, confirmed by testing) and, once DataGateway
+   answers, regenerates thisper's API token and writes it to Vault. Both
+   are self-healing/idempotent: safe to run even when Percona *wasn't*
+   wiped.
 
 5. **Re-register the GitHub self-hosted runners** on the fresh `dockerhost1`:
    ```
@@ -111,6 +113,13 @@ deliberately testing that the IaC still works).
    the exact call). Doesn't require the runners from step 5 to be re-registered
    first, though step 5 still needs to happen for *future* CI-triggered
    deploys to work.
+
+   `thisper` specifically must be redeployed *after* step 4, not before:
+   step 4 writes a freshly-generated token to Vault (needed whenever
+   Percona's `auth_token` table was wiped), but thisper's container only
+   reads that value from its environment at container start — a redeploy
+   is what picks up a changed value. If `thisper`'s deploy already ran
+   earlier in this pass, trigger it again.
 
 ### Verification
 

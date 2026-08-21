@@ -8,13 +8,13 @@ DataGatewayK8Cluster:
     vault_aws_iam_key_path: kv/data/aws/iam_access_keys/terraform_datagateway
     vault_secret_path: kv/data/k8clusters/DataGatewayK8Cluster
 
-    # createDatabaseIfNotExist: the `datagateway` database has no migration
-    # tool creating it -- it previously existed only because someone
-    # created it by hand once, and went missing (found empty on all 3
-    # Percona nodes after a cluster rebuild). Self-heals now instead of
-    # silently 500ing on generateToken. sbuser needs global CREATE for
-    # this to work (granted alongside its existing datagateway.* grants).
-    spring_datasource_url: jdbc:mysql://proxysql.internal.levantine.io:6033/datagateway?useSSL=false&createDatabaseIfNotExist=true
+    # createDatabaseIfNotExist=true doesn't work through ProxySQL (confirmed
+    # sbuser has full grants, so it's not a permissions issue -- ProxySQL's
+    # protocol handling just doesn't honor it). The `datagateway` database
+    # has no migration tool creating it, so dataGatewayK8Configs.yml now
+    # explicitly creates it (mysql_db task) before deploying, instead of
+    # relying on this JDBC flag.
+    spring_datasource_url: jdbc:mysql://proxysql.internal.levantine.io:6033/datagateway?useSSL=false
     spring_datasource_username: sbuser
     spring_datasource_password_vault_path: kv/data/percona_cluster/proxy_sql
 

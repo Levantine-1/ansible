@@ -74,6 +74,24 @@
           set_fact:
             db_creds: "{{ lookup('hashi_vault', 'secret={{ DataGatewayK8Cluster.spring_datasource_password_vault_path }} token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
+        - name: Install MySQL client library for the mysql_db module
+          apt:
+            name: python3-pymysql
+            state: present
+
+        # createDatabaseIfNotExist=true doesn't work through ProxySQL (see
+        # group_vars/DataGatewayK8Cluster) -- the datagateway database has
+        # no migration tool, so create it explicitly before every deploy.
+        # A no-op once it already exists.
+        - name: Ensure the datagateway database exists
+          mysql_db:
+            name: datagateway
+            state: present
+            login_host: proxysql.internal.levantine.io
+            login_port: 6033
+            login_user: "{{ DataGatewayK8Cluster.spring_datasource_username }}"
+            login_password: "{{ db_creds[DataGatewayK8Cluster.spring_datasource_username] }}"
+
         - name: Create Kubernetes Deployment
           kubernetes.core.k8s:
             state: present
@@ -124,6 +142,42 @@
                     protocol: TCP
                 selector:
                   app: datagateway
+
+        # thisper's Authorization header only validates against a row in
+        # Percona's auth_token table -- which has no backup and gets wiped
+        # by a Percona rebuild (see roles/os_configs/files/rebuild_fleet.sh
+        # header). generateToken(seed) is deterministic (UUID from
+        # seed+fixed salt), so re-running it here with the same seed either
+        # no-ops (row already exists, insert is caught and ignored server
+        # side) or re-creates the exact same token thisper already has
+        # cached -- self-healing the same way the DB-creation task above
+        # does. Vault ends up holding the right value either way; thisper
+        # itself still needs a redeploy to pick up a *changed* value (env
+        # vars are baked in at container start), which is why this is a
+        # separate documented step in disaster-recovery.md rather than
+        # triggered from here.
+        - name: Wait for DataGateway to accept requests
+          uri:
+            url: "http://localhost:{{ DataGatewayK8Cluster.serviceNodePort }}/generateToken"
+            method: POST
+            body_format: json
+            body:
+              email: thisper-service@levantine.io
+            status_code: 200
+          register: thisper_token_result
+          until: thisper_token_result.status is defined and thisper_token_result.status == 200
+          retries: 30
+          delay: 10
+          ignore_errors: yes # Pods may still be rolling out; matches the retry pattern used for Percona's readiness wait.
+
+        - name: Store thisper's DataGateway API key in Vault
+          community.hashi_vault.vault_write:
+            url: "{{ hashicorp.vault.address }}"
+            token: "{{ hashicorp_vault_token }}"
+            path: "{{ DataGatewayK8Cluster.vault_secret_path }}/thisperAPIKey"
+            data:
+              data:
+                api_key: "{{ thisper_token_result.content | trim | trim('\"') }}"
 
         - name: Configure HA Proxy
           template:
