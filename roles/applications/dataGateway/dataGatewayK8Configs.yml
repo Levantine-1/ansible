@@ -17,6 +17,7 @@
         AWS_SECRET_ACCESS_KEY: "{{ aws_creds.secret_key }}"
       aws_ecr_repo_path: "{{ aws.account_id }}.dkr.ecr.{{ aws.default_region }}.amazonaws.com/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}"
       local_registry_path: "{{ DataGatewayK8Cluster.control_plane_endpoint }}:5000/{{ DataGatewayK8Cluster.aws_ecr_repo_name }}"
+      existing_thisper_token: "" # Overwritten below if a valid one is already in Vault; stays empty (not undefined) if that lookup fails.
 
     vars_files:
       - ../../../vault.yml
@@ -143,20 +144,45 @@
                 selector:
                   app: datagateway
 
+        - name: Wait for DataGateway to accept requests
+          uri:
+            url: "http://localhost:{{ DataGatewayK8Cluster.serviceNodePort }}/"
+            status_code: 200
+          register: datagateway_ready
+          until: datagateway_ready.status is defined and datagateway_ready.status == 200
+          retries: 30
+          delay: 10
+          ignore_errors: yes # Pods may still be rolling out; matches the retry pattern used for Percona's readiness wait.
+
         # thisper's Authorization header only validates against a row in
         # Percona's auth_token table -- which has no backup and gets wiped
         # by a Percona rebuild (see roles/os_configs/files/rebuild_fleet.sh
-        # header). generateToken(seed) is deterministic (UUID from
-        # seed+fixed salt), so re-running it here with the same seed either
-        # no-ops (row already exists, insert is caught and ignored server
-        # side) or re-creates the exact same token thisper already has
-        # cached -- self-healing the same way the DB-creation task above
-        # does. Vault ends up holding the right value either way; thisper
-        # itself still needs a redeploy to pick up a *changed* value (env
-        # vars are baked in at container start), which is why this is a
-        # separate documented step in disaster-recovery.md rather than
-        # triggered from here.
-        - name: Wait for DataGateway to accept requests
+        # header). /generateToken is NOT safe to call unconditionally on
+        # every deploy: auth_token.token_hash has no unique constraint, so
+        # calling it with the same deterministic seed twice (e.g. two
+        # deploys in a row with no data loss in between) inserts a second
+        # row instead of no-op'ing, and TokenInterceptor's findByTokenHash
+        # then throws NonUniqueResultException on every protected endpoint
+        # -- found live during the second soft-DR pass, after the first
+        # version of this fix did exactly that. So: test the existing
+        # Vault-stored token first, and only mint a new one if it's
+        # actually gone (i.e. Percona really was wiped).
+        - name: Look up the existing thisper token in Vault
+          set_fact:
+            existing_thisper_token: "{{ (lookup('hashi_vault', 'secret=' + DataGatewayK8Cluster.vault_secret_path + '/thisperAPIKey token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address)).api_key | default('') }}"
+          ignore_errors: yes # Path may not exist yet on a genuinely first-ever deploy; existing_thisper_token stays "" from the play-level default above.
+
+        - name: Check whether the existing thisper token still validates
+          uri:
+            url: "http://localhost:{{ DataGatewayK8Cluster.serviceNodePort }}/amIAGoodMouse"
+            headers:
+              Authorization: "{{ existing_thisper_token }}"
+            status_code: 200
+          register: existing_thisper_token_check
+          ignore_errors: yes # 401 here is the expected signal to mint a new one, not a failure.
+          when: existing_thisper_token | length > 0
+
+        - name: Mint a fresh thisper token (existing one is missing or invalid)
           uri:
             url: "http://localhost:{{ DataGatewayK8Cluster.serviceNodePort }}/generateToken"
             method: POST
@@ -165,11 +191,8 @@
               email: thisper-service@levantine.io
             status_code: 200
             return_content: yes
-          register: thisper_token_result
-          until: thisper_token_result.status is defined and thisper_token_result.status == 200
-          retries: 30
-          delay: 10
-          ignore_errors: yes # Pods may still be rolling out; matches the retry pattern used for Percona's readiness wait.
+          register: new_thisper_token
+          when: existing_thisper_token | length == 0 or existing_thisper_token_check.status | default(0) != 200
 
         - name: Store thisper's DataGateway API key in Vault
           community.hashi_vault.vault_write:
@@ -178,7 +201,8 @@
             path: "{{ DataGatewayK8Cluster.vault_secret_path }}/thisperAPIKey"
             data:
               data:
-                api_key: "{{ thisper_token_result.content | trim | trim('\"') }}"
+                api_key: "{{ new_thisper_token.content | trim | trim('\"') }}"
+          when: new_thisper_token is defined and new_thisper_token.content is defined
 
         - name: Configure HA Proxy
           template:
