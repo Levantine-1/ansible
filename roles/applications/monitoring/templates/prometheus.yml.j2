@@ -58,6 +58,19 @@ scrape_configs:
           - http://service.internal.levantine.io:3000
           - http://service.internal.levantine.io:8080
           - http://vault.internal.levantine.io:8200/v1/sys/health
+          # App VIRTUAL_HOSTs on the VMWareDockerHosts nginx-proxy fleet
+          # (see inventories/production/group_vars/VMWareDockerHosts) --
+          # these had no uptime coverage at all until now.
+          - https://thisper.levantine.io
+          - https://processmining.levantine.io
+          - https://pet-care.levantine.io
+          - https://dental-care.levantine.io
+          - https://education-platform.levantine.io
+          - https://real-estate.levantine.io
+          - https://booking-movie-ticket.levantine.io
+          # DataGateway: no VIRTUAL_HOST (k8s NodePort, not behind
+          # nginx-proxy), so probe the internal endpoint directly instead.
+          - http://kube-c-00.internal.levantine.io:30080/mousey
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
