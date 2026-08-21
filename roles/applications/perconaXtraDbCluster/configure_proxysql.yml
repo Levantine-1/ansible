@@ -165,6 +165,38 @@
         MYSQL_TCP_PORT: 6032
       no_log: true
 
+    # NOTE: found the hard way after a Galera cluster restart -- the two
+    # UPDATEs above only touch the config table. Without this, ProxySQL
+    # keeps its factory-default mysql-monitor_username/password
+    # ("monitor"/"monitor", a user that was never created), so its health
+    # checks against every backend fail auth and it permanently SHUNs all
+    # of them, refusing to route any traffic even though the backends are
+    # actually healthy.
+    - name: Load mysql-monitor variables into runtime space
+      ansible.builtin.command:
+        cmd: >
+          mysql -u admin -e "LOAD MYSQL VARIABLES TO RUNTIME; SAVE MYSQL VARIABLES TO DISK;"
+      environment:
+        MYSQL_PWD: "{{ proxysql_creds.admin_password }}"
+        MYSQL_HOST: 127.0.0.1
+        MYSQL_TCP_PORT: 6032
+      no_log: true
+
+    # NOTE: found the hard way -- ProxySQL's default mysql-server_version
+    # (5.5.30) makes MySQL Connector/J assume it's talking to a legacy
+    # server and query variables like query_cache_size that don't exist in
+    # MySQL 8.0, breaking every connection with "Unknown system variable".
+    # See the matching comment/link in DataGateway's application.properties.
+    - name: Set proxysql variable for mysql-server_version to match the real backend
+      ansible.builtin.command:
+        cmd: >
+          mysql -u admin -e "UPDATE global_variables SET variable_value='8.0.46' WHERE variable_name='mysql-server_version'; LOAD MYSQL VARIABLES TO RUNTIME; SAVE MYSQL VARIABLES TO DISK;"
+      environment:
+        MYSQL_PWD: "{{ proxysql_creds.admin_password }}"
+        MYSQL_HOST: 127.0.0.1
+        MYSQL_TCP_PORT: 6032
+      no_log: true
+
     - name: Create ProxySQL Client User
       ansible.builtin.command:
         cmd: >
