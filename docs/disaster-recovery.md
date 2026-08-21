@@ -144,39 +144,42 @@ everything reverts to the normal, fully-automated path.
 Install Proxmox on the new hardware. Note root/API access — this is used
 directly, once, in Stage 1; it doesn't need to go anywhere durable.
 
-### Stage 1 — break-glass terraform apply
+### Stage 1 — break-glass terraform apply (NOT YET SOLVED — see below)
 
 Vault, OPNsense, and pi-hole are the only three hosts with no dependency on
 Vault already being up (everything else's terraform reads Vault-sourced
-credentials for AWS/Proxmox both). Apply just those three, supplying
-credentials directly instead of through Vault:
+credentials for AWS/Proxmox both), so in principle this stage applies just
+those three, supplying credentials directly instead of through Vault.
 
-```
-cd terraform
-terraform init
-terraform apply \
-  -var-file=vars/production.tfvars \
-  -var "proxmox_bootstrap_mode=true" \
-  -var "proxmox_api_token_override=<token_id>=<token_secret>" \
-  -var "proxmox_ssh_username_override=<user>" \
-  -var "proxmox_ssh_password_override=<password>" \
-  -target='module.proxmox_resources.proxmox_virtual_environment_vm.vms["vault"]' \
-  -target='module.proxmox_resources.proxmox_virtual_environment_vm.opnsense' \
-  -target='module.proxmox_resources.proxmox_download_file.opnsense_iso' \
-  -target='module.proxmox_resources.proxmox_virtual_environment_vm.vms["pi-hole"]'
-```
+**A first attempt at this (a `proxmox_bootstrap_mode` variable gating the
+Proxmox provider's Vault-sourced data sources behind `count`, with direct
+override vars used instead) was built, then reverted the same day it was
+added.** Found live, via a real dry-run `terraform plan -destroy -target=...`
+before ever running an actual destroy: gating those data sources behind
+`count` changes their resource address (bare → indexed), which Terraform
+treats as a "moved" resource. Any `-target` operation is then required to
+include them — and since they feed the *shared* default provider block that
+every host1 resource uses (including `service`), doing so pulled every
+host1 resource into scope, silently defeating `rebuild_fleet.sh`'s core
+safety property (confirmed: targeting just `vmwarebastion` alone was enough
+to show `service` staged for destruction). Reverted rather than ship
+something that could destroy `service` the first time anyone actually used
+it. See the commit that reverted it in `terraform/proxmox/main.tf`'s
+history for the full writeup.
 
-`proxmox_bootstrap_mode` (default `false`, zero effect on normal operation
-— see `proxmox/main.tf`) skips the Vault-sourced credential data sources
-entirely and uses the four override vars instead. The credentials here come
-from the fresh Proxmox install itself (Stage 0) — generate an API token via
-Proxmox's own UI/CLI, or use root directly for this one-time bootstrap.
-
-Note this only reaches the primary Proxmox host (`10.69.69.139` in the
-current config) — that's where Vault/OPNsense/pi-hole live. If the second
-host is *also* gone, its VMs (`pxdbc1-3`, `proxysql`, `kube-c-00`, `theia`)
-come back in Stage 3 along with everything else, once Vault-sourced
-credentials work normally again.
+**What Stage 1 actually needs is a way to supply Proxmox credentials
+directly that doesn't touch the resource addresses used elsewhere in this
+same configuration** — e.g. a genuinely separate, minimal terraform
+configuration (its own directory, own provider block, own tiny state) that
+only ever creates the Vault/OPNsense/pi-hole VM shells, entirely decoupled
+from `proxmox/main.tf`'s provider and resource graph, rather than trying to
+make the main configuration conditionally bootstrap-aware. Not built yet —
+until it is, a total physical loss recovery's first step is manual: create
+the three VM shells directly via the Proxmox UI/CLI on the fresh install
+(matching the specs in `proxmox/vms.tf`/`proxmox/opnsense.tf` for vm_id,
+sizing, network, static IP), then pick up at Stage 2 below. Once a real
+break-glass mechanism exists, `terraform import` those three VMs the same
+way this session imported the originals, so state catches up to reality.
 
 ### Stage 2 — manual + ansible
 
@@ -247,6 +250,10 @@ Same checklist as Scenario A, plus:
 
 ## Known gaps (not solved by either scenario)
 
+- **Scenario B's Stage 1 (break-glass credentials) has no working
+  mechanism yet** — a first attempt was built and reverted the same day
+  after a live dry-run showed it could destroy `service`. See Stage 1
+  above for what actually needs building.
 - **Percona and Kubernetes have no data backup/restore at all.** Both
   scenarios above wipe and recreate them from empty. If the actual data in
   either ever needs to survive a rebuild, that's separate, unstarted work.

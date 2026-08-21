@@ -80,8 +80,26 @@ log "rebuilding fleet"
 # against both hosts; the original host's SSD1TB storage handled the
 # lower VM count on it fine even at default parallelism, but there's no
 # reason to risk the same failure mode there as the fleet grows.
+#
+# Reuses the SAME $TARGET_ARGS as the destroy above -- this used to be a
+# plain unscoped `terraform apply`, which is a real bug found the hard way:
+# an unscoped apply also picks up ANY other pending drift in the whole
+# config, including on `service`/`opnsense`/`vault`/`pi-hole` if any of
+# them happen to differ from their live state at the time (e.g. a cpu-type
+# change committed but not yet live-applied) -- exactly the critical tier
+# this script exists to never touch. Re-targeting with the pre-destroy
+# list (not a fresh post-destroy discovery -- destroyed resources are
+# removed from state, so they wouldn't be discoverable there anymore)
+# keeps this apply scoped to exactly what was just destroyed.
+#
+# Trade-off: a VM added to vms.tf but never applied even once won't be in
+# pre-destroy state either, so it's silently skipped by both the destroy
+# and this apply -- run a normal unscoped `terraform apply` by hand once
+# for a genuinely new VM before using this script, or just run this script
+# a second time afterward.
 sudo terraform apply -auto-approve -parallelism=3 \
-  -var-file="$TFVARS" -var "vault_token=${TOKEN}"
+  -var-file="$TFVARS" -var "vault_token=${TOKEN}" \
+  "${TARGET_ARGS[@]}"
 
 # Re-discover from state *after* apply, not the pre-destroy TARGETS list --
 # a resource that's brand-new to state this run (e.g. a whole new resource
