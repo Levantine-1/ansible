@@ -164,6 +164,7 @@
             body:
               email: thisper-service@levantine.io
             status_code: 200
+            return_content: yes
           register: thisper_token_result
           until: thisper_token_result.status is defined and thisper_token_result.status == 200
           retries: 30
