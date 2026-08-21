@@ -144,12 +144,17 @@
                 selector:
                   app: datagateway
 
+        # DataGateway has no unauthenticated root route (unlike thisper's
+        # Flask app) -- GET / 404s once Tomcat's up rather than indicating
+        # real readiness. /amIAGoodMouse is TokenInterceptor-protected, so
+        # a 401 with no Authorization header proves the full app context
+        # (DispatcherServlet + interceptor + JPA) is actually serving.
         - name: Wait for DataGateway to accept requests
           uri:
-            url: "http://localhost:{{ DataGatewayK8Cluster.serviceNodePort }}/"
-            status_code: 200
+            url: "http://localhost:{{ DataGatewayK8Cluster.serviceNodePort }}/amIAGoodMouse"
+            status_code: 401
           register: datagateway_ready
-          until: datagateway_ready.status is defined and datagateway_ready.status == 200
+          until: datagateway_ready.status is defined and datagateway_ready.status == 401
           retries: 30
           delay: 10
           ignore_errors: yes # Pods may still be rolling out; matches the retry pattern used for Percona's readiness wait.
