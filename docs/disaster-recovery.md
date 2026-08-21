@@ -91,10 +91,15 @@ deliberately testing that the IaC still works).
    ```
    This now creates the `datagateway` database explicitly (an `mysql_db`
    task — the JDBC `createDatabaseIfNotExist=true` flag doesn't actually
-   work through ProxySQL, confirmed by testing) and, once DataGateway
-   answers, regenerates thisper's API token and writes it to Vault. Both
-   are self-healing/idempotent: safe to run even when Percona *wasn't*
-   wiped.
+   work through ProxySQL, confirmed by testing), then checks whether
+   thisper's *existing* Vault-stored token still validates against the
+   fresh DataGateway and only mints + stores a new one if it doesn't.
+   That check-first step matters: `auth_token.token_hash` has no unique
+   DB constraint, so unconditionally calling `/generateToken` on every
+   deploy (the first version of this fix) silently inserted a duplicate
+   row each run, which broke every protected endpoint (`/analytics`
+   included) with a `NonUniqueResultException` 500 — found live on a
+   second DR pass. Safe to run repeatedly either way now.
 
 5. **Re-register the GitHub self-hosted runners** on the fresh `dockerhost1`:
    ```
