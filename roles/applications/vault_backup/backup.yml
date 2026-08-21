@@ -1,0 +1,91 @@
+---
+# Sets up automated weekly backups of every secret in Vault's kv/ mount on
+# the `service` control-plane host. Vault's own VM was hand-built (now
+# brought under terraform) and its storage is local `file` backend with no
+# snapshot/replication -- losing that VM loses every secret in the fleet
+# permanently, not just "needs re-unsealing". This is its safety net,
+# mirroring roles/applications/opnsense/backup.yml's pattern exactly (same
+# systemd-timer convention, same git-credential-vault-github.sh helper,
+# same git-handling rationale). Restoring is a manual, by-hand step via
+# files/restore_vault_secrets.py -- see the disaster-recovery runbook.
+- name: Set up automated Vault secrets backups
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Configure automation user's git identity
+      become_user: automation
+      command: "git config --global {{ item.key }} '{{ item.value }}'"
+      loop:
+        - { key: "user.name", value: "automation" }
+        - { key: "user.email", value: "automation@levantine.io" }
+      changed_when: true
+
+    - name: Deploy git credential helper (fetches GitHub PAT from Vault)
+      copy:
+        src: files/git-credential-vault-github.sh
+        dest: /usr/local/bin/git-credential-vault-github
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure git to use the Vault-backed credential helper for GitHub
+      become_user: automation
+      command: git config --global credential.https://github.com.helper "!/usr/local/bin/git-credential-vault-github"
+      changed_when: true
+
+    - name: Install Python requests (used by the backup script)
+      pip:
+        name: requests
+        executable: pip3
+        extra_args: --break-system-packages
+
+    - name: Deploy Vault secrets backup script
+      copy:
+        src: files/backup_vault_secrets.py
+        dest: /usr/local/bin/backup_vault_secrets.py
+        owner: automation
+        group: automation
+        mode: "0755"
+
+    - name: Deploy vault-secrets-backup systemd service
+      copy:
+        dest: /etc/systemd/system/vault-secrets-backup.service
+        content: |
+          [Unit]
+          Description=Backup Vault kv/ secrets into the ansible repo
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=automation
+          EnvironmentFile=/etc/vault-approle.env
+          ExecStart=/usr/local/bin/backup_vault_secrets.py
+      register: backup_service_unit
+
+    - name: Deploy vault-secrets-backup systemd timer
+      copy:
+        dest: /etc/systemd/system/vault-secrets-backup.timer
+        content: |
+          [Unit]
+          Description=Weekly Vault secrets backup
+
+          [Timer]
+          OnCalendar=weekly
+          RandomizedDelaySec=1h
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+      register: backup_timer_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: backup_service_unit.changed or backup_timer_unit.changed
+
+    - name: Enable and start the Vault secrets backup timer
+      systemd:
+        name: vault-secrets-backup.timer
+        enabled: yes
+        state: started
