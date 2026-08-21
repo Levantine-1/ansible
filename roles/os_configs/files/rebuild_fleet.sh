@@ -10,9 +10,16 @@
 # `terraform state list` each run, so it stays in sync automatically as
 # VMs are added/removed from proxmox/vms.tf without editing this script.
 #
-# OPNsense, pi-hole, and vault are NOT terraform-managed at all (hand-built,
-# predate this module) so they're untouched by construction, not because of
-# anything special in this script.
+# OPNsense, pi-hole, and vault ARE terraform-managed now (brought in to
+# close a real IaC gap), but they're still explicitly excluded below --
+# they're the fleet's critical tier (router/DNS for the whole internal
+# network, secrets, ad-blocking DNS) and none of them has a clean
+# unattended rebuild path even where they're now declared in terraform
+# (OPNsense in particular needs a manual ISO install; Vault's data isn't
+# something you'd want blown away and reinitialized on a whim). Unlike
+# `service`, this exclusion is NOT automatic from `terraform state list`
+# alone -- it's an explicit grep pattern below, so it needs updating if
+# any of these three are ever renamed.
 #
 # DATA-LOSS WARNING: pxdbc1-3 (Percona) and the kube-* nodes have no
 # persistent-disk separation or backup/restore step yet (tracked as
@@ -47,7 +54,7 @@ TOKEN=$(get_vault_token)
 log "discovering VM resources to destroy (everything under module.proxmox_resources except service)"
 TARGETS=$(sudo terraform state list \
   | grep '^module\.proxmox_resources\.proxmox_virtual_environment_vm\.' \
-  | grep -v '\.service$')
+  | grep -v -E '\.service$|\.opnsense$|vms\["vault"\]|vms\["pi-hole"\]')
 if [ -z "$TARGETS" ]; then
   log "no proxmox VM resources found in state, aborting"
   exit 1
@@ -85,7 +92,7 @@ sudo terraform apply -auto-approve -parallelism=3 \
 log "discovering current VM resources (post-apply, includes anything new this run)"
 CURRENT_TARGETS=$(sudo terraform state list \
   | grep '^module\.proxmox_resources\.proxmox_virtual_environment_vm\.' \
-  | grep -v '\.service$')
+  | grep -v -E '\.service$|\.opnsense$|vms\["vault"\]|vms\["pi-hole"\]')
 
 log "waiting for SSH on rebuilt hosts"
 HOSTS=$(echo "$CURRENT_TARGETS" \
