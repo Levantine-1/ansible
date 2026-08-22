@@ -292,11 +292,22 @@
     # storage math in the plan, since the exact setting name varies by ZM
     # version and isn't safe to guess at via the API blind.
     #
-    # Type: Remote is required -- found live, omitting it left new
-    # Monitors defaulting to Type=Local (a physical /dev/videoX capture
-    # device), which doesn't exist on this VM. zmc crash-looped
-    # ("Can't find swscale format for palette 0", zm_local_camera.cpp)
-    # instead of ever actually connecting to the RTSP stream.
+    # Type: Ffmpeg, not Remote -- found live, tried Remote first (ZM's own
+    # built-in RTSP/RTP parser) and it failed outright against these
+    # cameras' SDP response ("No RTSP sources", zm_remote_camera_rtsp.cpp)
+    # even though the exact same stream opens perfectly via plain ffprobe/
+    # ffmpeg. Ffmpeg-type Monitors use libavformat under the hood (the
+    # same thing ffprobe uses) instead of ZM's own RTSP implementation --
+    # confirmed live, immediately connected at the camera's real ~20fps.
+    # Also omitting Type entirely defaults to Local (a physical /dev/videoX
+    # capture device, which doesn't exist on this VM) -- crash-looped with
+    # "Can't find swscale format for palette 0" until Type was set at all.
+    #
+    # Ffmpeg-type Monitors take the whole source as one URL in Path, not
+    # split Host/Port/Protocol/Method/User/Pass fields the way Remote-type
+    # does -- urlencode both credential fields since Amcrest's default
+    # password format (this fleet's included a literal '#') breaks the URL
+    # otherwise.
     - name: Create a Monitor for each camera
       uri:
         url: "http://localhost/zm/api/index.php/monitors.json?token={{ zm_login.json.access_token }}"
@@ -305,21 +316,16 @@
         body:
           Monitor:
             Name: "{{ item.name }}"
-            Type: "Remote"
+            Type: "Ffmpeg"
             Function: "Record"
-            Protocol: "rtsp"
-            Method: "rtpRtsp"
-            Host: "{{ item.ip }}"
-            Port: "554"
-            Path: "/cam/realmonitor?channel={{ item.channel | default(1) }}&subtype=0"
-            User: "{{ camera_secrets.username }}"
-            Pass: "{{ camera_secrets.password }}"
-            Width: "{{ item.width | default(2560) }}"
-            Height: "{{ item.height | default(1440) }}"
+            Path: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ item.ip }}:554/cam/realmonitor?channel={{ item.channel | default(1) }}&subtype=0"
+            Width: "{{ item.width | default(2960) }}"
+            Height: "{{ item.height | default(1668) }}"
         status_code: [200, 201]
       loop: "{{ cameras }}"
       loop_control:
         label: "{{ item.name }}"
+      no_log: true
       when: item.name not in (zm_existing_monitors.json.monitors | default([]) | map(attribute='Monitor.Name') | list)
       no_log: true
 
