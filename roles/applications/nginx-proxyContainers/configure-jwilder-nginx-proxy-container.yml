@@ -73,6 +73,22 @@
       docker_container:
         name: nginx-proxy
         image: jwilder/nginx-proxy:latest
+        env:
+          # Serve both HTTP and HTTPS without forcing a redirect between
+          # them. jwilder's default once a cert exists is to 301 every HTTP
+          # request to HTTPS, which is actively wrong in this topology: the
+          # public path terminates TLS at the AWS bastion and reaches this
+          # host over plain HTTP, so the redirect sent the client back
+          # around the same loop -- Firefox reported "the page isn't
+          # redirecting properly" for every app here.
+          #
+          # LAN clients still get TLS by requesting https directly; the
+          # relay keeps working over http. The stricter alternative is to
+          # have the relay pass X-Forwarded-Proto: https (which jwilder
+          # honours) and keep the redirect, but that means editing the
+          # bastion and vmwarebastion nginx configs -- a change to the path
+          # every other app depends on, for no benefit here.
+          HTTPS_METHOD: noredirect
         ports:
           - "80:80"
           - "443:443"
