@@ -61,8 +61,14 @@
           X-Vault-Token: "{{ vault_root_token }}"
         body_format: json
         body:
-          policies: ["livecam-ci"]
-          no_default_policy: true
+          # `default` is included deliberately alongside livecam-ci. It
+          # grants no secret access at all -- only token self-management
+          # (lookup-self, renew-self) -- but the Vault terraform provider
+          # calls lookup-self while initialising. Minting with
+          # no_default_policy produced a token that could read the secret
+          # it needed (200) yet 403'd on lookup-self, which failed the
+          # provider before it ever got as far as reading anything.
+          policies: ["default", "livecam-ci"]
           ttl: "8760h"
           renewable: true
           display_name: "livecam-github-actions-ci"
