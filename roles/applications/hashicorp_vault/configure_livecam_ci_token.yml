@@ -1,0 +1,96 @@
+---
+# Mints the Vault token livecam's CI uses, and the narrowly-scoped policy
+# behind it.
+#
+# livecam's terraform reads exactly one secret from Vault -- the delegate
+# AWS credentials its Route53 record needs -- so the policy grants read on
+# that single path and nothing else. Deliberately not reusing service-host's
+# policy: this token is handed to GitHub Actions and lives outside Vault's
+# AppRole lifecycle, so its blast radius should be as small as the job
+# actually requires.
+#
+# Requires a Vault ROOT token, for the same reason configure_vault_auth.yml
+# does: sys/policies/acl and auth/token/create are outside what the
+# service-host AppRole can see, by design.
+#
+# Idempotent: writing a policy is a PUT, and the token is only minted when
+# kv/data/github/ci_vault_token is absent, so re-running won't silently
+# rotate a token that CI is already using.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/hashicorp_vault/configure_livecam_ci_token.yml \
+#     --extra-vars "vault_root_token=<root token>"
+- name: Mint the livecam CI Vault token
+  hosts: service
+  become: yes
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+    - name: Write the livecam-ci ACL policy
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/sys/policies/acl/livecam-ci"
+        method: PUT
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          policy: |
+            path "kv/data/aws/iam_access_keys/subdomain_delegation" {
+              capabilities = ["read"]
+            }
+        status_code: 204
+
+    - name: Check whether the CI token already exists
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/kv/data/github/ci_vault_token"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        status_code: [200, 404]
+      register: existing_ci_token
+      no_log: true
+
+    - name: Mint a token bound to livecam-ci only
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/auth/token/create"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          policies: ["livecam-ci"]
+          no_default_policy: true
+          ttl: "8760h"
+          renewable: true
+          display_name: "livecam-github-actions-ci"
+        status_code: 200
+      register: minted_token
+      when: existing_ci_token.status == 404
+      no_log: true
+
+    # Stored in Vault so the token has a source of truth, and so
+    # github_runner/set_repo_secrets.yml can push it to GitHub the same way
+    # as every other CI secret rather than it being pasted in by hand.
+    - name: Store the CI token in Vault
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/kv/data/github/ci_vault_token"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          data:
+            token: "{{ minted_token.json.auth.client_token }}"
+        status_code: 200
+      when: existing_ci_token.status == 404
+      no_log: true
+
+    - name: Report (never prints the token itself)
+      debug:
+        msg: >-
+          {{ 'Minted a new livecam-ci token and stored it at kv/data/github/ci_vault_token'
+             if existing_ci_token.status == 404
+             else 'kv/data/github/ci_vault_token already exists -- left untouched' }}
