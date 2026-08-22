@@ -151,6 +151,16 @@
         login_unix_socket: /var/run/mysqld/mysqld.sock
       no_log: true
 
+    # Ships root:root 640 -- unreadable by www-data, which the zoneminder
+    # service and zmpkg.pl both run as. Found live (service failed to
+    # start: "configuration file found but is not readable"). Normally
+    # fixed by the package's own postinst during an interactive install,
+    # which a plain apt state:present never triggers.
+    - name: Let www-data read ZoneMinder's config
+      file:
+        path: /etc/zm/zm.conf
+        group: www-data
+
     - name: Add www-data to the video group (camera device/capture access)
       user:
         name: www-data
