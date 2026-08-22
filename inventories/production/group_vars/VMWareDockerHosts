@@ -36,16 +36,18 @@ supported_containers:
       ZM_BACKEND_URL: http://cameras.internal.levantine.io
       GO2RTC_URL: http://cameras.internal.levantine.io:1984
       PERMISSIONS_FILE: /app/config/permissions.yml
-    # Read-only credentials for resolving a ZM session cookie to a
-    # username, plus the Flask session secret. Injected from Vault at
-    # deploy time so none of it is baked into the image or committed.
+    # Just the Flask session secret now. The ZM_DB_* credentials that used
+    # to be here are gone with the code that needed them: livecam resolved a
+    # forwarded ZMSESSID back to a username by reading ZM's Sessions table
+    # and regex-matching PHP session serialization. It has its own accounts
+    # now, so it no longer needs any access to ZoneMinder's database.
+    #
+    # Injected from Vault at deploy time so it is neither baked into the
+    # image nor committed. Losing it only logs everyone out.
     vault_secrets:
       - path: kv/data/livecam/admin
         env:
           FLASK_SECRET_KEY: flask_secret_key
-          ZM_DB_HOST: zm_db_host
-          ZM_DB_USER: zm_db_user
-          ZM_DB_PASSWORD: zm_db_password
     # Per-user permissions are config, not secrets, so they live in git and
     # are mounted read-only rather than baked into the image -- editing who
     # can see which camera shouldn't need a rebuild and redeploy.

@@ -1,35 +1,60 @@
-# Per-user camera permissions for livecam (livecam.levantine.io).
+# Accounts and per-user camera permissions for livecam
+# (livecam.levantine.io / livecam-lan.levantine.io).
 #
 # Deployed to /opt/livecam/permissions.yml on dockerhost1 and mounted
-# read-only into the container. Config, not secrets -- so it lives in git
-# where changes are reviewable, and editing it needs no image rebuild.
+# read-only into the container. Config, not secrets -- only password
+# *hashes* live here, so it belongs in git where changes are reviewable,
+# and editing it needs no image rebuild or redeploy.
 #
-# Camera-level access is ALSO enforced natively by ZoneMinder's own
-# per-user monitor permissions. This file adds the two things ZM has no
+# This file is the whole account system: a user exists because they appear
+# here with a password_hash. There is no self-registration -- accounts are
+# added by editing this file and re-running the playbook, which is the right
+# trade for a handful of family members.
+#
+# These are livecam's own accounts, deliberately separate from ZoneMinder's.
+# Everyday live viewing never touches ZM's UI; ZM prompts for its own login
+# when someone opens "recordings & settings", and keeps enforcing its own
+# native per-user monitor permissions there. So each person has two logins.
+#
+# Generate a hash without ever committing the password:
+#
+#   python3 -c "from werkzeug.security import generate_password_hash as h; \
+#               import getpass; print(h(getpass.getpass()))"
+#
+# pbkdf2 rather than werkzeug's newer scrypt default, purely for
+# portability: a hash written by whatever werkzeug is installed on the
+# machine generating it has to be verifiable by whatever version the
+# container image happens to pull.
+#
+# What livecam adds over ZM's native permissions is the two things ZM has no
 # concept of: a time-of-day window, and audio on/off per user.
-#
-# Usernames must match ZoneMinder usernames exactly -- livecam resolves the
-# ZM session cookie to a username and looks it up here.
 #
 # Camera names must match the go2rtc stream names, which come from the
 # `cameras` list in group_vars/Cameras.
 
 # Maps ZoneMinder's numeric Monitor IDs to camera names, used for gating
-# recorded playback (ZM refers to monitors by ID, not name).
+# recorded playback (ZM refers to monitors by ID, not name). Keys starting
+# with `_` are metadata and are never treated as users.
 _monitor_id_to_name:
   1: guinea-pig-cage-1
   2: guinea-pig-cage-2
 
+# Password in Vault at kv/data/livecam/users, key `admin` -- stored there so
+# it's recoverable, since only the hash exists here and hashes don't reverse.
 admin:
+  password_hash: "pbkdf2:sha256:600000$2EbyTI7YeysEDk9w$21fca30809a1a306259327b3aa0174d1a38219d37691c0df9a736d63a846c663"
   cameras:
     - guinea-pig-cage-1
     - guinea-pig-cage-2
   audio: true
 
-# Example of a restricted viewer -- one camera, no audio, daytime only.
-# Delete or edit once real users exist.
+# Template for a restricted family viewer -- one camera, no audio, daytime
+# only. Copy, rename, and give it its own hash. The time window is
+# re-evaluated per chunk while a stream runs, so it ends a live view at
+# 20:00 rather than merely refusing to start a new one.
 #
 # guest:
+#   password_hash: "pbkdf2:sha256:600000$..."
 #   cameras:
 #     - guinea-pig-cage-1
 #   audio: false
