@@ -43,6 +43,12 @@ path "kv/data/zammad/*" {
 path "kv/data/percona_cluster/*" {
   capabilities = ["read", "create", "update"]
 }
+path "kv/data/cameras/*" {
+  capabilities = ["read"]
+}
+path "kv/data/livecam/*" {
+  capabilities = ["read"]
+}
 # Broad read+list added for the vault_backup role (backup_vault_secrets.py)
 # -- it needs to discover and read every secret path to produce a full
 # backup, not just the per-app prefixes above. Read-only: doesn't grant

@@ -13,6 +13,23 @@ supported_containers:
       DATA_GATEWAY_API_KEY_PATH: kv/data/k8clusters/DataGatewayK8Cluster/thisperAPIKey
       DATA_GATEWAY_URL: http://kube-c-00.internal.levantine.io:30080
 
+  # LIVECAM_ADMIN_SECRET_PATH is deliberately not listed here: unlike
+  # DATA_GATEWAY_API_KEY_PATH, deployDockerImage.yml's Vault-secret
+  # injection (nginx-proxyContainers/deployDockerImage.yml:42-55) is
+  # hardcoded to that one specific env var name, not a generic "any
+  # *_PATH key gets resolved" mechanism -- its own comment flags this as
+  # temporary. Generalizing it touches a role every one of the other 9
+  # production containers deploys through, so that's a deliberate follow-up
+  # decision, not bundled into this change. livecam's own repo should
+  # authenticate to Vault directly (e.g. its own AppRole, narrowly scoped
+  # to kv/data/livecam/* and kv/data/cameras/*, mirroring how service-host
+  # itself authenticates) rather than relying on this mechanism.
+  livecam:
+    env_vars:
+      VIRTUAL_HOST: livecam.levantine.io
+      ZM_BACKEND_URL: http://cameras.internal.levantine.io
+      VAULT_ADDR: http://vault.internal.levantine.io:8200
+
   processmining:
     env_vars:
       VIRTUAL_HOST: processmining.levantine.io
