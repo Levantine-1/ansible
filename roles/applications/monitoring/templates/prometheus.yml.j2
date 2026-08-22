@@ -68,6 +68,20 @@ scrape_configs:
           - https://education-platform.levantine.io
           - https://real-estate.levantine.io
           - https://booking-movie-ticket.levantine.io
+          # livecam probes /login, not /: everything else there is behind a
+          # session now, so / answers 302 and http_2xx would read a healthy
+          # app as down. /login is the deepest unauthenticated page that
+          # still proves Flask rendered rather than just that nginx-proxy
+          # answered.
+          #
+          # The LAN hostname deliberately, not the public one. Both names
+          # reach the same container, but a probe every 30s over the public
+          # route would relay through AWS and be billed as egress -- and
+          # would land in livecam's own egress counter, quietly inflating
+          # the number the dashboard shows the family. The public relay
+          # itself is already covered by the other app probes above, which
+          # all traverse it.
+          - https://livecam-lan.levantine.io/login
           # DataGateway: no VIRTUAL_HOST (k8s NodePort, not behind
           # nginx-proxy), so probe the internal endpoint directly instead.
           - http://kube-c-00.internal.levantine.io:30080/mousey
