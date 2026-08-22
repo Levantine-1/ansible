@@ -1,0 +1,125 @@
+# Declarative source for Vault's own auth config (the approle auth method,
+# the service-host ACL policy, and the service-host AppRole role) -- closes
+# a real gap found during a hard-DR review: backup_vault_secrets.py only
+# walks the kv/ secrets tree, so a real Vault loss would restore secret
+# *values* but not this auth config at all. Before this playbook existed,
+# service-host's policy only ever existed live in Vault, edited via raw API
+# calls with no git record (found the hard way: a mid-session policy
+# widening had zero source-of-truth trail).
+#
+# Requires a Vault ROOT token, not the usual hashicorp_vault_token AppRole
+# token -- by design, service-host's own policy grants it no visibility
+# into sys/auth, sys/policies/acl, or auth/approle/role (confirmed via a
+# live permission-denied test). Same reasoning as
+# roles/applications/vault_backup/files/restore_vault_secrets.py using a
+# root token directly: this config is what AppRole auth depends on, so it
+# can't bootstrap itself.
+#
+# Run this any time service-host's policy needs to change (replacing the
+# raw-API-PUT workflow used before), and as an explicit step in Scenario B
+# of disaster-recovery.md, right after Vault is unsealed.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/hashicorp_vault/configure_vault_auth.yml \
+#     --extra-vars "vault_root_token=<root token>"
+---
+- name: Configure Vault's own auth config (approle + service-host policy/role)
+  hosts: service
+  become: yes
+
+  vars_files:
+    - ../../../vault.yml
+
+  tasks:
+    - name: Check which auth methods are already enabled
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/sys/auth"
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        return_content: yes
+      register: vault_auth_methods
+
+    - name: Enable the approle auth method
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/sys/auth/approle"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          type: approle
+        status_code: 204
+      when: "'approle/' not in (vault_auth_methods.content | from_json)"
+
+    - name: Write the service-host ACL policy
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/sys/policies/acl/service-host"
+        method: PUT
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          policy: "{{ lookup('file', 'files/policies/service-host.hcl') }}"
+        status_code: 204
+
+    # Values match what was live in Vault at the time this playbook was
+    # written (captured via the root token, see the header comment) --
+    # update here first if these ever need to change, same as the policy.
+    - name: Create/update the service-host AppRole role
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/auth/approle/role/service-host"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          token_policies: "service-host"
+          token_ttl: 3600
+          token_max_ttl: 14400
+          secret_id_ttl: 0
+          secret_id_num_uses: 0
+          token_type: default
+        status_code: 204
+
+    - name: Check whether /etc/vault-approle.env already exists
+      stat:
+        path: /etc/vault-approle.env
+      register: vault_approle_env_file
+
+    # Only fires when the file is genuinely missing (e.g. a fresh service
+    # rebuild after Vault itself was lost) -- never rotates a working
+    # host's credential just because this playbook ran.
+    - name: Read the service-host role_id
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/auth/approle/role/service-host/role-id"
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        return_content: yes
+      register: vault_role_id_result
+      when: not vault_approle_env_file.stat.exists
+      no_log: true
+
+    - name: Generate a fresh secret_id
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/auth/approle/role/service-host/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        return_content: yes
+      register: vault_secret_id_result
+      when: not vault_approle_env_file.stat.exists
+      no_log: true
+
+    - name: Write /etc/vault-approle.env
+      copy:
+        content: |
+          VAULT_ADDR={{ hashicorp.vault.address }}
+          VAULT_ROLE_ID={{ (vault_role_id_result.content | from_json).data.role_id }}
+          VAULT_SECRET_ID={{ (vault_secret_id_result.content | from_json).data.secret_id }}
+        dest: /etc/vault-approle.env
+        owner: automation
+        group: automation
+        mode: "0600"
+      when: not vault_approle_env_file.stat.exists
+      no_log: true
