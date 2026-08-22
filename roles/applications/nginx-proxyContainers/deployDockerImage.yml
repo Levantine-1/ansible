@@ -84,6 +84,13 @@
     # which needs its per-user permission config mounted in. Kept as a
     # host bind mount rather than baked into the image so the permissions
     # can be edited and reviewed in git without a rebuild+redeploy cycle.
+    # comparisons env:strict -- by default docker_container tolerates env
+    # vars present on the container but absent from the config, so removing
+    # one leaves it set on the running container, and (more importantly) a
+    # rotated Vault secret could fail to take effect because the container
+    # is merely restarted rather than recreated. Found live: thisper kept a
+    # DATA_GATEWAY_API_KEY_PATH var after it was removed from config, while
+    # livecam recreated correctly only because its change *added* vars.
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
@@ -91,6 +98,8 @@
         env: "{{ env_vars }}"
         volumes: "{{ supported_containers[container_name]['volumes'] | default(omit) }}"
         restart_policy: unless-stopped
+        comparisons:
+          env: strict
 
     - name: Prune Docker
       command: docker system prune -af
