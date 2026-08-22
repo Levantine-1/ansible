@@ -356,6 +356,23 @@
             # crashes and real capture versus continuous segfaults.
             Colours: 4
             ImageBufferCount: 20
+            # The setting that actually makes this cheap. Passthrough
+            # recording is genuinely light -- the camera's H.264 is muxed
+            # to disk untouched -- but ZM decodes every frame ANYWAY for
+            # its analysis/live-view buffer, independent of how it records.
+            # At 2960x1668 x20fps x2 cameras that decode pinned a 2-core VM
+            # at load average 9.5 and starved sshd to the point the host
+            # had to be power-cycled. Disabling it is correct here rather
+            # than a workaround: Function=Record with no motion detection
+            # never needs a decoded frame. Measured: load 9.53 -> 0.08,
+            # both cameras at a full 20.00fps, zero crashes.
+            #
+            # Trade-off: ZM's own console can't render a live view without
+            # decoded frames (recorded playback is unaffected -- the
+            # browser decodes the mp4). If server-side live view is needed
+            # later, flip this per-monitor and size cores against measured
+            # load rather than assuming 2 is enough.
+            DecodingEnabled: 0
         status_code: [200, 201]
       loop: "{{ cameras }}"
       loop_control:
@@ -374,8 +391,10 @@
     - name: Enforce recording mode, transport and colour depth on existing monitors
       command: >
         mysql -u root -N zm -e
-        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2, Method='rtpRtsp', Colours=4, ImageBufferCount=20
-         WHERE SaveJPEGs != 0 OR VideoWriter != 2 OR Method != 'rtpRtsp' OR Colours != 4;
+        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2, Method='rtpRtsp', Colours=4,
+                ImageBufferCount=20, DecodingEnabled=0
+         WHERE SaveJPEGs != 0 OR VideoWriter != 2 OR Method != 'rtpRtsp'
+            OR Colours != 4 OR DecodingEnabled != 0;
          SELECT ROW_COUNT();"
       register: zm_recording_mode_fix
       # ROW_COUNT() makes this honestly idempotent: "changed" only when a
