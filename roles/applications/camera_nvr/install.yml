@@ -291,6 +291,12 @@
     # per-frame JPEG capture) in the web console before relying on the
     # storage math in the plan, since the exact setting name varies by ZM
     # version and isn't safe to guess at via the API blind.
+    #
+    # Type: Remote is required -- found live, omitting it left new
+    # Monitors defaulting to Type=Local (a physical /dev/videoX capture
+    # device), which doesn't exist on this VM. zmc crash-looped
+    # ("Can't find swscale format for palette 0", zm_local_camera.cpp)
+    # instead of ever actually connecting to the RTSP stream.
     - name: Create a Monitor for each camera
       uri:
         url: "http://localhost/zm/api/index.php/monitors.json?token={{ zm_login.json.access_token }}"
@@ -299,6 +305,7 @@
         body:
           Monitor:
             Name: "{{ item.name }}"
+            Type: "Remote"
             Function: "Record"
             Protocol: "rtsp"
             Method: "rtpRtsp"
