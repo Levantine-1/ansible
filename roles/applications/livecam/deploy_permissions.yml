@@ -1,0 +1,43 @@
+---
+# Deploys livecam's per-user permission config to dockerhost1, where
+# deployDockerImage.yml mounts it read-only into the container.
+#
+# Separate from the container deploy on purpose: changing who can see which
+# camera is a config edit, and shouldn't require rebuilding and
+# republishing an image through the whole CI pipeline.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/livecam/deploy_permissions.yml
+- name: Deploy livecam permissions config
+  hosts: VMWareDockerHosts
+  become: yes
+
+  tasks:
+    - name: Create the livecam config directory
+      file:
+        path: /opt/livecam
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy permissions.yml
+      copy:
+        src: files/permissions.yml
+        dest: /opt/livecam/permissions.yml
+        owner: root
+        group: root
+        mode: "0644"
+      register: livecam_perms
+
+    # The container reads this at request time rather than caching it, so a
+    # restart isn't strictly required -- but restarting makes the change
+    # take effect predictably instead of depending on that assumption.
+    - name: Restart livecam so the new permissions are definitely in effect
+      docker_container:
+        name: livecam
+        state: started
+        restart: yes
+      when: livecam_perms.changed
+      ignore_errors: yes  # container may not be deployed yet on a fresh host

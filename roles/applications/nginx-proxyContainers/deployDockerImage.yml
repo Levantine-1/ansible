@@ -39,20 +39,38 @@
         name: "{{ local_registry_image }}"
         source: pull
 
-    - name: Retrieve DataGateway Secrets from HashiCorp Vault
+    # Generic Vault -> env var injection, replacing the hardcoded
+    # DATA_GATEWAY_API_KEY_PATH handling that used to live here (which its
+    # own comment flagged as temporary). A container declares what it needs
+    # in group_vars/VMWareDockerHosts:
+    #
+    #   vault_secrets:
+    #     - path: kv/data/livecam/admin
+    #       env:
+    #         ZM_DB_PASSWORD: zm_db_password   # <ENV VAR>: <key in Vault>
+    #
+    # The field is `env`, not `keys`: in Jinja `item.keys` resolves to the
+    # dict's own .keys method rather than a member called "keys", which
+    # fails in a genuinely confusing way.
+    #
+    # Anything without a vault_secrets block is unaffected.
+    - name: Start from the container's plain env_vars
       set_fact:
-        datagateway_creds: "{{ lookup('hashi_vault', 'secret=' + supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address) }}"
-      when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is defined
+        env_vars: "{{ supported_containers[container_name]['env_vars'] | default({}) }}"
 
-    - name: Extract DataGateway API Key from DGW Secrets and add to env_vars
+    - name: Resolve secrets from Vault and merge into env_vars
       set_fact:
-        env_vars: "{{ supported_containers[container_name]['env_vars'] | combine({'DATA_GATEWAY_API_KEY': datagateway_creds.api_key}) }}"
-      when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is defined
-
-    - name: Set env_vars without DataGateway API Key # 2024-07-31 This is temporary, will find a more elegant solution later
-      set_fact:
-        env_vars: "{{ supported_containers[container_name]['env_vars'] }}"
-      when: supported_containers[container_name]['env_vars']['DATA_GATEWAY_API_KEY_PATH'] is not defined
+        env_vars: >-
+          {{ env_vars | combine(dict(
+               item['env'].keys() | list
+               | zip(item['env'].values() | list | map('extract', vault_data) | list)
+             )) }}
+      vars:
+        vault_data: "{{ lookup('hashi_vault', 'secret=' + item['path'] + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address) }}"
+      loop: "{{ supported_containers[container_name]['vault_secrets'] | default([]) }}"
+      loop_control:
+        label: "{{ item['path'] }}"
+      no_log: true
 
     # NOTE: 2026-07-26 Splunk logging disabled -- HEC was never set up on the
     # rebuilt Splunk host post-migration (see ansible README). Containers use
@@ -62,11 +80,16 @@
     # container ended up silently missing from dockerhost1 entirely,
     # causing a 502 on levantine.io that went unnoticed until the new
     # Alertmanager->Zammad pipeline caught it.
+    # volumes is optional and omitted by every container except livecam,
+    # which needs its per-user permission config mounted in. Kept as a
+    # host bind mount rather than baked into the image so the permissions
+    # can be edited and reviewed in git without a rebuild+redeploy cycle.
     - name: Run Docker Container
       docker_container:
         name: "{{ container_name }}"
         image: "{{ local_registry_image }}"
         env: "{{ env_vars }}"
+        volumes: "{{ supported_containers[container_name]['volumes'] | default(omit) }}"
         restart_policy: unless-stopped
 
     - name: Prune Docker

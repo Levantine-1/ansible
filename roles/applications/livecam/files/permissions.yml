@@ -1,0 +1,38 @@
+# Per-user camera permissions for livecam (livecam.levantine.io).
+#
+# Deployed to /opt/livecam/permissions.yml on dockerhost1 and mounted
+# read-only into the container. Config, not secrets -- so it lives in git
+# where changes are reviewable, and editing it needs no image rebuild.
+#
+# Camera-level access is ALSO enforced natively by ZoneMinder's own
+# per-user monitor permissions. This file adds the two things ZM has no
+# concept of: a time-of-day window, and audio on/off per user.
+#
+# Usernames must match ZoneMinder usernames exactly -- livecam resolves the
+# ZM session cookie to a username and looks it up here.
+#
+# Camera names must match the go2rtc stream names, which come from the
+# `cameras` list in group_vars/Cameras.
+
+# Maps ZoneMinder's numeric Monitor IDs to camera names, used for gating
+# recorded playback (ZM refers to monitors by ID, not name).
+_monitor_id_to_name:
+  1: guinea-pig-cage-1
+  2: guinea-pig-cage-2
+
+admin:
+  cameras:
+    - guinea-pig-cage-1
+    - guinea-pig-cage-2
+  audio: true
+
+# Example of a restricted viewer -- one camera, no audio, daytime only.
+# Delete or edit once real users exist.
+#
+# guest:
+#   cameras:
+#     - guinea-pig-cage-1
+#   audio: false
+#   time_window:
+#     start: "08:00:00"
+#     end: "20:00:00"

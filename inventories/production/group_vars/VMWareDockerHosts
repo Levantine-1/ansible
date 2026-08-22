@@ -10,20 +10,15 @@ supported_containers:
   thisper:
     env_vars:
       VIRTUAL_HOST: thisper.levantine.io
-      DATA_GATEWAY_API_KEY_PATH: kv/data/k8clusters/DataGatewayK8Cluster/thisperAPIKey
       DATA_GATEWAY_URL: http://kube-c-00.internal.levantine.io:30080
+    # Migrated off the old hardcoded DATA_GATEWAY_API_KEY_PATH handling in
+    # deployDockerImage.yml (which its own comment called temporary) onto
+    # the generic mechanism. Same secret, same resulting env var.
+    vault_secrets:
+      - path: kv/data/k8clusters/DataGatewayK8Cluster/thisperAPIKey
+        env:
+          DATA_GATEWAY_API_KEY: api_key
 
-  # LIVECAM_ADMIN_SECRET_PATH is deliberately not listed here: unlike
-  # DATA_GATEWAY_API_KEY_PATH, deployDockerImage.yml's Vault-secret
-  # injection (nginx-proxyContainers/deployDockerImage.yml:42-55) is
-  # hardcoded to that one specific env var name, not a generic "any
-  # *_PATH key gets resolved" mechanism -- its own comment flags this as
-  # temporary. Generalizing it touches a role every one of the other 9
-  # production containers deploys through, so that's a deliberate follow-up
-  # decision, not bundled into this change. livecam's own repo should
-  # authenticate to Vault directly (e.g. its own AppRole, narrowly scoped
-  # to kv/data/livecam/* and kv/data/cameras/*, mirroring how service-host
-  # itself authenticates) rather than relying on this mechanism.
   livecam:
     env_vars:
       VIRTUAL_HOST: livecam.levantine.io
@@ -34,7 +29,22 @@ supported_containers:
       # MJPEG live path decodes every frame and is what pinned the VM.
       ZM_BACKEND_URL: http://cameras.internal.levantine.io
       GO2RTC_URL: http://cameras.internal.levantine.io:1984
-      VAULT_ADDR: http://vault.internal.levantine.io:8200
+      PERMISSIONS_FILE: /app/config/permissions.yml
+    # Read-only credentials for resolving a ZM session cookie to a
+    # username, plus the Flask session secret. Injected from Vault at
+    # deploy time so none of it is baked into the image or committed.
+    vault_secrets:
+      - path: kv/data/livecam/admin
+        env:
+          FLASK_SECRET_KEY: flask_secret_key
+          ZM_DB_HOST: zm_db_host
+          ZM_DB_USER: zm_db_user
+          ZM_DB_PASSWORD: zm_db_password
+    # Per-user permissions are config, not secrets, so they live in git and
+    # are mounted read-only rather than baked into the image -- editing who
+    # can see which camera shouldn't need a rebuild and redeploy.
+    volumes:
+      - /opt/livecam/permissions.yml:/app/config/permissions.yml:ro
 
   processmining:
     env_vars:
