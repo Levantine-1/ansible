@@ -125,6 +125,19 @@
       command: zmupdate.pl -f
       when: "'Monitors' not in zm_db_check.stdout"
 
+    # zm_create.sql seeds the default admin account with APIEnabled=0 --
+    # a per-user flag, separate from ZM's global API toggle. Found live:
+    # explains why logging in via the API worked (returned a token) but
+    # every subsequent authenticated API call as that user was rejected
+    # with "Insufficient Privileges" regardless of the account's other
+    # (all-Edit) permissions. Can't fix this through the API itself
+    # (circular -- it's disabled for exactly the account that would need
+    # to call it), so it's a direct SQL UPDATE, the one place that's
+    # actually the right tool rather than a workaround.
+    - name: Enable API access for the admin account
+      command: mysql -u root zm -e "UPDATE Users SET APIEnabled=1 WHERE Username='admin'"
+      changed_when: false
+
     # MariaDB defaults to 127.0.0.1-only -- livecam (on dockerhost1) needs
     # to reach ZM's Sessions table remotely to resolve a session cookie to
     # a ZM username (see livecam's own README). Bound to this VM's own LAN
