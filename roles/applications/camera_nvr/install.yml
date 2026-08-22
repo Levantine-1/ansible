@@ -340,6 +340,8 @@
         label: "{{ item.name }}"
       when: item.name not in (zm_existing_monitors.json.monitors | default([]) | map(attribute='Monitor.Name') | list)
       no_log: true
+      register: zm_monitors_created
+      notify: Restart ZoneMinder
 
     # The task above only fires for monitors that don't exist yet, so on
     # any already-provisioned host it never runs and the recording-mode
@@ -352,6 +354,22 @@
         mysql -u root zm -e
         "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2 WHERE SaveJPEGs != 0 OR VideoWriter != 2"
       register: zm_recording_mode_fix
+      changed_when: false
+
+    # zmc (the per-monitor capture daemon) reads its monitor config once at
+    # startup, so monitors created via the API above sit at CaptureFPS=0.00
+    # until ZM is restarted -- found on a from-scratch rebuild, where the
+    # cameras showed "Running" but were capturing nothing at all. Flushing
+    # here rather than letting the handler fire at end-of-play so the
+    # verification below runs against an actually-capturing system.
+    - meta: flush_handlers
+
+    - name: Wait for both cameras to actually start capturing
+      command: mysql -u root -N zm -e "SELECT COUNT(*) FROM Monitor_Status WHERE Status='Connected' AND CaptureFPS > 0"
+      register: zm_capturing
+      until: zm_capturing.stdout | int == (cameras | length)
+      retries: 12
+      delay: 5
       changed_when: false
 
   handlers:
