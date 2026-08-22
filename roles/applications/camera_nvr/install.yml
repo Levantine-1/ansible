@@ -345,6 +345,17 @@
             Height: "{{ item.height | default(1668) }}"
             SaveJPEGs: 0
             VideoWriter: 2
+            # Colours=4 (32-bit RGB) and a 20-frame buffer are what ZM's
+            # own web UI defaults a new monitor to. Creating via the API
+            # instead defaults Colours to 1 (8-bit greyscale) with a
+            # 3-frame buffer, and greyscale against these cameras' colour
+            # H.264 stream segfaults zmc on every capture attempt --
+            # monitors sat at "Connected" with CaptureFPS 0.00, crashing
+            # and respawning roughly every 30s. Isolated by running one
+            # monitor at Colours=4 against the other at Colours=1: zero
+            # crashes and real capture versus continuous segfaults.
+            Colours: 4
+            ImageBufferCount: 20
         status_code: [200, 201]
       loop: "{{ cameras }}"
       loop_control:
@@ -360,13 +371,19 @@
     # cheap, idempotent, and the difference between GB/hour and 13GB/hour
     # of disk, so it's worth enforcing on every run rather than trusting
     # creation-time settings to have been right.
-    - name: Enforce passthrough recording and RTSP transport on existing monitors
+    - name: Enforce recording mode, transport and colour depth on existing monitors
       command: >
-        mysql -u root zm -e
-        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2, Method='rtpRtsp'
-         WHERE SaveJPEGs != 0 OR VideoWriter != 2 OR Method != 'rtpRtsp'"
+        mysql -u root -N zm -e
+        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2, Method='rtpRtsp', Colours=4, ImageBufferCount=20
+         WHERE SaveJPEGs != 0 OR VideoWriter != 2 OR Method != 'rtpRtsp' OR Colours != 4;
+         SELECT ROW_COUNT();"
       register: zm_recording_mode_fix
-      changed_when: false
+      # ROW_COUNT() makes this honestly idempotent: "changed" only when a
+      # row actually needed correcting, which is also what fires the ZM
+      # restart handler. (An earlier version hardcoded changed_when: false,
+      # so the notify never fired and corrected settings sat unapplied
+      # until something else happened to restart ZM.)
+      changed_when: (zm_recording_mode_fix.stdout | trim | int) > 0
       notify: Restart ZoneMinder
 
     # zmc (the per-monitor capture daemon) reads its monitor config once at
