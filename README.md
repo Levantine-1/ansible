@@ -37,7 +37,7 @@ Recurring jobs on `service` are plain **systemd timers**, not a separate schedul
 
 Logs go to journald (`journalctl -u <name>.service`) — no separate log aggregation for job output. `levantine-ssl-renew.service`/`.timer` (`/usr/local/bin/renew_levantine_ssl.sh`) is the reference example: renews the `levantine.io` cert via `certbot-dns-route53`, pushes it to Vault, deploys it to the `Nginx` group via `roles/os_configs/deploySSLCerts.yml`.
 
-`opnsense-config-backup.service`/`.timer` (`/usr/local/bin/backup_opnsense_config.py`, deployed by `roles/applications/opnsense/backup.yml`) is the other example: weekly pull of OPNsense's `config.xml` via its session-based API, committed and pushed to `roles/applications/opnsense/backups/config.xml` using a GitHub PAT fetched from Vault (`kv/data/github/ansible_repo_pat`) through a git credential helper, rather than a token stored on disk.
+`opnsense-config-backup.service`/`.timer` (`/usr/local/bin/backup_opnsense_config.py`, deployed by `roles/applications/opnsense/backup.yml`) is the other example: weekly pull of OPNsense's `config.xml` via its session-based API, committed and pushed to `roles/applications/opnsense/backups/config.xml` using a GitHub PAT fetched from Vault (`kv/data/github/levantine1`) through a git credential helper, rather than a token stored on disk.
 
 `vault-secrets-backup.service`/`.timer` (`/usr/local/bin/backup_vault_secrets.py`, deployed by `roles/applications/vault_backup/backup.yml`) is the same pattern applied to Vault itself: weekly walk of every `kv/` path, piped straight into `ansible-vault encrypt` via stdin (the plaintext dump never touches disk) and committed to `roles/applications/vault_backup/backups/secrets.json.vault`.
 

@@ -18,8 +18,8 @@ TOKEN=$(curl -s -X POST \
   "${VAULT_ADDR}/v1/auth/approle/login" | python3 -c "import sys,json; print(json.load(sys.stdin)['auth']['client_token'])")
 
 PAT=$(curl -s -H "X-Vault-Token: ${TOKEN}" \
-  "${VAULT_ADDR}/v1/kv/data/github/ansible_repo_pat" | \
-  python3 -c "import sys,json; print(json.load(sys.stdin)['data']['data']['token'])")
+  "${VAULT_ADDR}/v1/kv/data/github/levantine1" | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['data']['data']['pat'])")
 
 echo "username=x-access-token"
 echo "password=${PAT}"
