@@ -235,9 +235,17 @@
     # already-rotated installs just fail this login and move on. Has to
     # come after Apache/its ZM conf are actually up (flush_handlers above),
     # not earlier -- found live, moved here after it 404'd running too soon.
+    #
+    # /api/index.php/... not the bare pretty-URL /api/... path: this ZM
+    # install ships no .htaccess under www/api at all, so mod_rewrite has
+    # nothing to dispatch pretty URLs through CakePHP's front controller --
+    # found live (every /zm/api/* path 404'd at the plain Apache level,
+    # while routing through index.php explicitly hit the app itself, 401
+    # instead of 404). Also just more robust for automation either way,
+    # not dependent on rewrite/.htaccess behavior matching across installs.
     - name: Try logging in with ZoneMinder's default seed password
       uri:
-        url: "http://localhost/zm/api/host/login.json"
+        url: "http://localhost/zm/api/index.php/host/login.json"
         method: POST
         body_format: form-urlencoded
         body:
@@ -249,7 +257,7 @@
 
     - name: Set ZoneMinder admin password via the API
       uri:
-        url: "http://localhost/zm/api/users/1.json?token={{ zm_default_login.json.access_token }}"
+        url: "http://localhost/zm/api/index.php/users/1.json?token={{ zm_default_login.json.access_token }}"
         method: PUT
         body_format: json
         body:
@@ -264,7 +272,7 @@
     # if the login step below 401s unexpectedly.
     - name: Log in to ZoneMinder's API
       uri:
-        url: "http://localhost/zm/api/host/login.json"
+        url: "http://localhost/zm/api/index.php/host/login.json"
         method: POST
         body_format: form-urlencoded
         body:
@@ -276,7 +284,7 @@
 
     - name: Get existing monitors
       uri:
-        url: "http://localhost/zm/api/monitors.json?token={{ zm_login.json.access_token }}"
+        url: "http://localhost/zm/api/index.php/monitors.json?token={{ zm_login.json.access_token }}"
         method: GET
         status_code: 200
       register: zm_existing_monitors
@@ -291,7 +299,7 @@
     # version and isn't safe to guess at via the API blind.
     - name: Create a Monitor for each camera
       uri:
-        url: "http://localhost/zm/api/monitors.json?token={{ zm_login.json.access_token }}"
+        url: "http://localhost/zm/api/index.php/monitors.json?token={{ zm_login.json.access_token }}"
         method: POST
         body_format: json
         body:
