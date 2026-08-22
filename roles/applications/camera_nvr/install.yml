@@ -152,6 +152,47 @@
       command: mysql -u root zm -e "UPDATE Users SET APIEnabled=1 WHERE Username='admin'"
       changed_when: false
 
+    # ZoneMinder ships with authentication OFF, which is why a fresh install
+    # never prompts anyone to log in or create an account. Beyond the
+    # obvious (an unauthenticated camera system on the LAN), it also breaks
+    # livecam entirely: with auth disabled ZM never issues a ZMSESSID
+    # cookie, so there is no session for livecam to resolve to a username,
+    # and every request falls back to "not logged in".
+    - name: Enable ZoneMinder authentication
+      command: >
+        mysql -u root -N zm -e
+        "UPDATE Config SET Value='1' WHERE Name='ZM_OPT_USE_AUTH' AND Value != '1';
+         SELECT ROW_COUNT();"
+      register: zm_auth_enabled
+      # Keyed off ROW_COUNT() rather than a flat changed_when: false, so the
+      # restart handlers actually fire when this flips -- ZM reads Config
+      # at startup, so without a restart the setting sits in the DB unapplied.
+      changed_when: (zm_auth_enabled.stdout | trim | int) > 0
+      notify:
+        - Restart ZoneMinder
+        - Restart Apache
+
+    # Ships as the literal string "...Change me to something unique...".
+    # It keys ZM's auth hashes, so leaving the shipped default means the
+    # hashes are derived from a value that is identical on every
+    # ZoneMinder install in the world. Replaced only while it is still that
+    # default, so re-runs never rotate it out from under live sessions.
+    - name: Check whether the auth hash secret is still ZoneMinder's default
+      command: mysql -u root -N zm -e "SELECT Value FROM Config WHERE Name='ZM_AUTH_HASH_SECRET'"
+      register: zm_hash_secret
+      changed_when: false
+
+    - name: Set a unique auth hash secret
+      command: >
+        mysql -u root zm -e
+        "UPDATE Config SET Value='{{ lookup('ansible.builtin.password', '/dev/null length=40 chars=ascii_letters,digits') }}'
+         WHERE Name='ZM_AUTH_HASH_SECRET'"
+      when: "'Change me' in zm_hash_secret.stdout"
+      no_log: true
+      notify:
+        - Restart ZoneMinder
+        - Restart Apache
+
     # MariaDB defaults to 127.0.0.1-only -- livecam (on dockerhost1) needs
     # to reach ZM's Sessions table remotely to resolve a session cookie to
     # a ZM username (see livecam's own README). Bound to this VM's own LAN
