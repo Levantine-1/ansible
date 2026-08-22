@@ -21,7 +21,13 @@ supported_containers:
 
   livecam:
     env_vars:
-      VIRTUAL_HOST: livecam.levantine.io
+      # Two hostnames: the public one relays via the AWS bastion, the -lan
+      # one resolves to this host directly so home traffic never leaves the
+      # LAN (no egress, and ZoneMinder's 33 sub-resources load locally).
+      # Both are covered by the *.levantine.io wildcard cert.
+      VIRTUAL_HOST: livecam.levantine.io,livecam-lan.levantine.io
+      PUBLIC_HOSTNAME: livecam.levantine.io
+      LAN_HOSTNAME: livecam-lan.levantine.io
       # Two backends, deliberately: ZoneMinder serves recorded playback
       # (it hands over the stored mp4 and the browser decodes it -- no
       # server-side decoding involved), while go2rtc serves live view by
@@ -45,6 +51,9 @@ supported_containers:
     # can see which camera shouldn't need a rebuild and redeploy.
     volumes:
       - /opt/livecam/permissions.yml:/app/config/permissions.yml:ro
+      # Writable, unlike the permissions mount: holds the SQLite egress
+      # counter, which must survive container recreation to be meaningful.
+      - /opt/livecam/data:/app/data
 
   processmining:
     env_vars:

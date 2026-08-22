@@ -24,6 +24,45 @@
         tag: latest
       register: image_pull
 
+    # TLS on dockerhost1 exists so the LAN can serve HTTPS directly. Without
+    # it only the AWS bastion terminated TLS, so any https:// request from
+    # home resolved out to Oregon and was relayed back through WireGuard --
+    # video going up the uplink and back down, billed as egress, and the
+    # reason ZoneMinder felt slow (a console page pulls 33 sub-resources,
+    # each round-tripping to AWS).
+    #
+    # Named after the bare domain on purpose: jwilder matches a wildcard
+    # cert by that filename, so levantine.io.crt covers every *.levantine.io
+    # vhost here -- livecam.levantine.io and livecam-lan.levantine.io alike
+    # -- rather than needing a file per hostname.
+    - name: Create the nginx-proxy certs directory
+      file:
+        path: /opt/nginx-certs
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Retrieve the levantine.io certificate from Vault
+      set_fact:
+        ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/levantine_io token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    - name: Deploy the wildcard certificate for nginx-proxy
+      copy:
+        content: "{{ ssl_certs[item.key] }}"
+        dest: "/opt/nginx-certs/levantine.io.{{ item.ext }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - { key: fullchain, ext: crt }
+        - { key: privkey, ext: key }
+      loop_control:
+        label: "levantine.io.{{ item.ext }}"
+      no_log: true
+      register: proxy_certs
+
     # NOTE: 2026-07-26 Splunk logging disabled -- HEC was never set up on the
     # rebuilt Splunk host post-migration (see ansible README). Containers use
     # Docker's default json-file logging until that's addressed. This matches
@@ -36,17 +75,27 @@
         image: jwilder/nginx-proxy:latest
         ports:
           - "80:80"
+          - "443:443"
         volumes:
           - "/var/run/docker.sock:/tmp/docker.sock:ro"
+          - "/opt/nginx-certs:/etc/nginx/certs:ro"
         detach: yes
         restart_policy: unless-stopped
         container_default_behavior: no_defaults
-      # Also fixed: this used to only run `when: image_pull.changed`, which
-      # meant a from-scratch host that had already pulled the image once
-      # (e.g. a retried run) would never actually start the container --
-      # silently "skipped" instead of failed, masking the gap. Now starts
-      # it whenever it isn't already running, regardless of image pull state.
-      when: image_pull.changed or 'nginx-proxy' not in running_containers_raw.stdout
+      # Deliberately unconditional. This used to be gated on
+      # `image_pull.changed or not running`, which had already been widened
+      # once (from image_pull alone) because a host that had pulled the
+      # image but had no container silently skipped instead of starting it.
+      # The same class of gap bit again here: with the container already
+      # running, a gate like that means changes to ports or volumes -- such
+      # as adding 443 and the certs mount -- are never applied, because
+      # nothing asks Docker to reconcile.
+      #
+      # docker_container is declarative and reports changed only when it
+      # genuinely has to recreate, so letting it evaluate every run is both
+      # correct and quiet. Verified idempotent on a second run, which
+      # matters because a spurious recreate here cascades into restarting
+      # every app container below.
       register: container_start
 
     - name: Restart nginx-proxy container if image was pulled

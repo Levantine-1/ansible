@@ -14,13 +14,18 @@
   become: yes
 
   tasks:
-    - name: Create the livecam config directory
+    - name: Create the livecam config and data directories
       file:
-        path: /opt/livecam
+        path: "{{ item }}"
         state: directory
         owner: root
         group: root
         mode: "0755"
+      loop:
+        - /opt/livecam
+        # Writable state (the SQLite egress counter). Kept outside the
+        # config file so redeploying permissions never disturbs usage data.
+        - /opt/livecam/data
 
     - name: Deploy permissions.yml
       copy:
