@@ -12,6 +12,20 @@ hashicorp:
         address: http://vault.internal.levantine.io:8200
         # Token in ansible-vault
 
+# apt-cacher-ng + a Docker Hub pull-through registry cache, both on
+# `service` (see roles/applications/apt_cache_mirror/) -- speeds up
+# fleet rebuilds by caching Debian's own package repos and the
+# frequently-re-pulled public registry:latest/jwilder images. Lives on
+# `service` specifically because it's already excluded from the
+# destroy/rebuild cycle, so the cache stays warm across rebuilds for
+# free. Every host falls back to DIRECT internet access if this is
+# unreachable (roles/os_configs/configure_apt_cache_proxy.yml) -- not a
+# hard dependency.
+apt_cache_mirror:
+    host: service.internal.levantine.io
+    apt_port: 3142
+    registry_port: 5001
+
 # Single source of truth for Prometheus scrape targets (node_exporter +
 # cAdvisor, deployed fleet-wide by roles/os_configs/monitoring_agents.yml)
 # and for Blackbox Exporter uptime probes -- not every host we can resolve

@@ -31,7 +31,7 @@ deliberately testing that the IaC still works).
 | `opnsense` | Router/DHCP/DNS for all of `192.168.1.0/24`. Losing it cuts off access to everything else, including the ability to fix anything else. |
 | `vault` | Every other host's secrets come from here. No unattended-rebuild path — see Scenario B for why. |
 | `pi-hole` | Lower stakes than the other two, but still deliberately excluded — no reason to churn it in a "just rebuild the broken stuff" pass. |
-| `service` | Runs this rebuild — can't destroy itself mid-orchestration. Also hosts Semaphore, monitoring, and the local Docker registry. |
+| `service` | Runs this rebuild — can't destroy itself mid-orchestration. Also hosts Semaphore, monitoring, the local Docker registry, and (as of 2026-08-22) the fleet's apt/Docker-Hub package cache (`roles/applications/apt_cache_mirror/`) — living here means the cache survives every soft-DR rebuild automatically, no separate exclusion-list entry needed. |
 
 **Non-critical tier — fair game:** `dockerhost1`, `pxdbc1`, `pxdbc2`,
 `pxdbc3`, `proxysql`, `kube-c-00`, `theia`, `vmwarebastion`.

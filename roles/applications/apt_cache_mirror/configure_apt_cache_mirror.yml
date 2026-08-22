@@ -1,0 +1,82 @@
+# apt-cacher-ng + a Docker Hub pull-through registry cache, both on
+# `service`. Scope deliberately narrowed to Debian's own official repos
+# (already plain HTTP) and public Docker Hub images (registry:latest,
+# jwilder/nginx-proxy, Flannel's CNI images) -- NOT the four third-party
+# HTTPS apt repos (Docker CE, Kubernetes, HashiCorp, Percona). Caching
+# those would need apt-cacher-ng's HTTPS-passthrough mechanism (rewriting
+# each repo's source URL to route through the cache, since a proxy can't
+# inspect encrypted CONNECT-tunneled traffic to cache it), which carries
+# real implementation uncertainty (exact config syntax, and Percona's
+# self-installing repo tool's generated file paths) not worth taking on
+# for this pass. See ansible README / this file's git history if that
+# scope is ever revisited.
+#
+# Also NOT covered: raw curl/wget binary downloads (cri-dockerd,
+# node_exporter, cAdvisor, promtail, github-runner tarball, wireguard-ui,
+# pi-hole's installer) -- these deliberately bypass get_url already (an
+# ansible-core/Python 3.12+ incompatibility on Proxmox 9/Trixie hosts, see
+# monitoring_agents.yml's comments), so there's no shared proxy mechanism
+# to hook into without much more bespoke per-download work. Measured at
+# 17-26s each and a one-time cost per host, not repeated on every
+# apt-install run -- low value for the added complexity.
+#
+# Excluded from routine all.yml/rebuild_fleet.sh runs (service is never
+# targeted by either), so this needs an explicit standalone first run:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/apt_cache_mirror/configure_apt_cache_mirror.yml
+---
+- name: Install and configure apt-cacher-ng and a Docker Hub pull-through cache
+  hosts: service
+  become: yes
+
+  tasks:
+    - name: Install apt-cacher-ng
+      apt:
+        name: apt-cacher-ng
+        state: present
+        update_cache: yes
+
+    - name: Ensure apt-cacher-ng listens on the expected port
+      lineinfile:
+        path: /etc/apt-cacher-ng/acng.conf
+        regexp: '^Port:'
+        line: "Port:{{ apt_cache_mirror.apt_port }}"
+        create: yes
+      register: acng_config
+
+    - name: Restart apt-cacher-ng
+      systemd:
+        name: apt-cacher-ng
+        state: restarted
+        enabled: yes
+      when: acng_config.changed
+
+    - name: Ensure apt-cacher-ng is started and enabled
+      systemd:
+        name: apt-cacher-ng
+        state: started
+        enabled: yes
+
+    - name: Persistent volume dir for the registry pull-through cache
+      file:
+        path: /var/lib/registry-mirror-cache
+        state: directory
+        mode: "0755"
+
+    # Distinct name/port/volume from the "registry" container managed by
+    # nginx-proxyContainers/downloadDockerImage.yml -- that one is a
+    # private-ECR passthrough for app deploys (deleted/recreated every
+    # deploy, port 5000). This one is a public Docker Hub pull-through
+    # cache, long-lived, on a different port.
+    - name: Run the Docker Hub pull-through registry cache
+      docker_container:
+        name: registry-mirror
+        image: registry:2
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ apt_cache_mirror.registry_port }}:5000"
+        volumes:
+          - "/var/lib/registry-mirror-cache:/var/lib/registry"
+        env:
+          REGISTRY_PROXY_REMOTEURL: "https://registry-1.docker.io"

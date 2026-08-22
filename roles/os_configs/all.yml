@@ -7,6 +7,14 @@
 - import_playbook: users.yml
 - import_playbook: bash_profile/manage_bash_profile.yml
 - import_playbook: configure_apt_sources.yml
+# configure_apt_cache_proxy.yml and apt_cache_mirror deliberately run here,
+# not down with the other applications -- all.yml's plays run strictly
+# sequentially, so importing them this early guarantees the cache on
+# `service` is already up before every later apt/docker-heavy play in this
+# same run (installDocker.yml, monitoring_agents.yml,
+# kubernetes_clusters_baseline) needs it, including service's own.
+- import_playbook: configure_apt_cache_proxy.yml
+- import_playbook: ../applications/apt_cache_mirror/configure_apt_cache_mirror.yml
 - import_playbook: resize_main_diskPartitionWrapper.yml
 - import_playbook: configure_time.yml
 # - import_playbook: dnsForwardingAndResolution.yml # NOTE: As of 2023-12-14 this is deprecated by OPNSense

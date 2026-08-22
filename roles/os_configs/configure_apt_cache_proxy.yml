@@ -1,0 +1,31 @@
+---
+# Points every Debian host at the apt-cacher-ng cache on `service`
+# (roles/applications/apt_cache_mirror/) for Debian's own official repos,
+# which are already plain HTTP in templates/sources.list.j2 -- no
+# sources.list rewriting needed anywhere for this.
+#
+# Uses Acquire::http::Proxy-Auto-Detect with a reachability-check script,
+# not a bare hardcoded Acquire::http::Proxy, so apt silently falls back to
+# DIRECT internet access whenever the cache is unreachable (down for
+# maintenance, or `service` itself mid-rebuild in some future scenario).
+# Without this, a hard proxy directive would fail every apt operation on
+# every host whenever the cache is down, turning a nice-to-have into a
+# fleet-wide single point of failure.
+- name: Configure apt-cacher-ng proxy auto-detection
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Deploy apt proxy auto-detect script
+      template:
+        src: templates/apt-proxy-detect.sh.j2
+        dest: /usr/local/bin/apt-proxy-detect.sh
+        mode: "0755"
+      when: ansible_distribution == 'Debian'
+
+    - name: Configure apt to use proxy auto-detection
+      copy:
+        content: |
+          Acquire::http::Proxy-Auto-Detect "/usr/local/bin/apt-proxy-detect.sh";
+        dest: /etc/apt/apt.conf.d/02apt-cacher-ng-proxy
+      when: ansible_distribution == 'Debian'

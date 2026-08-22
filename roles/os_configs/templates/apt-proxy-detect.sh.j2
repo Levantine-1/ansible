@@ -1,0 +1,10 @@
+#!/bin/sh
+# Called by apt (via Acquire::http::Proxy-Auto-Detect) before every http
+# acquire. Must print either a proxy URL or the literal word DIRECT, and
+# exit 0. Short timeout so a down/unreachable cache degrades apt to direct
+# internet access instead of hanging or failing outright.
+if nc -z -w2 {{ apt_cache_mirror.host }} {{ apt_cache_mirror.apt_port }} 2>/dev/null; then
+  echo "http://{{ apt_cache_mirror.host }}:{{ apt_cache_mirror.apt_port }}"
+else
+  echo "DIRECT"
+fi

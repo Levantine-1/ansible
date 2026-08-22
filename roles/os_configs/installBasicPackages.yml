@@ -9,6 +9,7 @@
       - htop # Better than top
       - net-tools # ifconfig and stuff
       - python3-hvac # HashiCorp Vault client
+      - netcat-openbsd # nc, used by configure_apt_cache_proxy.yml's proxy-autodetect script
     service_host_packages:
       - snap # The snap packages for needed to install firefox on service host
       - snapd

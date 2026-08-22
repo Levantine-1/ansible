@@ -12,6 +12,22 @@
       notify: Update apt cache
       when: ansible_distribution == 'Debian'
 
+    # Debian's official cloud images ship their own default repo config at
+    # this path (deb822 format, "mirror+file:" pointing at an HTTPS mirror
+    # list) -- fully redundant with the sources.list template above (same
+    # repos, different mechanism), but its HTTPS URIs can't be cached by
+    # apt-cacher-ng (a proxy can't inspect encrypted CONNECT-tunneled
+    # traffic) and apt-cacher-ng correctly 403s the tunnel attempt rather
+    # than silently allow it. Found live once the apt cache proxy was
+    # actually rolled out to a real host -- removing it is safe since
+    # sources.list above already covers the same suites/components.
+    - name: Remove the redundant HTTPS-based debian.sources (duplicates sources.list)
+      file:
+        path: /etc/apt/sources.list.d/debian.sources
+        state: absent
+      notify: Update apt cache
+      when: ansible_distribution == 'Debian'
+
   handlers:
     - name: Update apt cache
       apt:

@@ -47,28 +47,44 @@
         name: "python3-docker"
         state: present
 
-    - name: Add insecure-registries to daemon.json
-      # Needed so dockerhost1 can `docker pull` from service's local
-      # registry (used by downloadDockerImage.yml/deployDockerImage.yml to
-      # move images between hosts, replacing the old base64-over-SSH fetch
-      # mechanism that failed on large images) without TLS. Scoped to
+    - name: Add insecure-registries and registry-mirrors to daemon.json
+      # insecure-registries: needed so dockerhost1 can `docker pull` from
+      # service's local registry (used by
+      # downloadDockerImage.yml/deployDockerImage.yml to move images
+      # between hosts, replacing the old base64-over-SSH fetch mechanism
+      # that failed on large images) without TLS. Scoped to
       # VMWareDockerHosts only -- service itself never needs this (it only
       # ever pushes to its own localhost:5000, which Docker already trusts
       # as insecure by default), and DataGatewayK8Cluster hosts manage
       # their own separate daemon.json for their own local registry in
       # kubernetes_clusters_baseline/setup_k8_baseline.yml -- writing this
       # file unconditionally here would clobber that.
+      # registry-mirrors: routes public Docker Hub pulls (registry:latest,
+      # jwilder/nginx-proxy) through the pull-through cache on `service`
+      # (roles/applications/apt_cache_mirror/) instead of hitting Docker
+      # Hub directly on every rebuild.
       copy:
         content: |
           {
-            "insecure-registries" : ["service.internal.levantine.io:5000"]
+            "insecure-registries" : ["service.internal.levantine.io:5000"],
+            "registry-mirrors" : ["http://{{ apt_cache_mirror.host }}:{{ apt_cache_mirror.registry_port }}"]
           }
         dest: /etc/docker/daemon.json
       register: daemon_json
       when: "'VMWareDockerHosts' in group_names"
 
+    - name: Add registry-mirrors to daemon.json (service)
+      copy:
+        content: |
+          {
+            "registry-mirrors" : ["http://{{ apt_cache_mirror.host }}:{{ apt_cache_mirror.registry_port }}"]
+          }
+        dest: /etc/docker/daemon.json
+      register: daemon_json_service
+      when: "'service' in group_names"
+
     - name: Restart Docker
       systemd:
         name: docker
         state: restarted
-      when: daemon_json.changed
+      when: daemon_json.changed or daemon_json_service.changed
