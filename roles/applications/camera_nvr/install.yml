@@ -95,8 +95,14 @@
         state: present
         login_unix_socket: /var/run/mysqld/mysqld.sock
 
+    # `USE zm; SHOW TABLES;` alone isn't a valid "already set up" check --
+    # it succeeds (rc=0) on a freshly-created, still-empty database too,
+    # found live (skipped zmupdate.pl entirely on a genuinely fresh
+    # install, cascading into "Set ZoneMinder admin password" failing with
+    # no Users table to operate on). Checking for a specific table
+    # zmupdate.pl actually creates is the real signal.
     - name: Check if ZoneMinder's database is already set up
-      command: mysql -u root -e "USE zm; SHOW TABLES;"
+      command: mysql -u root -N -e "USE zm; SHOW TABLES LIKE 'Monitors';"
       register: zm_db_check
       changed_when: false
       failed_when: false
@@ -106,7 +112,7 @@
     # loads the actual table schema now that the DB/user above exist.
     - name: Initialize ZoneMinder's database
       command: zmupdate.pl -f
-      when: zm_db_check.rc != 0
+      when: "'Monitors' not in zm_db_check.stdout"
 
     # zmupdate.pl -f creates the default admin/admin account -- reset its
     # password to the Vault-stored value so the API login step below works
