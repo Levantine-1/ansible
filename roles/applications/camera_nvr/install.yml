@@ -240,44 +240,25 @@
     # the package's own bin/ list has no such script anymore; user
     # management moved entirely to the web UI/API. zm_create.sql seeds a
     # single admin account with ZM's well-known default bcrypt hash for
-    # the password "admin" (meant to be changed on first login). Idempotent
-    # across re-runs by trying that default login first: succeeds only on
-    # a genuinely fresh install, in which case the password gets changed
-    # via the API's own user-edit endpoint (which handles ZM's bcrypt
-    # hashing correctly, same as the web UI's edit-user form would);
-    # already-rotated installs just fail this login and move on. Has to
-    # come after Apache/its ZM conf are actually up (flush_handlers above),
-    # not earlier -- found live, moved here after it 404'd running too soon.
+    # the password "admin" (meant to be changed on first login).
     #
-    # /api/index.php/... not the bare pretty-URL /api/... path: this ZM
-    # install ships no .htaccess under www/api at all, so mod_rewrite has
-    # nothing to dispatch pretty URLs through CakePHP's front controller --
-    # found live (every /zm/api/* path 404'd at the plain Apache level,
-    # while routing through index.php explicitly hit the app itself, 401
-    # instead of 404). Also just more robust for automation either way,
-    # not dependent on rewrite/.htaccess behavior matching across installs.
-    - name: Try logging in with ZoneMinder's default seed password
-      uri:
-        url: "http://localhost/zm/api/index.php/host/login.json"
-        method: POST
-        body_format: form-urlencoded
-        body:
-          user: "admin"
-          pass: "admin"
-        status_code: [200, 401]
-      register: zm_default_login
-      no_log: true
-
-    - name: Set ZoneMinder admin password via the API
-      uri:
-        url: "http://localhost/zm/api/index.php/users/1.json?token={{ zm_default_login.json.access_token }}"
-        method: PUT
-        body_format: json
-        body:
-          User:
-            Password: "{{ camera_secrets.zm_admin_password }}"
-        status_code: 200
-      when: zm_default_login.status == 200
+    # Direct SQL UPDATE, not the API's user-edit endpoint: spent real
+    # effort chasing that path first (API login worked, but every
+    # subsequent authenticated call as admin came back "Insufficient
+    # Privileges" despite the account's System=Edit permission and
+    # APIEnabled=1 both checking out against the controller's own source --
+    # something deeper in ZM's ACL layer, not worth reverse-engineering
+    # further for a one-time password set). ansible's password_hash filter
+    # produces a standard bcrypt hash (passlib, "2b" prefix) -- the exact
+    # format zm_create.sql's own seed row already uses, so this is setting
+    # the same field the same way the app itself would, just via SQL
+    # instead of the API. Idempotent: harmless to set the same value again
+    # on every re-run.
+    - name: Set ZoneMinder admin password
+      command: >
+        mysql -u root zm -e
+        "UPDATE Users SET Password='{{ camera_secrets.zm_admin_password | password_hash('bcrypt', rounds=12) }}' WHERE Username='admin'"
+      changed_when: false
       no_log: true
 
     # ZM's REST API needs API access enabled (ZM_OPT_USE_API, on by default
