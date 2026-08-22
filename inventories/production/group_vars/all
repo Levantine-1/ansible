@@ -52,8 +52,12 @@ monitored_hosts:
     - { name: pxdbc3, host: pxdbc3.internal.levantine.io }
     - { name: proxysql, host: proxysql.internal.levantine.io }
     - { name: kube-c-00, host: kube-c-00.internal.levantine.io }
-    - { name: kube-w-00, host: kube-w-00.internal.levantine.io }
-    - { name: kube-w-01, host: kube-w-01.internal.levantine.io }
+    # kube-w-00/01 deliberately absent: both were scaled down 2026-08-17
+    # (see terraform/proxmox/vms.tf) and no longer exist, but were left here,
+    # so Prometheus kept scraping them and four InstanceDown alerts fired
+    # permanently -- exactly the noise that hides a real alert later.
+    # Re-add these two lines alongside uncommenting the terraform entries if
+    # the full 3-node demo cluster is ever restored.
     - { name: 3800xt, host: "10.69.69.139" }
     - { name: fx8200, host: "10.69.69.116" }
     - { name: cameras, host: cameras.internal.levantine.io }
