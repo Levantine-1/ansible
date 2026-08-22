@@ -125,40 +125,6 @@
       command: zmupdate.pl -f
       when: "'Monitors' not in zm_db_check.stdout"
 
-    # zmuser.pl doesn't exist in this ZM version (1.36.x) -- found live,
-    # the package's own bin/ list has no such script anymore; user
-    # management moved entirely to the web UI/API. zm_create.sql seeds a
-    # single admin account with ZM's well-known default bcrypt hash for
-    # the password "admin" (meant to be changed on first login). Idempotent
-    # across re-runs by trying that default login first: succeeds only on
-    # a genuinely fresh install, in which case the password gets changed
-    # via the API's own user-edit endpoint (which handles ZM's bcrypt
-    # hashing correctly, same as the web UI's edit-user form would);
-    # already-rotated installs just fail this login and move on.
-    - name: Try logging in with ZoneMinder's default seed password
-      uri:
-        url: "http://localhost/zm/api/host/login.json"
-        method: POST
-        body_format: form-urlencoded
-        body:
-          user: "admin"
-          pass: "admin"
-        status_code: [200, 401]
-      register: zm_default_login
-      no_log: true
-
-    - name: Set ZoneMinder admin password via the API
-      uri:
-        url: "http://localhost/zm/api/users/1.json?token={{ zm_default_login.json.access_token }}"
-        method: PUT
-        body_format: json
-        body:
-          User:
-            Password: "{{ camera_secrets.zm_admin_password }}"
-        status_code: 200
-      when: zm_default_login.status == 200
-      no_log: true
-
     # MariaDB defaults to 127.0.0.1-only -- livecam (on dockerhost1) needs
     # to reach ZM's Sessions table remotely to resolve a session cookie to
     # a ZM username (see livecam's own README). Bound to this VM's own LAN
@@ -246,6 +212,42 @@
     # login task right below needs the newly-enabled zoneminder conf
     # already loaded, not queued behind everything else.
     - meta: flush_handlers
+
+    # zmuser.pl doesn't exist in this ZM version (1.36.x) -- found live,
+    # the package's own bin/ list has no such script anymore; user
+    # management moved entirely to the web UI/API. zm_create.sql seeds a
+    # single admin account with ZM's well-known default bcrypt hash for
+    # the password "admin" (meant to be changed on first login). Idempotent
+    # across re-runs by trying that default login first: succeeds only on
+    # a genuinely fresh install, in which case the password gets changed
+    # via the API's own user-edit endpoint (which handles ZM's bcrypt
+    # hashing correctly, same as the web UI's edit-user form would);
+    # already-rotated installs just fail this login and move on. Has to
+    # come after Apache/its ZM conf are actually up (flush_handlers above),
+    # not earlier -- found live, moved here after it 404'd running too soon.
+    - name: Try logging in with ZoneMinder's default seed password
+      uri:
+        url: "http://localhost/zm/api/host/login.json"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          user: "admin"
+          pass: "admin"
+        status_code: [200, 401]
+      register: zm_default_login
+      no_log: true
+
+    - name: Set ZoneMinder admin password via the API
+      uri:
+        url: "http://localhost/zm/api/users/1.json?token={{ zm_default_login.json.access_token }}"
+        method: PUT
+        body_format: json
+        body:
+          User:
+            Password: "{{ camera_secrets.zm_admin_password }}"
+        status_code: 200
+      when: zm_default_login.status == 200
+      no_log: true
 
     # ZM's REST API needs API access enabled (ZM_OPT_USE_API, on by default
     # in recent packaged versions) -- verify against the installed version
