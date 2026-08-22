@@ -103,7 +103,9 @@
                 name: datagateway
                 namespace: default
               spec:
-                replicas: 4
+                # Dropped from 4: over-provisioned for a low-traffic
+                # portfolio demo app on a single-node cluster.
+                replicas: 2
                 selector:
                   matchLabels:
                     app: datagateway
