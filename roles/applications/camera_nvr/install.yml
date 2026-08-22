@@ -107,10 +107,21 @@
       changed_when: false
       failed_when: false
 
-    # zmupdate.pl -f is the package's own documented one-time schema-setup
-    # step (also what dpkg-reconfigure zoneminder runs under the hood) --
-    # loads the actual table schema now that the DB/user above exist.
-    - name: Initialize ZoneMinder's database
+    # zmupdate.pl -f is NOT the initial-schema-load tool despite being the
+    # package's documented one-liner for this -- found live, it assumes
+    # core tables (Config, etc.) already exist and fails outright on a
+    # genuinely empty database ("Table 'zm.Config' doesn't exist"). The
+    # real initial schema ships as a plain SQL file; zmupdate.pl is only
+    # for version-to-version migrations on top of that.
+    - name: Load ZoneMinder's initial database schema
+      command: >
+        mysql -u root zm -e "source /usr/share/zoneminder/db/zm_create.sql"
+      when: "'Monitors' not in zm_db_check.stdout"
+
+    # Safe/idempotent to run either way -- brings a freshly-loaded schema
+    # up to whatever point releases this package version expects, same as
+    # it would on a genuine upgrade.
+    - name: Apply any pending ZoneMinder schema migrations
       command: zmupdate.pl -f
       when: "'Monitors' not in zm_db_check.stdout"
 
