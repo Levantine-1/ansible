@@ -158,12 +158,14 @@ everything reverts to the normal, fully-automated path.
 Install Proxmox on the new hardware. Note root/API access — this is used
 directly, once, in Stage 1; it doesn't need to go anywhere durable.
 
-### Stage 1 — break-glass terraform apply (NOT YET SOLVED — see below)
+### Stage 1 — break-glass terraform apply
 
-Vault, OPNsense, and pi-hole are the only three hosts with no dependency on
-Vault already being up (everything else's terraform reads Vault-sourced
-credentials for AWS/Proxmox both), so in principle this stage applies just
-those three, supplying credentials directly instead of through Vault.
+Vault, OPNsense, pi-hole, and `service` are the four hosts with no
+dependency on Vault already being up (everything else's terraform reads
+Vault-sourced credentials for AWS/Proxmox both) — `service` belongs in this
+set too, even though it's not "critical tier" in the OPNsense/Vault sense:
+it's still just a plain VM shell created by the same Vault-dependent
+config, so it needs the identical treatment.
 
 **A first attempt at this (a `proxmox_bootstrap_mode` variable gating the
 Proxmox provider's Vault-sourced data sources behind `count`, with direct
@@ -181,38 +183,36 @@ something that could destroy `service` the first time anyone actually used
 it. See the commit that reverted it in `terraform/proxmox/main.tf`'s
 history for the full writeup.
 
-**What Stage 1 actually needs is a way to supply Proxmox credentials
-directly that doesn't touch the resource addresses used elsewhere in this
-same configuration** — e.g. a genuinely separate, minimal terraform
-configuration (its own directory, own provider block, own tiny state) that
-only ever creates the Vault/OPNsense/pi-hole VM shells, entirely decoupled
-from `proxmox/main.tf`'s provider and resource graph, rather than trying to
-make the main configuration conditionally bootstrap-aware. Not built yet —
-until it is, a total physical loss recovery's first step is manual: create
-the three VM shells directly via the Proxmox UI/CLI on the fresh install
-(matching the specs in `proxmox/vms.tf`/`proxmox/opnsense.tf` for vm_id,
-sizing, network, static IP), then pick up at Stage 2 below. Once a real
-break-glass mechanism exists, `terraform import` those three VMs the same
-way this session imported the originals, so state catches up to reality.
+**The actual fix: `terraform/proxmox-bootstrap/`, a genuinely separate
+terraform configuration** — own directory, own provider block, own local
+state, zero references to Vault or AWS anywhere in it. It creates exactly
+the four VM shells (`vault`, `opnsense`, `pi-hole`, `service`), taking
+Proxmox credentials as plain input variables supplied by hand from the
+fresh Proxmox install's own UI/CLI. See that directory's `README.md` for
+the apply command and, critically, the state-reconciliation step
+afterward (`terraform import` these four into the real `terraform/proxmox`
+state once Vault is back up, so future operations go through the normal
+path again — this bootstrap config is meant to be used once per incident,
+not kept as an ongoing parallel state).
+
+Not yet exercised against a real fresh Proxmox install — the terraform
+syntax validates, and the resource shapes are copied from the live
+`proxmox/vms.tf`/`service.tf`/`opnsense.tf`, but a real `terraform apply`
+against actual new hardware would be the first real test of this path,
+same as Scenario A needed two live passes before its bugs surfaced.
 
 ### Stage 2 — manual + ansible
 
-1. **OPNsense**: connect via Proxmox's console and complete the installer
-   interactively (no unattended-install mechanism exists — see
-   `proxmox/opnsense.tf`'s header comment for why). Once it has at least LAN
-   connectivity and a temporary admin password:
-   ```
-   VAULT_ADDR=http://vault.internal.levantine.io:8200 \
-   VAULT_ROLE_ID=<role_id> VAULT_SECRET_ID=<secret_id> \
-   roles/applications/opnsense/files/restore_opnsense_config.py
-   ```
-   This restores the fleet's actual firewall/interface/DHCP/Unbound-DNS
-   config from the latest commit under
-   `roles/applications/opnsense/backups/config.xml` — the internal DNS
-   overrides for every other hostname come back as part of this, since
-   they're part of OPNsense's own config, not a separate step.
+1. **`service`**: SSH in as `automation`, clone both repos, install
+   ansible + the `community.hashi_vault`/`kubernetes.core` collections
+   (see the ansible repo's own README for the exact package list). Every
+   command in this stage runs from here.
 
-2. **Vault**: install via ansible, then init/unseal by hand with the
+2. **pi-hole**: fully unattended, nothing bootstrap-specific —
+   `ansible-playbook -i inventories/production/production.ini
+   roles/applications/pi-hole/configure_pi-hole.yml`.
+
+3. **Vault**: install via ansible, then init/unseal by hand with the
    operator's retained keys (this repo never automates that step, on
    purpose):
    ```
@@ -222,15 +222,45 @@ way this session imported the originals, so state catches up to reality.
    vault operator unseal  # x3, with the retained keys
    ```
 
-3. **Restore Vault's secrets** from the latest committed encrypted backup:
+4. **Restore Vault's secrets** from the latest committed encrypted backup:
    ```
    VAULT_ADDR=http://vault.internal.levantine.io:8200 \
-   VAULT_TOKEN=<root token from step 2> \
+   VAULT_TOKEN=<root token from step 3> \
    ANSIBLE_VAULT_PASSWORD_FILE=<path to the retained ansible-vault password> \
    roles/applications/vault_backup/files/restore_vault_secrets.py
    ```
    Uses the root token directly, not AppRole — AppRole auth itself is one of
-   the things being restored, so it isn't available yet at this point.
+   the things being restored, so it isn't available yet at this point. This
+   restores secret *values* only — it does not touch the `approle` auth
+   method, the `service-host` policy, or the AppRole role binding itself,
+   none of which live under `kv/`. Step 5 below covers that.
+
+5. **Configure Vault's own auth config** (the piece step 4 doesn't cover —
+   enables `approle`, writes the `service-host` policy, creates the role,
+   and mints `/etc/vault-approle.env` since it won't exist yet on a fresh
+   `service`):
+   ```
+   ansible-playbook -i inventories/production/production.ini \
+     roles/applications/hashicorp_vault/configure_vault_auth.yml \
+     --extra-vars "vault_root_token=<root token from step 3>"
+   ```
+   Idempotent — safe to re-run any time `service-host`'s policy needs to
+   change, not just during a DR recovery. Only mints a fresh role_id/
+   secret_id when `/etc/vault-approle.env` is actually missing.
+
+6. **OPNsense**: connect via Proxmox's console and complete the installer
+   interactively (no unattended-install mechanism exists — see
+   `proxmox/opnsense.tf`'s header comment for why). Once it has at least LAN
+   connectivity and a temporary admin password:
+   ```
+   source /etc/vault-approle.env  # from step 5
+   roles/applications/opnsense/files/restore_opnsense_config.py
+   ```
+   This restores the fleet's actual firewall/interface/DHCP/Unbound-DNS
+   config from the latest commit under
+   `roles/applications/opnsense/backups/config.xml` — the internal DNS
+   overrides for every other hostname come back as part of this, since
+   they're part of OPNsense's own config, not a separate step.
 
 ### Stage 3 — fully automated again
 
@@ -264,10 +294,6 @@ Same checklist as Scenario A, plus:
 
 ## Known gaps (not solved by either scenario)
 
-- **Scenario B's Stage 1 (break-glass credentials) has no working
-  mechanism yet** — a first attempt was built and reverted the same day
-  after a live dry-run showed it could destroy `service`. See Stage 1
-  above for what actually needs building.
 - **Percona and Kubernetes have no data backup/restore at all.** Both
   scenarios above wipe and recreate them from empty. If the actual data in
   either ever needs to survive a rebuild, that's separate, unstarted work.
@@ -277,10 +303,17 @@ Same checklist as Scenario A, plus:
   for real (would require actually destroying/reinstalling OPNsense to
   test, which is out of scope until this DR plan is deliberately being
   rehearsed).
-- **Neither scenario has been run for real end-to-end.** Scenario A's
-  individual steps have each been exercised live at some point (Percona
-  bootstrap, ProxySQL recovery, the Vault secrets backup script), but not
-  strung together as one continuous rehearsal. Scenario B is entirely
-  unrehearsed. Treat this document as a strong starting point, not a
+- **`configure_vault_auth.yml` has only been tested as a no-op re-run**
+  against a live, already-configured Vault (confirmed it correctly skips
+  re-minting `/etc/vault-approle.env`, and that the policy/role rewrite
+  didn't disrupt anything live). It has never been exercised against a
+  genuinely fresh Vault with `approle` not yet enabled and no existing
+  credential file — the actual Stage 2 bootstrap path it's meant for.
+- **Scenario B is entirely unrehearsed end-to-end.** Stage 1's terraform
+  config (`terraform/proxmox-bootstrap/`) is syntax-validated but has never
+  run against real hardware; Stage 2 has never been run start to finish.
+  Scenario A, by contrast, has now been run for real twice (see below) —
+  Scenario B needs the same treatment before it should be trusted. Treat
+  this document as a strong starting point, not a
   guarantee — the next time either is actually needed for real, expect to
   find and fix something.
