@@ -325,7 +325,6 @@
       loop: "{{ cameras }}"
       loop_control:
         label: "{{ item.name }}"
-      no_log: true
       when: item.name not in (zm_existing_monitors.json.monitors | default([]) | map(attribute='Monitor.Name') | list)
       no_log: true
 
