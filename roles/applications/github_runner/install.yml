@@ -53,9 +53,18 @@
         pat_vault_path: kv/data/github/nhitruong96_pat
 
   tasks:
+    # kv/data/github/levantine1 (the rotated all-repos PAT) stores its
+    # value under key `pat`; kv/data/github/nhitruong96_pat (an unrelated,
+    # untouched, pre-existing secret for an external account) stores it
+    # under `token` instead -- found live, a blanket .pat rename broke
+    # this second one ("'dict object' has no attribute 'pat'"). Falls back
+    # to whichever key is actually present rather than assuming one shape
+    # for every secret under kv/data/github/.
     - name: Retrieve GitHub PATs from HashiCorp Vault
       set_fact:
-        github_pats: "{{ github_pats | default({}) | combine({ item: (lookup('hashi_vault', 'secret=' + item + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address)).pat }) }}"
+        github_pats: "{{ github_pats | default({}) | combine({ item: (vault_secret.pat | default(vault_secret.token)) }) }}"
+      vars:
+        vault_secret: "{{ lookup('hashi_vault', 'secret=' + item + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address) }}"
       loop: "{{ runner_instances | map(attribute='pat_vault_path') | unique | list }}"
 
     - name: Register and start each runner instance
