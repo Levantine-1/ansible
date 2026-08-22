@@ -94,6 +94,32 @@
       command: zmuser.pl -e admin -p '{{ camera_secrets.zm_admin_password }}'
       no_log: true
 
+    # MariaDB defaults to 127.0.0.1-only -- livecam (on dockerhost1) needs
+    # to reach ZM's Sessions table remotely to resolve a session cookie to
+    # a ZM username (see livecam's own README). Bound to this VM's own LAN
+    # IP specifically, not 0.0.0.0, so it's not reachable from anywhere
+    # broader than the internal network this VM is already only on.
+    - name: Let MariaDB listen on the LAN interface
+      lineinfile:
+        path: /etc/mysql/mariadb.conf.d/50-server.cnf
+        regexp: '^bind-address'
+        line: "bind-address = 192.168.1.85"
+      notify: Restart MariaDB
+
+    # Dedicated read-only account, not ZM's own root/app credentials --
+    # scoped to exactly the one table livecam actually needs (Sessions, to
+    # resolve who a forwarded session cookie belongs to), nothing else in
+    # the zm database.
+    - name: Create livecam's read-only DB user
+      mysql_user:
+        name: livecam_ro
+        password: "{{ camera_secrets.livecam_db_password }}"
+        host: "192.168.1.31"
+        priv: "zm.Sessions:SELECT"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      no_log: true
+
     - name: Add www-data to the video group (camera device/capture access)
       user:
         name: www-data
@@ -205,4 +231,9 @@
     - name: Restart ZoneMinder
       service:
         name: zoneminder
+        state: restarted
+
+    - name: Restart MariaDB
+      service:
+        name: mariadb
         state: restarted

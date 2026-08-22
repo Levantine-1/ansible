@@ -7,7 +7,7 @@
 # automation credentials (Vault AppRole, AWS/Proxmox tokens,
 # ansible-vault password).
 #
-# One runner per app repo (9 total), each its own systemd service.
+# One runner per app repo (10 total), each its own systemd service.
 # Neither Levantine-1 nor nhitruong96 is a real GitHub Organization (both
 # are personal User accounts, confirmed live against the GitHub API --
 # org-level runner registration returned 404), so there's no way to share
@@ -23,16 +23,19 @@
     runner_instances:
       - name: thisper
         repo: Levantine-1/thisper
-        pat_vault_path: kv/data/github/levantine1_org_pat
+        pat_vault_path: kv/data/github/levantine1
       - name: DataGateway
         repo: Levantine-1/DataGateway
-        pat_vault_path: kv/data/github/levantine1_org_pat
+        pat_vault_path: kv/data/github/levantine1
       - name: processMining
         repo: Levantine-1/processMining
-        pat_vault_path: kv/data/github/levantine1_org_pat
+        pat_vault_path: kv/data/github/levantine1
       - name: portfolio
         repo: Levantine-1/portfolio
-        pat_vault_path: kv/data/github/levantine1_org_pat
+        pat_vault_path: kv/data/github/levantine1
+      - name: livecam
+        repo: Levantine-1/livecam
+        pat_vault_path: kv/data/github/levantine1
       - name: pet-care
         repo: nhitruong96/pet-care
         pat_vault_path: kv/data/github/nhitruong96_pat
@@ -52,7 +55,7 @@
   tasks:
     - name: Retrieve GitHub PATs from HashiCorp Vault
       set_fact:
-        github_pats: "{{ github_pats | default({}) | combine({ item: (lookup('hashi_vault', 'secret=' + item + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address)).token }) }}"
+        github_pats: "{{ github_pats | default({}) | combine({ item: (lookup('hashi_vault', 'secret=' + item + ' token=' + hashicorp_vault_token + ' url=' + hashicorp.vault.address)).pat }) }}"
       loop: "{{ runner_instances | map(attribute='pat_vault_path') | unique | list }}"
 
     - name: Register and start each runner instance
