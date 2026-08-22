@@ -184,7 +184,8 @@ make_template(
 
 # --- Deploy Container (was: DeployContainer Jenkins job) ---
 container_choices = ["portfolio", "thisper", "real-estate", "booking-movie-ticket",
-                      "education-platform", "dental-care", "pet-care", "processmining"]
+                      "education-platform", "dental-care", "pet-care", "processmining",
+                      "livecam"]
 make_template(
     "Deploy Container",
     "roles/applications/nginx-proxyContainers/deployContainerWrapper.yml",
@@ -199,7 +200,8 @@ make_template(
 
 # --- Manage Docker Containers (was: ManageDockerContainers Jenkins job) ---
 docker_services = ["nginx-proxy", "portfolio", "real-estate", "booking-movie-ticket",
-                    "thisper", "education-platform", "dental-care", "pet-care", "processmining"]
+                    "thisper", "education-platform", "dental-care", "pet-care", "processmining",
+                    "livecam"]
 manage_docker_template_id = make_template(
     "Manage Docker Containers",
     "roles/applications/nginx-proxyContainers/manageDockerContainerState.yml",
