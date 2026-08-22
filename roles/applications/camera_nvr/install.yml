@@ -63,6 +63,7 @@
           - zoneminder
           - mariadb-server
           - apache2
+          - python3-pymysql
         state: present
         update_cache: yes
 
