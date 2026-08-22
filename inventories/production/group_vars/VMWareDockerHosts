@@ -27,7 +27,13 @@ supported_containers:
   livecam:
     env_vars:
       VIRTUAL_HOST: livecam.levantine.io
+      # Two backends, deliberately: ZoneMinder serves recorded playback
+      # (it hands over the stored mp4 and the browser decodes it -- no
+      # server-side decoding involved), while go2rtc serves live view by
+      # remuxing the camera stream. Live view is NOT ZM's job here; ZM's
+      # MJPEG live path decodes every frame and is what pinned the VM.
       ZM_BACKEND_URL: http://cameras.internal.levantine.io
+      GO2RTC_URL: http://cameras.internal.levantine.io:1984
       VAULT_ADDR: http://vault.internal.levantine.io:8200
 
   processmining:

@@ -1,0 +1,155 @@
+---
+# go2rtc: restreams the cameras for live viewing in a browser.
+#
+# Exists because browsers can't play RTSP directly, and ZoneMinder's own
+# answer to that (decode every frame into MJPEG) is exactly the path that
+# had to be disabled -- it pinned this 2-core VM at load average 9.5 and
+# starved sshd badly enough to need a power cycle. go2rtc *remuxes*
+# instead: it repackages the camera's existing H.264 into WebRTC/HLS/MSE
+# without touching pixels, so it stays cheap even at full 2960x1668.
+#
+# Recording is entirely ZoneMinder's job and is untouched by this --
+# see install.yml. The two are independent consumers of the same camera,
+# which it handles fine (verified: 9 concurrent streams with ZM's capture
+# rate completely unaffected).
+#
+# go2rtc connects to a camera lazily, only while something is actually
+# watching, so with nobody viewing this costs nothing and the camera sees
+# only ZoneMinder's single connection. It also pulls each camera once and
+# fans out to all viewers, so viewer count never multiplies load on the
+# camera.
+#
+# LAN-only by construction: this VM has a single NIC on vmbr1, and the
+# only public path in is livecam on dockerhost1, which proxies these
+# streams after doing its own auth/permission checks.
+- name: Install and configure go2rtc for live camera restreaming
+  hosts: Cameras
+  become: yes
+
+  vars_files:
+    - ../../../vault.yml
+
+  vars:
+    go2rtc_version: "1.9.14"
+
+  tasks:
+    - name: Retrieve camera RTSP credentials from Vault
+      set_fact:
+        camera_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/cameras/amcrest token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    - name: Check if the go2rtc binary is already installed
+      stat:
+        path: /usr/local/bin/go2rtc
+      register: go2rtc_bin
+
+    - name: Create go2rtc system user
+      user:
+        name: go2rtc
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+
+    # curl, not get_url -- same ansible-core/Python 3.12 HTTP incompatibility
+    # documented in monitoring_agents.yml. Released as a bare binary rather
+    # than a tarball, so there's nothing to extract.
+    - name: Download the go2rtc binary
+      command: >
+        curl -sL -o /usr/local/bin/go2rtc
+        "https://github.com/AlexxIT/go2rtc/releases/download/v{{ go2rtc_version }}/go2rtc_linux_amd64"
+      when: not go2rtc_bin.stat.exists
+
+    - name: Set permissions on the go2rtc binary
+      file:
+        path: /usr/local/bin/go2rtc
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create the go2rtc config directory
+      file:
+        path: /etc/go2rtc
+        state: directory
+        owner: go2rtc
+        group: go2rtc
+        mode: "0750"
+
+    # 0640 go2rtc-owned: this file embeds the cameras' RTSP credentials, so
+    # it must never be world-readable (and never committed -- it's rendered
+    # from Vault at deploy time).
+    - name: Deploy the go2rtc config
+      template:
+        src: templates/go2rtc.yaml.j2
+        dest: /etc/go2rtc/go2rtc.yaml
+        owner: go2rtc
+        group: go2rtc
+        mode: "0640"
+      no_log: true
+      notify: Restart go2rtc
+
+    - name: Deploy the go2rtc systemd unit
+      copy:
+        dest: /etc/systemd/system/go2rtc.service
+        content: |
+          [Unit]
+          Description=go2rtc camera restreamer
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User=go2rtc
+          ExecStart=/usr/local/bin/go2rtc -config /etc/go2rtc/go2rtc.yaml
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: go2rtc_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: go2rtc_unit.changed
+
+    - name: Enable and start go2rtc
+      systemd:
+        name: go2rtc
+        enabled: yes
+        state: started
+
+    - meta: flush_handlers
+
+    - name: Wait for the go2rtc API to answer
+      uri:
+        url: "http://localhost:1984/api/streams"
+        status_code: 200
+      register: go2rtc_api
+      until: go2rtc_api.status == 200
+      retries: 12
+      delay: 5
+
+    # Catches a config that parsed but produced the wrong stream set (e.g.
+    # a templating mistake silently dropping a camera) -- the API answering
+    # 200 alone doesn't prove the streams are actually there.
+    - name: Verify every camera has all four stream variants registered
+      assert:
+        that: >-
+          {{ cameras | map(attribute='name') | map('regex_replace', '$', suffix) | list
+             | difference(go2rtc_api.json.keys() | list) | length == 0 }}
+        fail_msg: "go2rtc is missing expected '{{ suffix }}' streams. Registered: {{ go2rtc_api.json.keys() | list }}"
+      loop:
+        - ""
+        - "_noaudio"
+        - "_sub"
+        - "_sub_noaudio"
+      loop_control:
+        loop_var: suffix
+
+  handlers:
+    - name: Restart go2rtc
+      systemd:
+        name: go2rtc
+        state: restarted

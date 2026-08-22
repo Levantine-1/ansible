@@ -38,6 +38,10 @@
 - import_playbook: ../applications/theia/install.yml
 - import_playbook: theiaOneOff.yml
 - import_playbook: ../applications/camera_nvr/install.yml
+# Recording (install.yml) and live restreaming (go2rtc.yml) are independent
+# consumers of the same cameras -- go2rtc deliberately does NOT depend on
+# ZoneMinder, so live view keeps working if ZM is down and vice versa.
+- import_playbook: ../applications/camera_nvr/go2rtc.yml
 - import_playbook: installDocker.yml
 - import_playbook: monitoring_agents.yml
 - import_playbook: configure_gui.yml
