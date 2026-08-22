@@ -329,6 +329,17 @@
             Name: "{{ item.name }}"
             Type: "Ffmpeg"
             Function: "Record"
+            # rtpRtsp is ZM's name for RTSP-over-TCP (per this version's
+            # own $rtspFFMpegMethods map). Required, not optional: an
+            # Ffmpeg monitor with an empty Method logs "Unknown method ()"
+            # and never captures a frame. Masked during the original
+            # build because those monitors were first created as
+            # Remote-type (which sets a Method) and only later switched to
+            # Ffmpeg, so they inherited a valid value -- a from-scratch
+            # build had none and silently sat at CaptureFPS=0.00. TCP
+            # specifically because it's what these cameras were verified
+            # working with via ffprobe -rtsp_transport tcp.
+            Method: "rtpRtsp"
             Path: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ item.ip }}:554/cam/realmonitor?channel={{ item.channel | default(1) }}&subtype=0"
             Width: "{{ item.width | default(2960) }}"
             Height: "{{ item.height | default(1668) }}"
@@ -349,12 +360,14 @@
     # cheap, idempotent, and the difference between GB/hour and 13GB/hour
     # of disk, so it's worth enforcing on every run rather than trusting
     # creation-time settings to have been right.
-    - name: Enforce passthrough recording on existing monitors
+    - name: Enforce passthrough recording and RTSP transport on existing monitors
       command: >
         mysql -u root zm -e
-        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2 WHERE SaveJPEGs != 0 OR VideoWriter != 2"
+        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2, Method='rtpRtsp'
+         WHERE SaveJPEGs != 0 OR VideoWriter != 2 OR Method != 'rtpRtsp'"
       register: zm_recording_mode_fix
       changed_when: false
+      notify: Restart ZoneMinder
 
     # zmc (the per-monitor capture daemon) reads its monitor config once at
     # startup, so monitors created via the API above sit at CaptureFPS=0.00
