@@ -199,10 +199,15 @@
         - cgi
         - rewrite
 
-    - name: Enable ZoneMinder's Apache site
-      command: a2ensite zoneminder
+    # ZoneMinder's package ships its Apache config under conf-available/,
+    # not sites-available/ -- found live (a2ensite failed outright since
+    # sites-available/zoneminder.conf doesn't exist; the package's actual
+    # file is conf-available/zoneminder.conf, which needs a2enconf instead).
+    - name: Enable ZoneMinder's Apache config
+      command: a2enconf zoneminder
       args:
-        creates: /etc/apache2/sites-enabled/zoneminder.conf
+        creates: /etc/apache2/conf-enabled/zoneminder.conf
+      notify: Restart Apache
 
     # Points ZM's event/frame storage at the dedicated HDD instead of the
     # SSD-backed OS disk. This is the simple, reliably-automatable global
@@ -236,6 +241,11 @@
         name: apache2
         state: started
         enabled: yes
+
+    # Handlers only fire at the end of the play by default -- the API
+    # login task right below needs the newly-enabled zoneminder conf
+    # already loaded, not queued behind everything else.
+    - meta: flush_handlers
 
     # ZM's REST API needs API access enabled (ZM_OPT_USE_API, on by default
     # in recent packaged versions) -- verify against the installed version
@@ -301,4 +311,9 @@
     - name: Restart MariaDB
       service:
         name: mariadb
+        state: restarted
+
+    - name: Restart Apache
+      service:
+        name: apache2
         state: restarted
