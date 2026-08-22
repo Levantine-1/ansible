@@ -72,15 +72,37 @@
         state: started
         enabled: yes
 
+    # The package ships /etc/zm/zm.conf already pointing at
+    # ZM_DB_NAME=zm/ZM_DB_USER=zmuser/ZM_DB_PASS=zmpass (the package's own
+    # well-known plaintext defaults, not a real secret -- it's shipped in
+    # that same local, root-only-readable conf file either way), but
+    # doesn't create the database or DB user for a non-interactive install
+    # (normally done via debconf prompts, which apt with a plain `state:
+    # present` never triggers). zmupdate.pl -f assumes both already exist.
+    - name: Create ZoneMinder's database
+      mysql_db:
+        name: zm
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create ZoneMinder's database user
+      mysql_user:
+        name: zmuser
+        password: zmpass
+        priv: "zm.*:ALL"
+        host: "localhost"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
     - name: Check if ZoneMinder's database is already set up
       command: mysql -u root -e "USE zm; SHOW TABLES;"
       register: zm_db_check
       changed_when: false
       failed_when: false
 
-    # ZoneMinder's Debian package doesn't auto-create its DB on install --
-    # zmupdate.pl -f is the package's own documented one-time setup step
-    # (also what dpkg-reconfigure zoneminder runs under the hood).
+    # zmupdate.pl -f is the package's own documented one-time schema-setup
+    # step (also what dpkg-reconfigure zoneminder runs under the hood) --
+    # loads the actual table schema now that the DB/user above exist.
     - name: Initialize ZoneMinder's database
       command: zmupdate.pl -f
       when: zm_db_check.rc != 0
