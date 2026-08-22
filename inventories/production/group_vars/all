@@ -56,3 +56,4 @@ monitored_hosts:
     - { name: kube-w-01, host: kube-w-01.internal.levantine.io }
     - { name: 3800xt, host: "10.69.69.139" }
     - { name: fx8200, host: "10.69.69.116" }
+    - { name: cameras, host: cameras.internal.levantine.io }
