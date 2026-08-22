@@ -48,6 +48,27 @@ admin:
     - guinea-pig-cage-2
   audio: true
 
+# Shared account for the rest of the household. livecam only -- there is no
+# matching ZoneMinder user, so "recordings & settings" will simply prompt
+# for a ZM login nobody has, which is the intended boundary: live viewing
+# for family, recordings and admin for the admin account.
+#
+# audio: false is enforced server-side by which go2rtc stream gets
+# requested (the _noaudio variants have the track genuinely removed, not
+# muted), so it cannot be turned back on from the browser.
+#
+# The password is deliberately short and memorable at the owner's request.
+# That is a real tradeoff on an internet-facing login, mitigated by the
+# per-IP throttle in livecam.py (10 failures per 5 minutes) and bounded by
+# what the account can reach: live video of guinea pigs, no audio, no
+# recordings, no settings. Password in Vault at kv/data/livecam/users.
+family:
+  password_hash: "pbkdf2:sha256:600000$CioPzqEyAPnpLBk4$c9363e50a2d103561aa61802b66f4ec08a210c99a17115028770b79c42fe8642"
+  cameras:
+    - guinea-pig-cage-1
+    - guinea-pig-cage-2
+  audio: false
+
 # Template for a restricted family viewer -- one camera, no audio, daytime
 # only. Copy, rename, and give it its own hash. The time window is
 # re-evaluated per chunk while a stream runs, so it ends a live view at

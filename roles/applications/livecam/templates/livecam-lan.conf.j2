@@ -1,0 +1,69 @@
+# livecam's LAN entrance, served from `service`.
+#
+# Why this exists at all: dockerhost1 has one NIC, on vmbr1
+# (192.168.1.0/24), which sits behind OPNsense. The home LAN
+# (10.69.69.0/24) is on OPNsense's *WAN* side, so no phone or laptop at
+# home can route to 192.168.1.31 -- livecam-lan.levantine.io resolved
+# correctly and then timed out for every real client.
+#
+# `service` is the only VM in the fleet with a foot on both networks
+# (net0 -> vmbr0 = {{ livecam_lan_listen_address }}, net1 -> vmbr1 =
+# 192.168.1.50), which is exactly why ops-dashboard.conf already proxies
+# OPNsense from here for the same reason. Same trick, same host.
+#
+# Traffic stays local end to end: client -> service -> dockerhost1. Nothing
+# touches the AWS relay, so nothing is billed as egress and livecam's own
+# counter correctly ignores it (it keys on the Host header, which is
+# preserved below).
+
+server {
+    listen 80;
+    server_name {{ livecam_lan_hostname }};
+
+    # Scoped to this server_name only, so ops-dashboard.conf's
+    # `listen 80 default_server` keeps serving everything else here.
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name {{ livecam_lan_hostname }};
+
+    # The same wildcard every other nginx in the fleet uses, put here by
+    # roles/os_configs/deploySSLCerts.yml -- which now targets `service`
+    # too, so the renewal timer keeps this fresh automatically.
+    ssl_certificate     /etc/nginx/certs/levantine.io/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/levantine.io/privkey.pem;
+
+    # 2K video at ~7 Mbps, and a tab may hold a stream open for hours.
+    # Uploads are trivial by comparison -- there are none.
+    client_max_body_size 16m;
+
+    location / {
+        # An explicit upstream hostname, never $host: this server_name
+        # resolves to `service` itself for LAN clients, so proxying by
+        # vhost name would loop straight back here.
+        proxy_pass http://dockerhost1.internal.levantine.io;
+
+        # jwilder on dockerhost1 routes by Host, so it has to survive the
+        # hop or the request lands on the wrong container -- or none.
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        # TLS terminates here; the internal hop is plain HTTP across
+        # 192.168.1.0/24, same as the bastion -> vmwarebastion -> dockerhost
+        # path every other app already takes.
+        proxy_set_header X-Forwarded-Proto https;
+
+        # The three settings that decide whether live video works at all.
+        # Without them nginx buffers the fragmented mp4 and hands it over in
+        # lumps (or not at all), and cuts the connection at the default 60s
+        # read timeout -- which looks exactly like a stream that "freezes
+        # after a minute".
+        proxy_buffering     off;
+        proxy_request_buffering off;
+        proxy_http_version  1.1;
+        proxy_read_timeout  3600s;
+        proxy_send_timeout  3600s;
+    }
+}

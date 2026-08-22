@@ -1,6 +1,16 @@
 ---
 - name: Deploy Nginx Reverse Certs
-  hosts: Nginx
+  # `service` is included alongside the Nginx group, not added to it:
+  # roles/applications/livecam/lan_proxy.yml gives service an HTTPS vhost
+  # (livecam-lan.levantine.io) so the home LAN can reach dockerhost1, and
+  # that needs the wildcard cert here. Putting service in the Nginx group
+  # instead would also hand it deployRPConfigs.yml's bastion reverse-proxy
+  # templating, which is wrong for this host.
+  #
+  # This also means the renewal timer keeps service current for free --
+  # /usr/local/bin/renew_levantine_ssl.sh runs exactly this playbook with
+  # no --limit, so widening the target here is the whole change.
+  hosts: Nginx:service
   become: yes
 
   vars_files:

@@ -1,0 +1,106 @@
+---
+# Puts livecam's LAN hostname on an address the home network can actually
+# reach.
+#
+# The first attempt pointed livecam-lan.levantine.io straight at
+# dockerhost1 (192.168.1.31) and was verified from `service`, which is
+# inside that network -- so it passed while being broken for every real
+# client. dockerhost1 is vmbr1-only, and the home LAN sits on OPNsense's
+# WAN side, so 10.69.69.x cannot route to it at all.
+#
+# `service` is dual-homed onto both networks and already terminates nginx
+# here; roles/applications/ops_dashboard proxies OPNsense from this host
+# for precisely the same reason. This play adds a vhost next to that one.
+#
+# Depends on roles/os_configs/deploySSLCerts.yml having run for `service`
+# (it targets Nginx:service now), which is also what keeps the cert fresh
+# when the renewal timer fires.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/livecam/lan_proxy.yml
+- name: Deploy livecam LAN reverse proxy
+  hosts: service
+  become: yes
+
+  vars:
+    livecam_lan_hostname: livecam-lan.levantine.io
+    # service's WAN-side address, and what the public Route53 record for
+    # livecam-lan points at. Documented here rather than looked up because
+    # the DNS record hardcodes it too -- if one moves, both must.
+    livecam_lan_listen_address: 10.69.69.133
+
+  tasks:
+    - name: Install nginx
+      # ops_dashboard installs it too, but this play must stand alone --
+      # deploySSLCerts.yml already learned that lesson on a from-scratch
+      # host (see its own comment).
+      package:
+        name: nginx
+        state: present
+
+    - name: Verify the wildcard certificate is present
+      # Failing here with a clear message beats nginx refusing to start
+      # later with "cannot load certificate", which takes the ops dashboard
+      # down with it.
+      stat:
+        path: /etc/nginx/certs/levantine.io/fullchain.pem
+      register: livecam_lan_cert
+
+    - name: Fail if the certificate is missing
+      fail:
+        msg: >-
+          /etc/nginx/certs/levantine.io/fullchain.pem is missing on {{ inventory_hostname }}.
+          Run roles/os_configs/deploySSLCerts.yml first.
+      when: not livecam_lan_cert.stat.exists
+
+    - name: Deploy the livecam-lan nginx site config
+      template:
+        src: templates/livecam-lan.conf.j2
+        dest: /etc/nginx/conf.d/livecam-lan.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload nginx
+
+    - name: Ensure nginx is enabled and running
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+
+    # Handlers run at the end of the play, so without this the checks below
+    # would test the old config.
+    - name: Apply the new site config now
+      meta: flush_handlers
+
+    # --resolve, not a plain URL: this host's own resolver answers
+    # livecam-lan with dockerhost1's address (the OPNsense override, which
+    # keeps internal traffic off service's WAN leg), so a normal request
+    # would sail past the vhost being tested and report success no matter
+    # what nginx here is doing. Pinning the name to the local address while
+    # keeping SNI and certificate validation intact is the point.
+    - name: Check that the new vhost answers locally and reaches livecam
+      command: >-
+        curl -sS --max-time 15
+        --resolve {{ livecam_lan_hostname }}:443:{{ livecam_lan_listen_address }}
+        -o /dev/null -w '%{http_code} %{ssl_verify_result}'
+        https://{{ livecam_lan_hostname }}/login
+      register: livecam_lan_probe
+      changed_when: false
+      retries: 3
+      delay: 5
+      until: livecam_lan_probe.stdout == "200 0"
+      failed_when: livecam_lan_probe.stdout != "200 0"
+
+    - name: Report the LAN entrance
+      debug:
+        msg: >-
+          https://{{ livecam_lan_hostname }} answers 200 with a valid certificate
+          at {{ livecam_lan_listen_address }} and proxies through to livecam.
+
+  handlers:
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
