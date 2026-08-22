@@ -44,15 +44,29 @@
         dev: /dev/sdb
       when: nvr_disk_blkid.stdout == ""
 
-    - name: Create the footage mount point
+    # Mounted directly at ZoneMinder's OWN default events path, not at a
+    # separate /mnt/nvr-hdd that ZM then has to be told about. Learned the
+    # hard way: the first version mounted at /mnt/nvr-hdd and set
+    # ZM_DIR_EVENTS=/mnt/nvr-hdd in /etc/zm/conf.d/, which ZM 1.36 silently
+    # ignores for event storage -- it takes the path from the `Storage`
+    # database table instead, which still pointed at the OS disk. Result:
+    # every recording landed on the 16GB root filesystem and filled it to
+    # 100% in about an hour while the 1.9TB disk sat empty.
+    #
+    # Making ZM's default correct (rather than overriding it) means there's
+    # no config or DB row that can drift back: a schema reload, a DB
+    # reinit, or a fresh install all still write to this disk. Mounted
+    # before the zoneminder package installs so the package's own postinst
+    # sets up its directory tree on the right filesystem from the start.
+    - name: Create ZoneMinder's events directory (the footage mount point)
       file:
-        path: /mnt/nvr-hdd
+        path: /var/cache/zoneminder/events
         state: directory
         mode: "0755"
 
-    - name: Mount the footage disk
+    - name: Mount the footage disk at ZoneMinder's events path
       mount:
-        path: /mnt/nvr-hdd
+        path: /var/cache/zoneminder/events
         src: /dev/sdb
         fstype: ext4
         state: mounted
@@ -198,24 +212,15 @@
         creates: /etc/apache2/conf-enabled/zoneminder.conf
       notify: Restart Apache
 
-    # Points ZM's event/frame storage at the dedicated HDD instead of the
-    # SSD-backed OS disk. This is the simple, reliably-automatable global
-    # setting; ZM 1.34+'s multi-"Storage Area" feature (which adds the
-    # built-in max-usage/pruning behavior the plan calls for) still needs a
-    # one-time pass through ZM's own web console to point the storage area
-    # at this same path and set its usage limit -- not automated here since
-    # it depends on the exact installed ZM version's UI/API shape.
-    - name: Point ZoneMinder's event storage at the footage disk
-      lineinfile:
-        path: /etc/zm/conf.d/01-nvr-storage.conf
-        line: "ZM_DIR_EVENTS=/mnt/nvr-hdd"
-        create: yes
-        mode: "0644"
-      notify: Restart ZoneMinder
-
-    - name: Ensure /mnt/nvr-hdd is owned by ZoneMinder's service user
+    # Storage path needs no config here at all -- the footage disk is
+    # mounted at ZM's own default events path near the top of this play,
+    # so ZM's shipped default is already correct. (The previous
+    # ZM_DIR_EVENTS approach that used to live here didn't work; see that
+    # mount task's comment.) This only fixes ownership, since the mount
+    # itself lands root-owned.
+    - name: Ensure the events directory is owned by ZoneMinder's service user
       file:
-        path: /mnt/nvr-hdd
+        path: /var/cache/zoneminder/events
         owner: www-data
         group: www-data
 
@@ -286,11 +291,17 @@
     # Function=Record (not Modect/Mocord): deliberately the lightest-CPU ZM
     # mode -- skips the motion-analysis daemon entirely, which is exactly
     # right given no motion/AI detection is wanted and the FX8200's CPU is
-    # old. Save Jpegs / video writer mode is left at the package default
-    # here -- verify it's set to direct/passthrough recording (not legacy
-    # per-frame JPEG capture) in the web console before relying on the
-    # storage math in the plan, since the exact setting name varies by ZM
-    # version and isn't safe to guess at via the API blind.
+    # old.
+    #
+    # VideoWriter=2 ("Camera Passthrough", confirmed against this version's
+    # own monitor.php) writes the camera's native H.264 straight to mp4 with
+    # zero transcode, and SaveJPEGs=0 disables per-frame JPEG writing. Both
+    # are load-bearing, not tuning: the package defaults (SaveJPEGs=3,
+    # VideoWriter=0) are the legacy every-frame-as-a-JPEG mode, which was
+    # left unset in the first version of this role and wrote 13GB across
+    # 24,211 files in ~1 hour for 2 cameras -- ~312GB/day, versus the
+    # GB/hour that passthrough actually costs. Passthrough is only offered
+    # for Ffmpeg-type monitors, which is what Type below sets.
     #
     # Type: Ffmpeg, not Remote -- found live, tried Remote first (ZM's own
     # built-in RTSP/RTP parser) and it failed outright against these
@@ -321,12 +332,27 @@
             Path: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ item.ip }}:554/cam/realmonitor?channel={{ item.channel | default(1) }}&subtype=0"
             Width: "{{ item.width | default(2960) }}"
             Height: "{{ item.height | default(1668) }}"
+            SaveJPEGs: 0
+            VideoWriter: 2
         status_code: [200, 201]
       loop: "{{ cameras }}"
       loop_control:
         label: "{{ item.name }}"
       when: item.name not in (zm_existing_monitors.json.monitors | default([]) | map(attribute='Monitor.Name') | list)
       no_log: true
+
+    # The task above only fires for monitors that don't exist yet, so on
+    # any already-provisioned host it never runs and the recording-mode
+    # fields above would never be corrected. This catches that case --
+    # cheap, idempotent, and the difference between GB/hour and 13GB/hour
+    # of disk, so it's worth enforcing on every run rather than trusting
+    # creation-time settings to have been right.
+    - name: Enforce passthrough recording on existing monitors
+      command: >
+        mysql -u root zm -e
+        "UPDATE Monitors SET SaveJPEGs=0, VideoWriter=2 WHERE SaveJPEGs != 0 OR VideoWriter != 2"
+      register: zm_recording_mode_fix
+      changed_when: false
 
   handlers:
     - name: Restart ZoneMinder
