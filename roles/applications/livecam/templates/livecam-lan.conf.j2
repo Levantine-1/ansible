@@ -35,6 +35,21 @@ server {
     ssl_certificate     /etc/nginx/certs/levantine.io/fullchain.pem;
     ssl_certificate_key /etc/nginx/certs/levantine.io/privkey.pem;
 
+    # Belt-and-suspenders for a real bug: Frigate's own nginx config
+    # (bundled in the image) has `keepalive_disable safari;` on its
+    # recorded-video route -- its own maintainers already hit and mitigated
+    # a Safari-specific problem there. That directive only protects direct
+    # connections to Frigate's nginx; this vhost is a separate hop in front
+    # of it (client -> here -> dockerhost1 -> livecam -> Frigate), so it
+    # doesn't inherit that protection. Cheap to replicate at the layer that
+    # actually terminates the client's connection. Not the fix by itself --
+    # see livecam.py's _proxy() for the proven cause and the real fix
+    # (buffering the whole response before replying meant an abandoned
+    # scrub-triggered request kept downloading regardless) -- but Frigate's
+    # own team judged this worth doing for this exact traffic pattern, and
+    # it costs nothing to match.
+    keepalive_disable safari;
+
     # 2K video at ~7 Mbps, and a tab may hold a stream open for hours.
     # Uploads are trivial by comparison -- there are none.
     client_max_body_size 16m;
