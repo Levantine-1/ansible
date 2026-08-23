@@ -50,18 +50,14 @@
     # by-id maps straight to terraform's `interface = "scsi1"`, so it says
     # what is actually meant -- the second disk this VM was declared with --
     # rather than whatever order the kernel happened to probe in.
-    - name: Resolve the footage disk
-      stat:
-        path: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
-        follow: yes
+    - name: Resolve the footage disk to its current kernel device
+      # readlink, not stat: the by-id path is what is stable, but blkid,
+      # mkfs and findmnt all speak kernel names, so resolve once here and
+      # compare like with like everywhere below.
+      command: readlink -f /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
       register: footage_disk
-
-    - name: Fail if the footage disk is missing
-      fail:
-        msg: >-
-          scsi1 not found. Frigate will not be installed rather than risk
-          recording to the OS disk.
-      when: not footage_disk.stat.exists
+      changed_when: false
+      failed_when: footage_disk.rc != 0 or not footage_disk.stdout
 
     - name: Identify the root disk, so it can never be the format target
       shell: |
@@ -76,13 +72,13 @@
       # The guard that makes the by-id lookup above safe rather than merely
       # correct-looking: if these ever resolve to the same device, stop.
       assert:
-        that: footage_disk.stat.path | basename != root_disk.stdout | trim
+        that: footage_disk.stdout | trim | basename != root_disk.stdout | trim
         fail_msg: >-
-          The resolved footage disk ({{ footage_disk.stat.path | basename }})
-          is the root disk ({{ root_disk.stdout | trim }}). Refusing to format.
+          The resolved footage disk ({{ footage_disk.stdout | trim }})
+          is the root disk (/dev/{{ root_disk.stdout | trim }}). Refusing to format.
 
     - name: Check if the footage disk is already formatted
-      command: "blkid -o value -s TYPE {{ footage_disk.stat.path }}"
+      command: "blkid -o value -s TYPE {{ footage_disk.stdout | trim }}"
       register: nvr_disk_blkid
       changed_when: false
       failed_when: false
@@ -90,7 +86,7 @@
     - name: Format the footage disk (scsi1, ext4)
       filesystem:
         fstype: ext4
-        dev: "{{ footage_disk.stat.path }}"
+        dev: "{{ footage_disk.stdout | trim }}"
       when: nvr_disk_blkid.stdout == ""
 
     # Mounted at Frigate's own default media path rather than somewhere
@@ -124,7 +120,7 @@
         executable: /bin/bash
       register: frigate_media_source
       changed_when: false
-      failed_when: footage_disk.stat.path | basename not in frigate_media_source.stdout
+      failed_when: footage_disk.stdout | trim not in frigate_media_source.stdout
 
     # --- docker -------------------------------------------------------
     - name: Install Docker prerequisites
