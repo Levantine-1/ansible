@@ -90,11 +90,17 @@ family:
 # re-evaluated per chunk while a stream runs, so it ends a live view at
 # 20:00 rather than merely refusing to start a new one.
 #
+# `ptz` follows the same shape as `audio` (true/false/[camera list],
+# intersected with `cameras`) -- but even a full grant here does nothing
+# without the same camera also being declared in cameras.yml. Both are
+# required. No camera is declared there today, so this is inert either way.
+#
 # guest:
 #   password_hash: "pbkdf2:sha256:600000$..."
 #   cameras:
 #     - the-boiz
 #   audio: false
+#   ptz: false
 #   recordings: false
 #   time_window:
 #     start: "08:00:00"

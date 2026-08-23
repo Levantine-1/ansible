@@ -1,0 +1,33 @@
+# PTZ-capable cameras and how livecam reaches them over ONVIF.
+#
+# Deliberately separate from permissions.yml: that file is about who may
+# see what, this one is camera wiring (an IP and a port), and mixing the
+# two would mean a permissions edit could accidentally touch camera config
+# or vice versa.
+#
+# Independent of Frigate entirely -- PTZ control talks straight to the
+# camera, the same way live view already bypasses Frigate via go2rtc. A
+# camera absent here has no PTZ regardless of what any user's `ptz:` grant
+# in permissions.yml says; a user without that grant can't control a
+# camera that IS declared here either. Both are required.
+#
+# Camera names must match go2rtc/Frigate camera names exactly (see
+# group_vars/Frigate) and the names used in permissions.yml's `cameras`
+# lists.
+#
+# username/password are optional per camera -- if omitted, livecam falls
+# back to CAMERA_USERNAME/CAMERA_PASSWORD (the same RTSP admin account
+# already used for streaming, from kv/data/cameras/amcrest). Whether that
+# account also authenticates ONVIF is an assumption, not a verified fact --
+# confirm it against the real camera before relying on it, and add a
+# per-camera username/password below if it turns out to need its own.
+#
+# Empty today: no PTZ hardware exists yet. Example shape for when one does:
+#
+# cameras:
+#   city-view-1:
+#     ip: 10.69.69.150
+#     onvif_port: 80   # common default for this camera family's web UI;
+#                       # NOT verified against any specific model -- confirm
+#                       # against the real camera once purchased.
+cameras: {}

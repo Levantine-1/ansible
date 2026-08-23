@@ -41,23 +41,42 @@ supported_containers:
       FRIGATE_URL: http://frigate.internal.levantine.io:5000
       GO2RTC_URL: http://frigate.internal.levantine.io:1984
       PERMISSIONS_FILE: /app/config/permissions.yml
-    # Just the Flask session secret now. The ZM_DB_* credentials that used
-    # to be here are gone with the code that needed them: livecam resolved a
-    # forwarded ZMSESSID back to a username by reading ZM's Sessions table
-    # and regex-matching PHP session serialization. It has its own accounts
-    # now, so it no longer needs any access to ZoneMinder's database.
+      # PTZ-capable cameras and their ONVIF details -- see that file's own
+      # header for why it's kept separate from permissions.yml. PTZ talks
+      # straight to the camera, deliberately bypassing Frigate the same way
+      # live view already does via go2rtc.
+      CAMERAS_FILE: /app/config/cameras.yml
+    # FLASK_SECRET_KEY: the session secret. Losing it only logs everyone out.
     #
-    # Injected from Vault at deploy time so it is neither baked into the
-    # image nor committed. Losing it only logs everyone out.
+    # CAMERA_USERNAME/CAMERA_PASSWORD: the assumed-shared account for both
+    # RTSP streaming and ONVIF PTZ control on this camera family -- same
+    # secret Frigate's role already reads for RTSP, reused here rather than
+    # duplicated. A per-camera override in cameras.yml exists for the case
+    # where a specific camera turns out to need its own ONVIF account.
+    #
+    # The ZM_DB_* credentials that used to be here are gone with the code
+    # that needed them: livecam resolved a forwarded ZMSESSID back to a
+    # username by reading ZM's Sessions table and regex-matching PHP
+    # session serialization. It has its own accounts now, so it no longer
+    # needs any access to a recorder's database.
+    #
+    # Injected from Vault at deploy time so none of it is baked into the
+    # image or committed.
     vault_secrets:
       - path: kv/data/livecam/admin
         env:
           FLASK_SECRET_KEY: flask_secret_key
-    # Per-user permissions are config, not secrets, so they live in git and
-    # are mounted read-only rather than baked into the image -- editing who
-    # can see which camera shouldn't need a rebuild and redeploy.
+      - path: kv/data/cameras/amcrest
+        env:
+          CAMERA_USERNAME: username
+          CAMERA_PASSWORD: password
+    # Per-user permissions and camera wiring are config, not secrets, so
+    # they live in git and are mounted read-only rather than baked into the
+    # image -- editing who can see which camera, or adding a PTZ camera,
+    # shouldn't need a rebuild and redeploy.
     volumes:
       - /opt/livecam/permissions.yml:/app/config/permissions.yml:ro
+      - /opt/livecam/cameras.yml:/app/config/cameras.yml:ro
       # Writable, unlike the permissions mount: holds the SQLite egress
       # counter, which must survive container recreation to be meaningful.
       - /opt/livecam/data:/app/data

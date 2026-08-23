@@ -36,13 +36,26 @@
         mode: "0644"
       register: livecam_perms
 
-    # The container reads this at request time rather than caching it, so a
-    # restart isn't strictly required -- but restarting makes the change
+    # Which cameras support PTZ and how to reach them over ONVIF. Separate
+    # file from permissions.yml on purpose -- see that file's own header
+    # comment for why. Same deploy-without-rebuild reasoning as permissions:
+    # adding a camera's ONVIF details shouldn't need a new image.
+    - name: Deploy cameras.yml
+      copy:
+        src: files/cameras.yml
+        dest: /opt/livecam/cameras.yml
+        owner: root
+        group: root
+        mode: "0644"
+      register: livecam_cameras
+
+    # The container reads these at request time rather than caching them, so
+    # a restart isn't strictly required -- but restarting makes the change
     # take effect predictably instead of depending on that assumption.
-    - name: Restart livecam so the new permissions are definitely in effect
+    - name: Restart livecam so the new config is definitely in effect
       docker_container:
         name: livecam
         state: started
         restart: yes
-      when: livecam_perms.changed
+      when: livecam_perms.changed or livecam_cameras.changed
       ignore_errors: yes  # container may not be deployed yet on a fresh host
