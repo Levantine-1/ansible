@@ -93,7 +93,8 @@ hosts:
       in-flight connection across every app at once.
 
   incident-agent:
-    fqdn: incident-agent.internal.levantine.io
+    # IP, not a name: no DNS record exists for this host yet.
+    fqdn: "192.168.1.51"
     hypervisor: 3800xt
     vm_id: 106
     critical: true
