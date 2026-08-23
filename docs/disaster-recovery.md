@@ -34,7 +34,31 @@ deliberately testing that the IaC still works).
 | `service` | Runs this rebuild — can't destroy itself mid-orchestration. Also hosts Semaphore, monitoring, the local Docker registry, and (as of 2026-08-22) the fleet's apt/Docker-Hub package cache (`roles/applications/apt_cache_mirror/`) — living here means the cache survives every soft-DR rebuild automatically, no separate exclusion-list entry needed. |
 
 **Non-critical tier — fair game:** `dockerhost1`, `pxdbc1`, `pxdbc2`,
-`pxdbc3`, `proxysql`, `kube-c-00`, `theia`, `vmwarebastion`.
+`pxdbc3`, `proxysql`, `kube-c-00`, `theia`, `vmwarebastion`,
+`incident-agent`.
+
+`incident-agent` is deliberately in this tier rather than protected: it
+responds to incidents but nothing else depends on it, so losing it degrades
+the fleet to "tickets wait for a human" — which is exactly how things worked
+before it existed. It rebuilds unattended (`roles/applications/incident-agent/`
+is imported by `all.yml`, so step 1 restores it with no extra step), though
+expect the rebuild to spend a few minutes pulling the local model.
+
+**What is lost when it is rebuilt:** everything under
+`/var/lib/incident-agent/` — the incident history database (`incidents.db`)
+and `learned_notes.md`, the file successive escalations append fleet knowledge
+to. This is accepted rather than backed up, for the same reason Frigate's
+footage is: the half that matters is already elsewhere. Every RCA is posted to
+Zammad, which runs on `service` and is untouched by soft DR, so the account of
+each individual incident survives.
+
+What genuinely does not survive is the accumulated `learned_notes.md` and the
+incident statistics. **This is a real gap, not a solved problem** — anything in
+those notes worth keeping permanently has to be promoted by hand into
+`roles/applications/incident-agent/files/AGENT_CONTEXT.md`, which is in git and
+therefore rebuilt with the host. Worth skimming
+`/var/lib/incident-agent/learned_notes.md` occasionally and moving the durable
+lines across, since nothing does it automatically.
 
 ### Steps
 
@@ -173,6 +197,14 @@ Install Proxmox on the new hardware. Note root/API access — this is used
 directly, once, in Stage 1; it doesn't need to go anywhere durable.
 
 ### Stage 1 — break-glass terraform apply
+
+`incident-agent` is deliberately **not** part of this stage. It is not needed
+to bootstrap anything — nothing else depends on it, and an incident responder
+is of no use when the whole fleet is being rebuilt by hand anyway. It returns
+normally in Stage 3's full `terraform apply` + `all.yml`, with no
+bootstrap-specific handling. Do not add it to `terraform/proxmox-bootstrap/`:
+that config's value is being minimal and Vault-free, and every VM added to it
+is another thing that must work during the worst possible moment.
 
 Vault, OPNsense, pi-hole, and `service` are the four hosts with no
 dependency on Vault already being up (everything else's terraform reads

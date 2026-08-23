@@ -57,3 +57,11 @@
 - import_playbook: ../applications/perconaXtraDbCluster/configure_percona_wrapper.yml
 - import_playbook: ../applications/perconaXtraDbCluster/configure_proxysql.yml
 - import_playbook: ../applications/pi-hole/configure_pi-hole.yml
+# incident-agent belongs here, unlike monitoring/ and zammad/ which are only
+# ever run standalone: `incident-agent` is in the non-critical tier, so
+# rebuild_fleet.sh destroys and recreates it during a soft DR, and soft DR
+# reprovisions purely by running this playbook against the rebuilt hosts. Left
+# out of here, the VM would come back as a bare Debian box with no agent on it
+# and nothing would say so -- the same shape of gap that made theia and frigate
+# imports necessary above.
+- import_playbook: ../applications/incident-agent/install.yml

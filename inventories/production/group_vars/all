@@ -61,3 +61,9 @@ monitored_hosts:
     - { name: 3800xt, host: "10.69.69.139" }
     - { name: fx8200, host: "10.69.69.116" }
     - { name: frigate, host: frigate.internal.levantine.io }
+    # incident-agent is monitored like any other host, but note that it is
+    # also the host that *responds* to alerts -- roles/applications/
+    # incident-agent/files/fleet.yml marks it self_exclude, so an alert about
+    # this host is never triaged by the agent running on it (it would be
+    # investigating its own outage) and goes straight to a human instead.
+    - { name: incident-agent, host: incident-agent.internal.levantine.io }

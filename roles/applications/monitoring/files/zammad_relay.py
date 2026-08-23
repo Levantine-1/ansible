@@ -12,6 +12,8 @@ Config via environment (see /etc/zammad-relay.env):
   ZAMMAD_API_TOKEN
   ZAMMAD_GROUP      default: Users
   LISTEN_PORT       default: 9099
+  INCIDENT_AGENT_URL  optional; if set, newly created tickets are handed off
+                      to the incident agent for automated triage
 """
 import json
 import os
@@ -25,6 +27,9 @@ ZAMMAD_API_TOKEN = os.environ["ZAMMAD_API_TOKEN"]
 ZAMMAD_GROUP = os.environ.get("ZAMMAD_GROUP", "Users")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "9099"))
 CUSTOMER_EMAIL = os.environ.get("ZAMMAD_CUSTOMER_EMAIL", "zammad-admin@levantine.io")
+# Empty disables the handoff entirely, which is the correct behaviour before
+# the incident agent exists (or if it is deliberately taken out of service).
+INCIDENT_AGENT_URL = os.environ.get("INCIDENT_AGENT_URL", "").rstrip("/")
 
 
 def zammad_request(method, path, data=None):
@@ -56,6 +61,38 @@ def find_open_ticket(fingerprint_tag):
     return None
 
 
+def notify_incident_agent(alert, ticket):
+    """Hand a newly created ticket to the incident agent for triage.
+
+    Best-effort by design. Ticket creation is the job that must not fail, and
+    the agent is an optional consumer sitting on a different host -- so every
+    failure here (agent down, VM rebuilt, network blip, DNS) is swallowed and
+    logged. The worst case is that a ticket simply waits for a human, which is
+    exactly how this worked before the agent existed.
+
+    Deliberately short-timeout and fire-and-forget: the agent's listener only
+    enqueues and returns, and Alertmanager is still waiting on this webhook.
+    Anything slower here would risk an Alertmanager timeout and retry, which
+    would duplicate the alert rather than help.
+    """
+    if not INCIDENT_AGENT_URL or not ticket:
+        return
+    try:
+        payload = json.dumps(
+            {
+                "alert": alert,
+                "ticket_id": ticket.get("id"),
+                "ticket_number": ticket.get("number"),
+            }
+        ).encode()
+        req = urllib.request.Request(f"{INCIDENT_AGENT_URL}/alert", data=payload, method="POST")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            print(f"Handed ticket {ticket.get('number')} to incident agent: {resp.status}")
+    except Exception as e:  # noqa: BLE001 -- must never affect ticketing
+        print(f"Incident agent handoff failed (ticket still created): {type(e).__name__}: {e}")
+
+
 def handle_alert(alert):
     fingerprint = alert.get("fingerprint", "unknown")
     fingerprint_tag = f"[{fingerprint[:12]}]"
@@ -71,7 +108,7 @@ def handle_alert(alert):
     if status == "firing":
         if existing:
             return  # already has an open ticket, don't duplicate
-        zammad_request(
+        ticket = zammad_request(
             "POST",
             "/api/v1/tickets",
             {
@@ -86,6 +123,10 @@ def handle_alert(alert):
                 },
             },
         )
+        # Only on genuine creation, never on the dedup path above: a
+        # re-notification of an alert that already has an open ticket must not
+        # kick off a second investigation of the same problem.
+        notify_incident_agent(alert, ticket)
     elif status == "resolved" and existing:
         zammad_request(
             "PUT",

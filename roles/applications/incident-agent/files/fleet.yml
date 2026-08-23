@@ -1,0 +1,174 @@
+# Fleet topology for the incident agent: how to reach each host, where it
+# physically lives, and -- most importantly -- whether the agent is allowed to
+# act on it unsupervised.
+#
+# This is the safety boundary. `critical: true` means the agent NEVER performs
+# an action against that host: it collects diagnostics, writes them to the
+# ticket, and escalates to a human. Everything defaults to critical when it
+# isn't listed here (see config.py's host_policy()), so forgetting to add a new
+# host fails closed -- diagnostics only -- rather than granting the agent
+# unsupervised reach over something nobody vetted.
+#
+# Keep in sync with terraform/proxmox/*.tf (vm_id, node) and
+# inventories/production/group_vars/all (monitored_hosts).
+
+hypervisors:
+  # SSH targets for `qm` VM control. These are the physical Proxmox nodes, and
+  # they are themselves critical -- listed here so the agent can reach them to
+  # inspect/restart the guests on them, never to restart them.
+  3800xt:
+    address: "10.69.69.139"
+  fx8200:
+    address: "10.69.69.116"
+
+hosts:
+  # ---------------------------------------------------------------------
+  # CRITICAL -- diagnostics only, always escalate to a human. Never auto-acted.
+  # ---------------------------------------------------------------------
+  service:
+    fqdn: service.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 103
+    critical: true
+    # The control plane, and specifically the host running Prometheus,
+    # Alertmanager, Loki and Zammad. Restarting it would sever the very
+    # pipeline that produced the ticket and that the agent writes its findings
+    # back to -- the agent would blind itself mid-investigation and lose the
+    # record of why.
+    critical_reason: >-
+      Control plane. Hosts Alertmanager/Zammad/Loki/Prometheus, i.e. this
+      agent's own input, output and diagnostic sources.
+
+  vault:
+    fqdn: vault.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 104
+    critical: true
+    # A restart does not "recover" Vault -- it comes back sealed and STAYS
+    # sealed until a human runs `vault operator unseal` three times with the
+    # Shamir key shares. Auto-restarting it converts a possibly-minor problem
+    # into a guaranteed outage that only a human with the key shares can end.
+    critical_reason: >-
+      Shamir unseal, no auto-unseal configured. Restarting guarantees a sealed
+      Vault until a human supplies three key shares. Never automate around it.
+
+  opnsense:
+    fqdn: opnsense.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 101
+    critical: true
+    critical_reason: >-
+      Router/firewall for 192.168.1.0/24. Restarting it cuts the network the
+      agent needs to reach anything, including the host it is restarting.
+
+  pxdbc1:
+    fqdn: pxdbc1.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 108
+    critical: true
+    critical_reason: &percona_reason >-
+      Percona XtraDB cluster node. A restart can trigger a full SST rather than
+      a clean rejoin, and a mistimed one risks split-brain. Cluster recovery is
+      a human decision, not a retry.
+  pxdbc2:
+    fqdn: pxdbc2.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 109
+    critical: true
+    critical_reason: *percona_reason
+  pxdbc3:
+    fqdn: pxdbc3.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 110
+    critical: true
+    critical_reason: *percona_reason
+
+  proxysql:
+    fqdn: proxysql.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 111
+    critical: true
+    critical_reason: >-
+      Sole database entry point for the app fleet. Bouncing it drops every
+      in-flight connection across every app at once.
+
+  incident-agent:
+    fqdn: incident-agent.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 106
+    critical: true
+    # Distinct from `critical`: this host is excluded from triage entirely,
+    # not merely protected from actions. An agent cannot meaningfully
+    # investigate its own outage -- if it is down it cannot run, and if it is
+    # up the alert is stale. Alerts about it go straight to a human.
+    self_exclude: true
+    critical_reason: "The agent itself. Cannot investigate its own outage."
+
+  # ---------------------------------------------------------------------
+  # NON-CRITICAL -- service restarts allowed where restart_allowlist.yml
+  # explicitly permits, host restart (`qm reboot`) allowed as a fallback.
+  # ---------------------------------------------------------------------
+  dockerhost1:
+    fqdn: dockerhost1.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 105
+    critical: false
+
+  frigate:
+    fqdn: frigate.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 202
+    critical: false
+
+  theia:
+    fqdn: theia.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 200
+    critical: false
+
+  kube-c-00:
+    fqdn: kube-c-00.internal.levantine.io
+    hypervisor: fx8200
+    vm_id: 112
+    critical: false
+
+  pi-hole:
+    fqdn: pi-hole.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 102
+    critical: false
+    # Not critical in the "never touch" sense -- restarting pi-hole is in fact
+    # the normal fix when it wedges -- but worth knowing during triage that
+    # fleet-wide DNS is down while it is restarting, so a burst of unrelated
+    # resolution failures right afterwards is expected, not a second incident.
+    note: >-
+      Fleet DNS. A restart briefly breaks name resolution fleet-wide; expect
+      transient collateral alerts immediately after.
+
+  vmwarebastion:
+    fqdn: vmwarebastion.internal.levantine.io
+    hypervisor: 3800xt
+    vm_id: 107
+    critical: false
+
+# ProbeFailed's `instance` label is a URL, not a host:port like the
+# node_exporter alerts -- Prometheus rewrites it that way in
+# prometheus.yml.j2's blackbox_http relabel_configs. Without this map the agent
+# cannot tell which host to investigate for a failed probe, which is most of
+# the value of the alert. Keep in sync with that scrape config's target list.
+probe_targets:
+  "https://levantine.io": {host: vmwarebastion, service: nginx}
+  "http://theia.internal.levantine.io": {host: theia, service: theia}
+  "http://service.internal.levantine.io:3000": {host: service, service: semaphore}
+  "http://service.internal.levantine.io:8080": {host: service, service: zammad}
+  "http://vault.internal.levantine.io:8200/v1/sys/health": {host: vault, service: vault}
+  "https://thisper.levantine.io": {host: dockerhost1, service: thisper}
+  "https://processmining.levantine.io": {host: dockerhost1, service: processmining}
+  "https://pet-care.levantine.io": {host: dockerhost1, service: pet-care}
+  "https://dental-care.levantine.io": {host: dockerhost1, service: dental-care}
+  "https://education-platform.levantine.io": {host: dockerhost1, service: education-platform}
+  "https://real-estate.levantine.io": {host: dockerhost1, service: real-estate}
+  "https://booking-movie-ticket.levantine.io": {host: dockerhost1, service: booking-movie-ticket}
+  "https://livecam-lan.levantine.io/login": {host: dockerhost1, service: livecam}
+  "http://frigate.internal.levantine.io:5000/api/version": {host: frigate, service: frigate}
+  "http://kube-c-00.internal.levantine.io:30080/mousey": {host: kube-c-00, service: datagateway}

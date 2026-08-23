@@ -1,0 +1,100 @@
+# What to collect for each alert type, and in what order.
+#
+# The ordering principle that matters: Loki and Prometheus are queried BEFORE
+# SSH, because both live on `service` and answer over HTTP without touching the
+# host under investigation. That is not just a speed preference -- for the most
+# severe alert class (InstanceDown) the target host is by definition not
+# answering, so an SSH-first design would hang on a connect timeout and then
+# report nothing at all. Loki still has that host's journal right up to the
+# moment it went silent, because promtail ships it centrally
+# (roles/os_configs/monitoring_agents.yml, job: journal, labels host + unit).
+#
+# Every command here is read-only. Nothing in this file may change state on a
+# host -- state changes come only from restart_allowlist.yml, so that the "what
+# can this thing actually do to my fleet" question has exactly one answer.
+#
+# Output caps are deliberate and load-bearing: these bundles get written into
+# Zammad articles and fed to a token-metered API. Unbounded `journalctl` or
+# `docker logs` would blow up both Postgres growth and API cost.
+
+defaults:
+  # Per-command output cap. Truncation is marked inline so a reader (human or
+  # model) can tell the difference between "nothing more to see" and "cut off".
+  max_output_chars: 4000
+  ssh_timeout_seconds: 20
+  loki_limit: 200
+  loki_lookback_minutes: 30
+
+alerts:
+  InstanceDown:
+    # Assume SSH fails. It usually will -- that IS the alert.
+    ssh_expected: false
+    steps:
+      - {source: loki, query: '{host="$HOST"}', description: "Last journal lines before the host went silent"}
+      - {source: prometheus, query: 'up{instance="$INSTANCE"}[30m]', description: "Scrape history -- clean stop or flapping?"}
+      # `qm` commands take no vm id here: remote.qm() looks it up from fleet.yml
+      # and injects it after the subcommand, so writing it out would produce
+      # `qm status 105 105`.
+      - {source: hypervisor, command: "qm status", description: "Is the VM even running from the hypervisor's view?"}
+      - {source: hypervisor, command: "uptime", description: "Hypervisor load -- is the guest the victim rather than the cause?"}
+      - {source: hypervisor, command: "qm config | head -30", description: "VM config (memory/cores/boot)"}
+      # Only after the above. If it answers, the host is up and this is a
+      # monitoring-path problem rather than a host-down problem, which is a
+      # genuinely different diagnosis and worth knowing.
+      - {source: ssh, command: "uptime; systemctl is-system-running || true", description: "Liveness probe -- if this answers, the host is up and node_exporter/network is the fault"}
+      - {source: ssh, command: "systemctl status node_exporter --no-pager -l | head -30", description: "node_exporter state (only reachable if the host is actually up)"}
+
+  HighCPUUsage:
+    ssh_expected: true
+    steps:
+      - {source: prometheus, query: '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle",instance="$INSTANCE"}[5m])) * 100)', description: "Current CPU"}
+      - {source: ssh, command: "uptime", description: "Load average"}
+      - {source: ssh, command: "ps aux --sort=-%cpu | head -15", description: "Top CPU consumers"}
+      - {source: ssh, command: "docker ps --format '{{.Names}}\t{{.Status}}' 2>/dev/null || true", description: "Container states, if this is a Docker host"}
+      - {source: loki, query: '{host="$HOST"}', description: "Recent journal"}
+
+  HighMemoryUsage:
+    ssh_expected: true
+    steps:
+      - {source: ssh, command: "free -m", description: "Memory"}
+      - {source: ssh, command: "ps aux --sort=-%mem | head -15", description: "Top memory consumers"}
+      # OOM kills are the single most useful thing to know here and are easy to
+      # miss in a general journal dump.
+      - {source: ssh, command: "dmesg -T 2>/dev/null | grep -i -E 'oom|killed process' | tail -20 || true", description: "OOM killer activity"}
+      - {source: prometheus, query: '(1 - (node_memory_MemAvailable_bytes{instance="$INSTANCE"} / node_memory_MemTotal_bytes{instance="$INSTANCE"})) * 100', description: "Current memory pressure"}
+      - {source: loki, query: '{host="$HOST"}', description: "Recent journal"}
+
+  DiskSpaceLow:
+    ssh_expected: true
+    steps:
+      - {source: ssh, command: "df -h", description: "Filesystem usage"}
+      - {source: ssh, command: "du -xh --max-depth=2 / 2>/dev/null | sort -rh | head -20", description: "Largest directories"}
+      - {source: ssh, command: "journalctl --disk-usage 2>/dev/null || true", description: "Journal size -- a common quiet consumer"}
+      - {source: ssh, command: "docker system df 2>/dev/null || true", description: "Docker image/volume/build-cache usage, if applicable"}
+
+  NVRRetentionFailing:
+    ssh_expected: true
+    steps:
+      - {source: ssh, command: "df -h /media/frigate", description: "NVR disk"}
+      - {source: loki, query: '{host="$HOST", unit=~"docker.*|frigate.*"}', description: "Frigate logs -- retention/cleanup errors"}
+      - {source: ssh, command: "docker logs --tail 100 frigate 2>&1 || true", description: "Frigate container log tail"}
+      - {source: ssh, command: "ls -la /media/frigate/recordings 2>/dev/null | head -20 || true", description: "Recording directory state"}
+
+  ProbeFailed:
+    ssh_expected: true
+    steps:
+      # Re-probe first: Blackbox probes every 30s and the alert has a 5m `for`,
+      # but the endpoint may have recovered in the time the grace period took.
+      - {source: http_probe, target: "$INSTANCE", description: "Re-probe the failing endpoint directly"}
+      - {source: loki, query: '{host="$HOST"}', description: "Journal on the host serving this endpoint"}
+      - {source: ssh, command: "docker ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null | head -30 || true", description: "Container states"}
+      - {source: ssh, command: "docker logs --tail 100 $SERVICE 2>&1 || true", description: "Logs for the specific container behind this probe"}
+
+# Fallback for an alert name with no entry above -- a new rule added to
+# alert_rules.yml still gets a useful bundle instead of an empty one.
+fallback:
+  ssh_expected: true
+  steps:
+    - {source: loki, query: '{host="$HOST"}', description: "Recent journal"}
+    - {source: ssh, command: "uptime; free -m; df -h", description: "Basic host state"}
+    - {source: ssh, command: "systemctl --failed --no-pager", description: "Failed units"}

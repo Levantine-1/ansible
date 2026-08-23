@@ -8,7 +8,7 @@
 # exactly, which is what roles/applications/monitoring/templates/
 # prometheus.yml.j2 already scrapes.
 - name: Deploy node_exporter (host metrics agent)
-  hosts: BastionHosts:!bastion.prod.levantine.io:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster:ProxmoxHosts:Frigate
+  hosts: BastionHosts:!bastion.prod.levantine.io:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster:ProxmoxHosts:Frigate:IncidentAgent
   become: yes
 
   vars:
@@ -95,7 +95,7 @@
         state: started
 
 - name: Deploy cAdvisor (container/cgroup metrics agent)
-  hosts: BastionHosts:!bastion.prod.levantine.io:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster:ProxmoxHosts:Frigate
+  hosts: BastionHosts:!bastion.prod.levantine.io:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster:ProxmoxHosts:Frigate:IncidentAgent
   become: yes
 
   vars:
@@ -169,7 +169,7 @@
       when: cadvisor_unit.changed
 
 - name: Deploy promtail (log shipping agent to Loki)
-  hosts: BastionHosts:!bastion.prod.levantine.io:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster:ProxmoxHosts:Frigate
+  hosts: BastionHosts:!bastion.prod.levantine.io:Theia:VMWareDockerHosts:Vault:service:PerconaCluster:ProxySQL:DataGatewayK8Cluster:ProxmoxHosts:Frigate:IncidentAgent
   become: yes
 
   vars:

@@ -1,0 +1,308 @@
+---
+# Automated incident triage: responds to the Zammad tickets that
+# roles/applications/monitoring's zammad_relay.py creates from Alertmanager
+# alerts. Three tiers -- deterministic rules that decide and act, a small local
+# model (Ollama) that explains and classifies, and Claude Sonnet for genuine
+# escalations.
+#
+# Runs on its own VM rather than on `service` because CPU inference is a
+# sustained multi-core burn and `service` was right-sized against measured
+# usage; see terraform/proxmox/vms.tf's incident-agent entry.
+#
+# Imported by roles/os_configs/all.yml (unlike monitoring/ and zammad/, which
+# are standalone-only) specifically so a soft DR restores it: `incident-agent`
+# is in the non-critical tier that rebuild_fleet.sh destroys and recreates, and
+# soft DR reprovisions by running all.yml against the rebuilt hosts.
+- name: Deploy incident agent
+  hosts: IncidentAgent
+  become: yes
+
+  vars:
+    incident_agent_ollama_model: phi4-mini
+    incident_agent_claude_model: claude-sonnet-5
+    incident_agent_budget_usd: 20
+    # The controller (`service`) is hand-bootstrapped and holds the fleet's
+    # automation key; there is no other distribution mechanism for it in this
+    # repo. rebuild_fleet.sh uses this same path.
+    incident_agent_controller_key: /home/automation/.ssh/automation.pem
+    incident_agent_home: /opt/incident-agent
+    incident_agent_config: /etc/incident-agent
+    incident_agent_state: /var/lib/incident-agent
+
+  tasks:
+    - name: Retrieve Zammad secrets from HashiCorp Vault
+      set_fact:
+        zammad_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/zammad/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+
+    # Deliberately tolerant of the path not existing. The escalation tier is
+    # the only thing that needs this, and everything else -- triage,
+    # diagnostics, allow-listed restarts, ticket notes -- works without it. A
+    # missing key must degrade the agent, not fail the whole deploy (and by
+    # extension not fail a soft DR rebuild, which runs this playbook).
+    - name: Retrieve Anthropic API key from HashiCorp Vault (optional)
+      block:
+        - name: Look up the Anthropic secret
+          set_fact:
+            anthropic_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/anthropic/incident-agent token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      rescue:
+        # block/rescue rather than failed_when/ignore_errors: a lookup that
+        # fails does so while templating the task's own arguments, which is
+        # before failed_when is ever evaluated.
+        - name: Continue without an Anthropic key
+          set_fact:
+            anthropic_secrets: {}
+
+    - name: Resolve Anthropic API key
+      set_fact:
+        anthropic_api_key: "{{ (anthropic_secrets | default({})).api_key | default('') }}"
+
+    - name: Report escalation tier status
+      debug:
+        msg: >-
+          {{ 'Anthropic API key found -- escalation tier is active.'
+             if anthropic_api_key | length > 0
+             else 'No Anthropic API key at kv/data/anthropic/incident-agent (key: api_key). Deploying
+                   with the escalation tier inert: triage, diagnostics and allow-listed restarts all
+                   work, escalations will record that they could not run and flag the ticket for a
+                   human. Add the secret and re-run to activate.' }}
+
+    - name: Install base packages
+      apt:
+        name:
+          - python3
+          - python3-venv
+          - python3-pip
+          - curl
+          - ca-certificates
+        state: present
+        update_cache: yes
+
+    - name: Create directories
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ incident_agent_home }}", mode: "0755" }
+        - { path: "{{ incident_agent_config }}", mode: "0750" }
+        # State holds the incident database and learned_notes.md. Wiped by a
+        # soft DR along with the VM -- see docs/disaster-recovery.md for why
+        # that is accepted rather than backed up.
+        - { path: "{{ incident_agent_state }}", mode: "0750" }
+
+    # ---------------------------------------------------------------- Ollama
+    - name: Check whether Ollama is already installed
+      stat:
+        path: /usr/local/bin/ollama
+      register: ollama_bin
+
+    - name: Install Ollama
+      # The vendor install script, same approach the rest of this repo takes
+      # for node_exporter/promtail (upstream artefact, not a distro package).
+      # Guarded by the stat above so re-runs -- including every soft DR -- do
+      # not re-download it.
+      shell: curl -fsSL https://ollama.com/install.sh | sh
+      when: not ollama_bin.stat.exists
+
+    - name: Ensure Ollama service is enabled and running
+      systemd:
+        name: ollama
+        enabled: yes
+        state: started
+
+    - name: Wait for Ollama to accept connections
+      wait_for:
+        host: 127.0.0.1
+        port: 11434
+        timeout: 120
+
+    - name: Check which models are already pulled
+      command: /usr/local/bin/ollama list
+      register: ollama_models
+      changed_when: false
+
+    - name: Pull the local triage model
+      # Several minutes on a first run/rebuild. Runs only when absent so
+      # repeat deploys are fast.
+      command: /usr/local/bin/ollama pull {{ incident_agent_ollama_model }}
+      when: incident_agent_ollama_model.split(':')[0] not in ollama_models.stdout
+      async: 1800
+      poll: 15
+
+    # ------------------------------------------------------------ Python env
+    - name: Create the virtualenv
+      command: python3 -m venv {{ incident_agent_home }}/venv
+      args:
+        creates: "{{ incident_agent_home }}/venv/bin/python3"
+
+    - name: Install Python dependencies
+      # Only two, deliberately: PyYAML for the config files and the anthropic
+      # SDK for the escalation tier. Everything else -- HTTP, SQLite, SSH,
+      # the Ollama client -- is stdlib or subprocess, matching zammad_relay.py.
+      pip:
+        name:
+          - PyYAML
+          - anthropic
+        state: present
+        virtualenv: "{{ incident_agent_home }}/venv"
+      register: pip_install
+
+    # ------------------------------------------------------------- Agent code
+    - name: Deploy agent package
+      copy:
+        src: files/incident_agent/
+        dest: "{{ incident_agent_home }}/incident_agent/"
+        owner: root
+        group: root
+        mode: "0644"
+        # Without this the package directory itself inherits 0644 and is not
+        # traversable, so every import fails -- `mode` applies to the files
+        # within when copying a directory, not to the directory.
+        directory_mode: "0755"
+      register: agent_package
+
+    - name: Deploy agent entrypoints
+      copy:
+        src: "files/{{ item }}"
+        dest: "{{ incident_agent_home }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - listener.py
+        - triage.py
+        - escalate.py
+      register: agent_scripts
+
+    - name: Deploy agent configuration
+      copy:
+        src: "files/{{ item }}"
+        dest: "{{ incident_agent_config }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0640"
+      loop:
+        - fleet.yml
+        - restart_allowlist.yml
+        - diagnostics.yml
+        - AGENT_CONTEXT.md
+      register: agent_config
+
+    - name: Verify the controller holds the automation SSH key
+      # Fail loudly and specifically rather than deploying an agent that can
+      # reach nothing and only discovers it during an incident.
+      delegate_to: localhost
+      become: no
+      stat:
+        path: "{{ incident_agent_controller_key }}"
+      register: controller_key
+
+    - name: Fail if the automation key is missing on the controller
+      fail:
+        msg: >-
+          {{ incident_agent_controller_key }} not found on the ansible controller. The incident
+          agent needs it to reach fleet hosts and hypervisors. On `service` this is the same key
+          rebuild_fleet.sh uses; set incident_agent_controller_key if it lives elsewhere.
+      when: not controller_key.stat.exists
+
+    - name: Deploy the automation SSH key
+      copy:
+        src: "{{ incident_agent_controller_key }}"
+        dest: "{{ incident_agent_config }}/automation.pem"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Deploy environment file
+      template:
+        src: templates/incident-agent.env.j2
+        dest: /etc/incident-agent.env
+        owner: root
+        group: root
+        mode: "0600"
+      register: agent_env
+
+    # -------------------------------------------------------------- systemd
+    - name: Deploy listener systemd unit
+      copy:
+        dest: /etc/systemd/system/incident-agent-listener.service
+        content: |
+          [Unit]
+          Description=Incident agent alert intake listener
+          After=network.target
+
+          [Service]
+          Environment=PYTHONUNBUFFERED=1
+          EnvironmentFile=/etc/incident-agent.env
+          ExecStart={{ incident_agent_home }}/venv/bin/python3 {{ incident_agent_home }}/listener.py
+          Restart=on-failure
+          RestartSec=10
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: listener_unit
+
+    - name: Deploy triage worker systemd unit
+      copy:
+        dest: /etc/systemd/system/incident-agent-worker.service
+        content: |
+          [Unit]
+          Description=Incident agent triage worker
+          # Separate unit from the listener on purpose: a wedged investigation
+          # must never block new alerts from being recorded.
+          After=network.target ollama.service incident-agent-listener.service
+
+          [Service]
+          Environment=PYTHONUNBUFFERED=1
+          EnvironmentFile=/etc/incident-agent.env
+          ExecStart={{ incident_agent_home }}/venv/bin/python3 {{ incident_agent_home }}/triage.py
+          Restart=on-failure
+          RestartSec=10
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: worker_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: listener_unit.changed or worker_unit.changed
+
+    - name: Enable and start the incident agent services
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      loop:
+        - incident-agent-listener
+        - incident-agent-worker
+
+    - name: Restart services if code or config changed
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - incident-agent-listener
+        - incident-agent-worker
+      when: >-
+        agent_package.changed or agent_scripts.changed or agent_config.changed
+        or agent_env.changed or pip_install.changed
+
+    - name: Verify the listener answers
+      uri:
+        url: "http://127.0.0.1:9098/"
+        return_content: yes
+      register: listener_health
+      retries: 5
+      delay: 3
+      until: listener_health.status is defined and listener_health.status == 200

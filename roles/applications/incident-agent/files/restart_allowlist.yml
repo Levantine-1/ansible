@@ -1,0 +1,95 @@
+# What the agent is allowed to restart, and nothing else.
+#
+# Deliberately an allow-list, never a deny-list: an unlisted alert/host pair
+# results in diagnostics + escalation, never an action. That default is what
+# makes adding a new service to the fleet safe -- it inherits "collect and
+# escalate", not "restart it and see".
+#
+# Starting small on purpose. This list growing over time as specific
+# restart-fixes-it patterns prove themselves IS the rollout strategy -- there is no
+# separate shadow mode, so the allow-list is the thing keeping early
+# mistakes cheap.
+#
+# Anything on a host marked `critical: true` in fleet.yml is refused even if
+# listed here. fleet.yml wins; this file cannot grant an exception to it.
+# (See config.py's may_restart() -- the criticality check runs first.)
+
+# Ordered: the first entry whose alert + host + (optional) service match wins.
+rules:
+  # --- Frigate NVR ------------------------------------------------------
+  # The clearest restart-fixes-it case in the fleet: Frigate wedging its
+  # go2rtc restream or losing a camera connection is a container-level
+  # problem that a bounce resolves, and the cost of being wrong is a ~30s
+  # recording gap on a home camera.
+  - alert: ProbeFailed
+    host: frigate
+    service: frigate
+    action: restart_container
+    target: frigate
+    # Re-probe the same endpoint Blackbox uses, so "did it work" is measured
+    # the same way the alert was raised rather than by a proxy signal.
+    verify: {type: http, url: "http://frigate.internal.levantine.io:5000/api/version"}
+
+  - alert: InstanceDown
+    host: frigate
+    action: restart_host
+    verify: {type: http, url: "http://frigate.internal.levantine.io:5000/api/version"}
+
+  # --- dockerhost1 app containers ---------------------------------------
+  # Portfolio/demo apps. Nothing here has a real user or any persistent state
+  # that a container restart endangers -- the databases live elsewhere
+  # (PerconaCluster), which is exactly why these are safe and pxdbc* is not.
+  - alert: ProbeFailed
+    host: dockerhost1
+    service: livecam
+    action: restart_container
+    target: livecam
+    verify: {type: http, url: "https://livecam-lan.levantine.io/login"}
+
+  - alert: ProbeFailed
+    host: dockerhost1
+    # No `service:` -- matches any of the other jwilder-fronted demo apps on
+    # this host. The container name is taken from the probe target's `service`
+    # in fleet.yml, which is where nginx-proxy's VIRTUAL_HOST routing already
+    # maps a URL onto a container.
+    action: restart_container
+    target: "{service}"
+    verify: {type: probe_target}
+
+  # --- theia ------------------------------------------------------------
+  - alert: ProbeFailed
+    host: theia
+    service: theia
+    action: restart_service
+    target: theia
+    verify: {type: http, url: "http://theia.internal.levantine.io"}
+
+# How many times the same (alert, host) pair may be auto-actioned inside the
+# window before the agent stops trying and escalates instead. A service that
+# needs restarting three times an hour does not have a restart problem, it has
+# a problem that restarting hides -- and continuing to bounce it destroys the
+# evidence needed to find the real cause.
+flap_guard:
+  max_actions: 2
+  window_seconds: 3600
+
+storm:
+  # Distinct hosts alerting inside the window before the agent treats it as one
+  # infrastructure-level event rather than N independent incidents. Set against
+  # a real precedent: the 2026-08-20 outage (hypervisor rebooted with
+  # on_boot=false) took the whole fleet down at once. Triaging that as ~10
+  # separate incidents would mean ~10 SSH investigations, each concluding its
+  # own VM was at fault, and ~10 Sonnet escalations -- the wrong answer, ten
+  # times, at ten times the cost.
+  min_hosts: 4
+  window_seconds: 600
+
+grace:
+  # Wait before doing anything at all, then re-check whether the alert is still
+  # firing. Most transient blips die inside this window, and one Alertmanager
+  # API call is enormously cheaper than an SSH session plus CPU inference.
+  #
+  # Note this is on top of each rule's own `for:` clause in alert_rules.yml
+  # (5-15m there), so a genuinely stuck service has already been failing for
+  # some minutes before this adds five more.
+  seconds: 300
