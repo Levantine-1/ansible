@@ -228,7 +228,7 @@
       <landing_page/>
       <comment/>
       <email/>
-      <apikeys/>
+      <apikeys>2iDC2rUmZjBkp1pfrQKqbvsuQ4//G7cwsFQ6AN7ImKj8uduE1ahSSQCdod4F8iR2XSrUP92eeTee7MPu|$6$$hfH//eCBqgiCJ81yqRcz3APq7CGjrb4XXmy1MvbNsYefEgL7ME6D6erFH5.76jRNfgWl7fAd97stN3O8j8H37/</apikeys>
       <priv/>
       <language/>
       <descr>System Administrator</descr>
@@ -241,10 +241,15 @@
     <webgui>
       <protocol>https</protocol>
       <ssl-certref>66024bd9b61ce</ssl-certref>
+      <port/>
+      <ssl-ciphers/>
+      <interfaces/>
+      <compression/>
+      <nohttpreferercheck>1</nohttpreferercheck>
     </webgui>
     <disablenatreflection>yes</disablenatreflection>
     <usevirtualterminal>1</usevirtualterminal>
-    <disableconsolemenu/>
+    <disableconsolemenu>1</disableconsolemenu>
     <powerd_ac_mode>hadp</powerd_ac_mode>
     <powerd_battery_mode>hadp</powerd_battery_mode>
     <powerd_normal_mode>hadp</powerd_normal_mode>
@@ -255,6 +260,14 @@
     <lb_use_sticky>1</lb_use_sticky>
     <ssh>
       <group>admins</group>
+      <noauto>1</noauto>
+      <interfaces/>
+      <kex/>
+      <ciphers/>
+      <macs/>
+      <keys/>
+      <keysig/>
+      <rekeylimit/>
     </ssh>
     <rrdbackup>-1</rrdbackup>
     <netflowbackup>-1</netflowbackup>
@@ -267,6 +280,7 @@
       <reboot/>
     </firmware>
     <backupcount>3</backupcount>
+    <serialspeed>115200</serialspeed>
   </system>
   <interfaces>
     <wan>
@@ -617,9 +631,9 @@
     <column_count>2</column_count>
   </widgets>
   <revision>
-    <username>(root)</username>
-    <description>/usr/local/opnsense/mvc/script/run_migrations.php made changes</description>
-    <time>1785029420.09</time>
+    <username>root@192.168.1.50</username>
+    <description>/api/unbound/settings/addHostOverride made changes</description>
+    <time>1787503492.46</time>
   </revision>
   <OPNsense>
     <wireguard>
@@ -1097,7 +1111,7 @@
       <queues/>
       <rules/>
     </TrafficShaper>
-    <unboundplus version="1.0.15" persisted_at="1785029420.09" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1787503492.46" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -1181,6 +1195,253 @@
           <txtdata/>
           <addptr>1</addptr>
           <description>opnsense router</description>
+        </host>
+        <host uuid="de2b23c3-eb30-49d4-b27f-9fdcf49e5b06">
+          <enabled>1</enabled>
+          <hostname>vmwarebastion</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.10</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (vmwarebastion)</description>
+        </host>
+        <host uuid="fed63c12-e018-4398-abe5-faa85bd93532">
+          <enabled>1</enabled>
+          <hostname>theia</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.30</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (theia)</description>
+        </host>
+        <host uuid="b836d645-7256-4a6a-bbff-c4ec9ea16c01">
+          <enabled>1</enabled>
+          <hostname>dockerhost1</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.31</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (dockerhost1)</description>
+        </host>
+        <host uuid="4d60d409-3a90-4bd7-8921-e6ef3bd94095">
+          <enabled>1</enabled>
+          <hostname>vault</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.41</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (vault)</description>
+        </host>
+        <host uuid="fc740cd5-cb87-4683-ac28-81d50980c0c2">
+          <enabled>1</enabled>
+          <hostname>service</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.50</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (service)</description>
+        </host>
+        <host uuid="df8d9465-3ef3-420a-afa7-28a63f119e6a">
+          <enabled>1</enabled>
+          <hostname>pxdbc1</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.61</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (pxdbc1)</description>
+        </host>
+        <host uuid="8957be67-a782-4f59-ba77-c90ff5ee495e">
+          <enabled>1</enabled>
+          <hostname>pxdbc2</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.62</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (pxdbc2)</description>
+        </host>
+        <host uuid="e197b245-0394-4595-bc00-fa0513f083fc">
+          <enabled>1</enabled>
+          <hostname>pxdbc3</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.63</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (pxdbc3)</description>
+        </host>
+        <host uuid="8aa541a7-ff90-41f4-9f46-a009a50c7053">
+          <enabled>1</enabled>
+          <hostname>proxysql</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.71</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (proxysql)</description>
+        </host>
+        <host uuid="24019e31-87cd-46d2-b5b0-eae0f7f5626c">
+          <enabled>1</enabled>
+          <hostname>kube-c-00</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.80</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (kube-c-00)</description>
+        </host>
+        <host uuid="53db360d-72cf-4f12-bf0a-bef0fe277c88">
+          <enabled>1</enabled>
+          <hostname>kube-w-00</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.90</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (kube-w-00)</description>
+        </host>
+        <host uuid="ec2427b3-d42e-4a87-be49-8e65810b9657">
+          <enabled>1</enabled>
+          <hostname>kube-w-01</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.91</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (kube-w-01)</description>
+        </host>
+        <host uuid="ec05dcf7-3437-454d-ab06-f8a96061ea56">
+          <enabled>1</enabled>
+          <hostname>3800xt</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>10.69.69.139</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (3800xt)</description>
+        </host>
+        <host uuid="10a66380-e3e7-48c9-9749-67337a418c11">
+          <enabled>1</enabled>
+          <hostname>fx8200</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>10.69.69.116</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (fx8200)</description>
+        </host>
+        <host uuid="bd4c5db4-1d6a-44e8-8a23-83a8de29fc6f">
+          <enabled>1</enabled>
+          <hostname>pi-hole</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.2</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>fleet host (pi-hole)</description>
+        </host>
+        <host uuid="a8ecb096-8618-44f4-a082-4649c9686f53">
+          <enabled>1</enabled>
+          <hostname>livecam</hostname>
+          <domain>levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.31</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>livecam gate on dockerhost1 -- so on-LAN clients skip the public/VPN relay path</description>
+        </host>
+        <host uuid="0f0a2a28-bb08-4104-8287-e81f130e62e1">
+          <enabled>1</enabled>
+          <hostname>livecam-lan</hostname>
+          <domain>levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.31</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>LAN path for livecam -- keeps home viewing off the AWS relay</description>
+        </host>
+        <host uuid="3cc7233f-91e6-48ad-9ca8-298a7183abc3">
+          <enabled>1</enabled>
+          <hostname>frigate</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.86</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>Frigate NVR + the fleet's go2rtc (replaced cameras/ZoneMinder)</description>
+        </host>
+        <host uuid="91a85180-a82a-47f5-9c9d-fab3f0e67cef">
+          <enabled>1</enabled>
+          <hostname>incident-agent</hostname>
+          <domain>internal.levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.51</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>incident-agent VM (automated incident triage)</description>
         </host>
       </hosts>
       <aliases/>
@@ -1295,4 +1556,5 @@
     <password/>
     <syncitems/>
   </hasync>
+  <syslog/>
 </opnsense>
