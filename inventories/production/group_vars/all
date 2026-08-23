@@ -66,4 +66,4 @@ monitored_hosts:
     # incident-agent/files/fleet.yml marks it self_exclude, so an alert about
     # this host is never triaged by the agent running on it (it would be
     # investigating its own outage) and goes straight to a human instead.
-    - { name: incident-agent, host: "192.168.1.51" }
+    - { name: incident-agent, host: incident-agent.internal.levantine.io }
