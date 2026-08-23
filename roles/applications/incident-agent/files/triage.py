@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """The triage worker: decides, acts, documents, and escalates when needed.
 
-Decisions here are deterministic. The local model is asked to explain and
-classify, never to choose -- so a hallucination costs a badly worded ticket
-note rather than a restarted database. The single place the model's opinion
-changes an outcome is narrow and one-directional: it can suppress an
-escalation only when Alertmanager independently agrees the alert has cleared.
-It can never cause an action, and never prevent one.
+The restart_allowlist.yml fast path stays fully deterministic -- a matched
+rule acts immediately, no model involved. As of 2026-08-24 the local model
+also gets a real, bounded vote in two places: when no rule covers an alert at
+all, and when a matched rule's own action fails (the case that made ticket
+16093 cost $0.50 to power on a host -- the rule tried restart_service, which
+failed because the whole VM was off, and the only option before this was to
+escalate). In both cases the model's recommendation still goes through
+_assert_actionable() in remote.py, the same flap guard as every other action,
+and post-action verification -- a bad recommendation costs a failed attempt
+that falls through to escalation, never an unsupervised action on something
+protected.
 """
 import json
 import os
@@ -16,6 +21,22 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from incident_agent import claude, collect, config, llm, observability, remote, store, zammad  # noqa: E402
+
+# Maps an (action, target_kind) pair from llm.analyse() onto the matching
+# remote.py function. Every entry here is already gated through
+# remote.py's _assert_actionable() -- this dict only chooses WHICH verb to
+# call, it grants no additional authority.
+_ACTION_FUNCS = {
+    ("start", "host"): lambda host, target: remote.start_host(host),
+    ("stop", "host"): lambda host, target: remote.stop_host(host),
+    ("restart", "host"): lambda host, target: remote.restart_host(host),
+    ("start", "container"): lambda host, target: remote.start_container(host, target),
+    ("stop", "container"): lambda host, target: remote.stop_container(host, target),
+    ("restart", "container"): lambda host, target: remote.restart_container(host, target),
+    ("start", "service"): lambda host, target: remote.start_service(host, target),
+    ("stop", "service"): lambda host, target: remote.stop_service(host, target),
+    ("restart", "service"): lambda host, target: remote.restart_service(host, target),
+}
 
 
 def log(message):
@@ -48,18 +69,26 @@ def _link_related(incident):
     cross-host causation is left to the escalation tier, which can actually
     investigate -- guessing at it with string similarity would produce
     confident, wrong links, which are worse than none.
+
+    Links regardless of the peer ticket's current state (open or already
+    closed) -- deliberately changed 2026-08-24. A single host outage commonly
+    trips several distinct Prometheus targets at once (confirmed live: theia
+    powering off raised ProbeFailed, InstanceDown/node_exporter, and
+    InstanceDown/cadvisor as three separate tickets), and this worker
+    processes them sequentially -- by the time the second and third are
+    handled, the first may already be closed. Only linking open peers meant
+    those three never got cross-referenced at all, which is exactly the kind
+    of noise a human reviewing Zammad complains about: three tickets that
+    read as unrelated when they were one event.
     """
     host = incident.get("host")
     if not host or not incident.get("ticket_number"):
         return []
     linked = []
-    for peer in store.open_incidents_for_host(host, 3600, incident["id"]):
+    for peer in store.recent_incidents_for_host(host, 3600, incident["id"]):
         if not peer.get("ticket_id") or peer["ticket_id"] == incident.get("ticket_id"):
             continue
         try:
-            ticket = zammad.get_ticket(peer["ticket_id"])
-            if not zammad.is_open(ticket):
-                continue
             zammad.link_tickets(incident["ticket_number"], peer["ticket_id"])
             linked.append(peer)
         except zammad.ZammadError as e:
@@ -86,6 +115,154 @@ def _verify(rule, incident):
             return ok, detail
         return None, "(probe_target verification requested but instance is not a URL)"
     return None, "(no verification configured for this rule)"
+
+
+def _host_down_evidence(bundle_text):
+    """Whether the bundle actually shows signs the host itself is
+    unreachable, as opposed to the model merely asserting so.
+
+    Confirmed live (2026-08-24): a 3.8B model recommended action=start,
+    target_kind=host for a DiskSpaceLow alert on a host that was
+    demonstrably up and responding normally throughout its own diagnostic
+    bundle -- it defaulted to the schema's simplest valid completion
+    (target_kind=host needs no target name) rather than correctly saying
+    none. `start` against an already-running VM is a safe no-op (Proxmox
+    refuses it with an error), but `stop`/`restart` against a healthy host
+    would not be -- this check gates all three host-level verbs regardless,
+    since none of them make sense without real evidence anyway.
+    """
+    lowered = bundle_text.lower()
+    signals = (
+        "status: stopped", "no route to host", "connection refused",
+        "ssh timed out", "could not connect", "connection timed out",
+    )
+    return any(s in lowered for s in signals)
+
+
+def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
+    """Ask the local model for an action recommendation and, if it produces a
+    valid one, attempt it -- subject to the same flap guard every other
+    action goes through, and the same _assert_actionable() gate in remote.py.
+
+    extra_context is free text prepended to the model's prompt -- used to
+    tell it a previous action already failed and how, so it can react to
+    that rather than repeating it (the theia case: a failed restart_service
+    is strong evidence the host itself is down, not the service).
+
+    rule_for_verify, if given, reuses that rule's own verify: block (the
+    right check is "is theia's HTTP endpoint healthy", regardless of which
+    action was used to get there); otherwise falls back to an Alertmanager
+    re-check, same signal the grace period already uses.
+
+    Returns (resolved, analysis, note):
+      resolved=True  -> incident is fully handled (ticket noted/tagged/finished
+                         already) -- caller should return immediately.
+      resolved=False -> caller should escalate. `note`, if not None, is
+                         ready-to-use context for the escalation (what was
+                         tried and how it went); `analysis` is the raw
+                         classification for callers that want it directly
+                         (e.g. to check for a transient verdict).
+    """
+    host = incident.get("host")
+    alertname = incident.get("alertname")
+    ticket_id = incident.get("ticket_id")
+
+    analysis = llm.analyse(bundle, action_note=extra_context or "")
+    if not llm.has_action(analysis):
+        return False, analysis, None
+
+    if analysis["target_kind"] == "host" and not _host_down_evidence(bundle):
+        log(
+            f"incident {incident['id']}: local model recommended {analysis['action']} host "
+            f"on {host}, but the bundle has no evidence the host is actually down -- refusing "
+            f"(see _host_down_evidence's docstring)"
+        )
+        return False, analysis, (
+            f"Local model recommended {analysis['action']} host `{host}`, but nothing in the "
+            f"diagnostic bundle actually shows the host is unreachable -- refused as an "
+            f"unsupported recommendation rather than attempted."
+        )
+
+    guard = config.flap_guard()
+    recent = store.recent_action_count(alertname, host, guard.get("window_seconds", 3600))
+    if recent >= guard.get("max_actions", 2):
+        log(
+            f"incident {incident['id']}: local model recommended "
+            f"{analysis['action']} {analysis['target_kind']}, but the flap guard already "
+            f"tripped ({recent} attempts on {alertname}/{host} this window) -- not attempting it"
+        )
+        return False, analysis, (
+            f"Local model recommended {analysis['action']} {analysis['target_kind']} "
+            f"`{analysis['target'] or host}`, but {alertname} on {host} has already been "
+            f"auto-actioned {recent} times this window -- not attempting another."
+        )
+
+    action, kind, target = analysis["action"], analysis["target_kind"], analysis["target"]
+    fn = _ACTION_FUNCS.get((action, kind))
+    if fn is None:
+        return False, analysis, None
+
+    log(
+        f"incident {incident['id']}: local model recommends {action} {kind} "
+        f"{target or host} on {host} -- {analysis['notes']}"
+    )
+    action_label = f"{action}_{kind}"
+    try:
+        ok, output = fn(host, target)
+    except remote.ActionRefused as e:
+        store.record_action(incident["id"], alertname, host, action_label, target, "refused", str(e))
+        return False, analysis, (
+            f"Local model recommended {action} {kind} `{target or host}` -- refused by policy: {e}"
+        )
+
+    store.record_action(incident["id"], alertname, host, action_label, target, "ok" if ok else "failed", output)
+
+    if not ok:
+        return False, analysis, (
+            f"Local model recommended {action} {kind} `{target or host}` "
+            f"({analysis['notes']}) -- attempted, but it failed:\n```\n{output[:2000]}\n```"
+        )
+
+    if rule_for_verify:
+        verified, verify_detail = _verify(rule_for_verify, incident)
+    else:
+        # No rule to borrow a verify: block from -- settle, then ask
+        # Alertmanager directly, the same signal the grace period already
+        # trusts for "is this actually still a problem."
+        time.sleep(15)
+        firing_after = observability.alert_is_firing(
+            incident.get("fingerprint"), alertname, incident.get("instance")
+        )
+        verified = firing_after is False
+        verify_detail = (
+            "alert cleared" if verified
+            else "still firing" if firing_after
+            else "could not confirm (Alertmanager unreachable)"
+        )
+
+    action_note_text = (
+        f"Local model recommended: {action} {kind} `{target or host}` -- {analysis['notes']}\n"
+        f"Result: {output[:1000]}\n"
+        f"Verification: {verify_detail}"
+    )
+
+    if verified is False:
+        return False, analysis, action_note_text + "\n\n(action completed, but did not resolve the alert)"
+
+    narrative = llm.format_analysis(analysis) or llm.fallback_summary("no response from Ollama")
+    _note(
+        ticket_id,
+        f"Auto-resolved -- local model recommended {action} {kind} on {host}",
+        f"{action_note_text}\n\n{narrative}\n\n"
+        f"This ticket is left open deliberately: Alertmanager closes it automatically once the "
+        f"alert clears, so it staying open means monitoring has not yet confirmed the fix.",
+        internal=False,
+    )
+    _tag(ticket_id, "auto-resolved")
+    _tag(ticket_id, "llm-decided")
+    store.finish(incident["id"], "llm_auto_resolved", action_note_text[:2000])
+    log(f"incident {incident['id']} auto-resolved via local model's {action} {kind} on {host}")
+    return True, analysis, action_note_text
 
 
 def _escalate(incident, bundle_text, reason, extra_note=None):
@@ -258,12 +435,25 @@ def handle(incident):
 
     rule = config.match_restart_rule(alertname, host, service)
     if not rule:
-        # No allow-list entry. This is where the local model earns its keep: if
-        # Alertmanager already says the alert cleared AND the model reads the
-        # evidence as transient, skip a Sonnet call that would only confirm
-        # "it's fine now". The model can only agree with the deterministic
-        # signal here, never override it.
-        analysis = llm.analyse(bundle)
+        # No allow-list entry. This is where the local model earns its keep --
+        # as of 2026-08-24, it gets a real vote here, not just an opinion:
+        # given the bundle's evidence, it can recommend starting/stopping/
+        # restarting a host/container/service, and if the target is real and
+        # non-critical, that recommendation gets attempted (still through the
+        # same _assert_actionable() gate and flap guard as every other
+        # action). One inference call does both the action decision and the
+        # classification below, so this doesn't cost a second round-trip.
+        resolved, analysis, note = _try_llm_action(incident, bundle)
+        if resolved:
+            return
+
+        # No action taken (model recommended none, target didn't resolve, the
+        # attempt failed, or the flap guard already tripped). Fall back to the
+        # existing transient check, reusing the SAME analyse() call above --
+        # if Alertmanager independently agrees the alert cleared AND the model
+        # read the evidence as transient, skip a Sonnet call that would only
+        # confirm "it's fine now." The model can only agree with the
+        # deterministic signal here, never override it.
         recheck = observability.alert_is_firing(incident.get("fingerprint"), alertname, incident.get("instance"))
         if recheck is False and analysis and analysis["classification"] == "transient" and analysis["confidence"] in ("medium", "high"):
             _note(ticket_id, "Assessed as transient", llm.format_analysis(analysis))
@@ -272,12 +462,13 @@ def handle(incident):
             log(f"incident {incident['id']} assessed transient, escalation skipped")
             return
 
-        extra = llm.format_analysis(analysis) if analysis else None
+        extra_parts = [p for p in (note, llm.format_analysis(analysis) if analysis else None) if p]
+        extra = "\n\n".join(extra_parts) or None
         _escalate(incident, bundle, reason=(
             f"No restart_allowlist.yml rule covers {alertname} on {host}"
             + (f" (service {service})" if service else "")
-            + ", so nothing could be done automatically."
-        ), extra_note=("Local model assessment:\n\n" + extra) if extra else None)
+            + ", and the local model did not recommend an action it could safely take."
+        ), extra_note=extra)
         return
 
     # --- Flap guard -----------------------------------------------------
@@ -312,10 +503,44 @@ def handle(incident):
     store.record_action(incident["id"], alertname, host, action, target, "ok" if ok else "failed", output)
 
     if not ok:
+        # The rule's own action failed -- this is the theia case (ticket
+        # 16093, 2026-08-24): restart_service failed with "no route to host"
+        # because the whole VM was off, and escalating straight to Claude cost
+        # $0.50 for a power-on. Before escalating, tell the model exactly what
+        # was tried and how it failed, and let it reconsider: a connection
+        # failure is strong evidence the HOST is down, not the service, which
+        # is a different fix than the rule assumed. Reuses this rule's own
+        # verify: block, since "is the endpoint healthy" is the right check
+        # regardless of which action got it there.
+        failure_context = (
+            f"An automated action was already attempted and failed.\n"
+            f"Attempted: {action} on target '{target or host}' (host {host}).\n"
+            f"Failure detail: {output[:1000]}\n\n"
+            f"If this failure looks like the HOST itself is down (connection refused, no route to "
+            f"host, SSH/connect timeout) rather than the service or container being unhealthy, that "
+            f"changes the right fix -- consider recommending the host be started instead of "
+            f"repeating the same target."
+        )
+        resolved, analysis, note = _try_llm_action(
+            incident, bundle, extra_context=failure_context, rule_for_verify=rule
+        )
+        if resolved:
+            return
+
+        extra = f"Attempted {action} `{target or host}` on `{host}` -- failed:\n\n```\n{output[:2000]}\n```"
+        if note:
+            extra += f"\n\n{note}"
+        elif analysis:
+            extra += f"\n\n{llm.format_analysis(analysis) or ''}"
+
         _escalate(
             incident, bundle,
-            reason=f"Automated {action} of '{target or host}' on {host} FAILED.",
-            extra_note=f"Attempted {action} `{target or host}` on `{host}` -- failed:\n\n```\n{output[:2000]}\n```",
+            reason=(
+                f"Automated {action} of '{target or host}' on {host} FAILED"
+                + (", and the local model's alternative also failed." if note else
+                   ", and the local model had no better recommendation.")
+            ),
+            extra_note=extra,
         )
         return
 

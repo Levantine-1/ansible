@@ -33,6 +33,34 @@ DESTRUCTIVE_PATTERNS = (
     "mkfs", "dd if=", "fdisk", "wipefs",
 )
 
+# Checked on EVERY host, critical or not -- unlike DESTRUCTIVE_PATTERNS above,
+# which only applies to critical hosts because restarting/stopping things is
+# explicitly permitted on non-critical ones. Config changes are not permitted
+# anywhere: this fleet's whole model is that infrastructure and config changes
+# go through ansible/terraform, reviewed and committed by a human, never made
+# live out of band by an agent -- a change made this way is invisible to that
+# review and gets silently wiped by the next ansible run or soft-DR rebuild
+# regardless. Same honesty as DESTRUCTIVE_PATTERNS' own comment: this is a
+# pattern-matched backstop against an honest mistake, not a security control
+# -- a determined agent could write a config file through a command that
+# doesn't match any of these strings. The real guarantee is the instruction in
+# AGENT_CONTEXT.md and Claude's own judgment, same as it already is for the
+# critical-host boundary above.
+#
+# Deliberately matches WRITE operations, not config paths/extensions on their
+# own -- an earlier draft matched bare "/etc/" and ".conf", which also
+# refused `cat /etc/hosts` and `grep foo /etc/theia.conf`, breaking normal
+# read-only investigation for no safety benefit. Reading config is exactly
+# what an investigation needs; only writing it is out of bounds.
+CONFIG_EDIT_PATTERNS = (
+    "sed -i", "sed --in-place",
+    "> /etc/", ">> /etc/", "tee /etc/", "tee -a /etc/",
+    "> /opt/", ">> /opt/", "tee /opt/", "tee -a /opt/",
+    "vim /etc/", "vi /etc/", "nano /etc/", "emacs /etc/",
+    "crontab -e", "crontab /", "crontab -",
+    "systemctl edit", "visudo",
+)
+
 TOOLS = [
     {
         "name": "run_command",
@@ -214,10 +242,22 @@ def append_learning(note):
 
 
 def _guard_command(host, command):
+    lowered = command.lower()
+
+    # Config-edit check runs first and unconditionally -- it applies to every
+    # host, so there is no reason to even look at criticality first.
+    for pattern in CONFIG_EDIT_PATTERNS:
+        if pattern in lowered:
+            return (
+                f"REFUSED: this command matches the config-write pattern '{pattern}'. Infrastructure "
+                f"and config changes go through ansible/terraform, reviewed by a human -- not made live "
+                f"out of band, on any host. Reading config to investigate is fine; put a needed config "
+                f"change in the RCA as a recommendation instead of applying it directly."
+            )
+
     pol = config.host_policy(host)
     if not (pol["critical"] or not pol["known"]):
         return None
-    lowered = command.lower()
     for pattern in DESTRUCTIVE_PATTERNS:
         if pattern in lowered:
             return (
@@ -257,9 +297,21 @@ def _execute_tool(name, args, incident, state):
             if not address:
                 return f"Unknown hypervisor '{hv}'. Known: {', '.join((config.fleet().get('hypervisors') or {}).keys())}"
             command = args.get("command", "")
+            lowered = command.lower()
+            # Config-edit check applies here too -- a hypervisor is bare metal
+            # with its own Proxmox/network config, just as writable via
+            # arbitrary SSH as any guest. This tool has its own separate guard
+            # below rather than calling _guard_command(), so this check has to
+            # be repeated rather than shared -- keep both in sync if either
+            # pattern list changes.
+            for pattern in CONFIG_EDIT_PATTERNS:
+                if pattern in lowered:
+                    return (
+                        f"REFUSED: this command matches the config-write pattern '{pattern}'. Same rule "
+                        f"as guest hosts -- config changes go through ansible/terraform, not live SSH."
+                    )
             # Hypervisors are always critical: a `qm` against a guest is fine,
             # but anything that would reboot the node itself is not.
-            lowered = command.lower()
             if any(p in lowered for p in ("reboot", "shutdown", "poweroff", "halt", "init 0", "init 6")):
                 if not lowered.startswith("qm "):
                     return (

@@ -99,6 +99,33 @@ def restart_container(host, container, timeout=90):
     return ok, out
 
 
+def start_container(host, container, timeout=90):
+    """Start a stopped Docker container.
+
+    Distinct from restart_container: `docker restart` on an already-stopped
+    container does work (Docker treats it as an implicit start), but a
+    caller reasoning explicitly about "the host/container is down, bring it
+    up" -- the local model's decision path in particular -- should be able to
+    say `start` and have it read that way in the action log, not show up as
+    a "restart" of something that was never running to begin with.
+    """
+    _assert_actionable(host)
+    address = host_address(host)
+    ok, out = ssh(address, f"sudo docker start {shlex.quote(container)}", timeout=timeout)
+    return ok, out
+
+
+def stop_container(host, container, timeout=90):
+    """Stop a Docker container. Unpaired stop (no follow-up start attempt) is
+    a real, distinct risk from restart/start -- callers are expected to
+    verify and escalate if this was the wrong call, same as any other
+    action; this function itself has no opinion, it just stops it."""
+    _assert_actionable(host)
+    address = host_address(host)
+    ok, out = ssh(address, f"sudo docker stop {shlex.quote(container)}", timeout=timeout)
+    return ok, out
+
+
 def restart_service(host, unit, timeout=90):
     """Restart a systemd unit on a host."""
     _assert_actionable(host)
@@ -107,6 +134,25 @@ def restart_service(host, unit, timeout=90):
     if ok:
         _, status = ssh(address, f"systemctl is-active {shlex.quote(unit)}", timeout=20)
         return ok, f"{out}\nis-active: {status}".strip()
+    return ok, out
+
+
+def start_service(host, unit, timeout=90):
+    """Start a stopped systemd unit."""
+    _assert_actionable(host)
+    address = host_address(host)
+    ok, out = ssh(address, f"sudo systemctl start {shlex.quote(unit)}", timeout=timeout)
+    if ok:
+        _, status = ssh(address, f"systemctl is-active {shlex.quote(unit)}", timeout=20)
+        return ok, f"{out}\nis-active: {status}".strip()
+    return ok, out
+
+
+def stop_service(host, unit, timeout=90):
+    """Stop a systemd unit. Same unpaired-stop caveat as stop_container."""
+    _assert_actionable(host)
+    address = host_address(host)
+    ok, out = ssh(address, f"sudo systemctl stop {shlex.quote(unit)}", timeout=timeout)
     return ok, out
 
 
@@ -150,3 +196,18 @@ def restart_host(host, timeout=120):
         # on_boot unset (the 2026-08-20 outage).
         return qm(host, "start", timeout=timeout)
     return ok, out
+
+
+def start_host(host, timeout=120):
+    """Start a stopped guest VM. Thin wrapper for symmetry with
+    start_container/start_service -- qm() already does the real work and is
+    already gated through _assert_actionable()."""
+    return qm(host, "start", timeout=timeout)
+
+
+def stop_host(host, timeout=120):
+    """Stop a guest VM (not reboot). Same unpaired-stop caveat as
+    stop_container/stop_service -- this is the highest-blast-radius verb the
+    local tier can now reach, so callers must still verify and escalate if
+    stopping the host was not actually the fix."""
+    return qm(host, "stop", timeout=timeout)

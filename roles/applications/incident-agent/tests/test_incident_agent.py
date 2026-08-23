@@ -18,6 +18,8 @@ import sys
 import tempfile
 import time
 
+import yaml
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILES = os.path.join(os.path.dirname(HERE), "files")
 
@@ -29,6 +31,7 @@ os.environ["IA_ZAMMAD_API_TOKEN"] = "test-token"
 sys.path.insert(0, FILES)
 
 from incident_agent import claude, collect, config, llm, remote, store  # noqa: E402
+import triage  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -120,6 +123,25 @@ try:
 except remote.ActionRefused:
     check("restart_container on a critical host refused", True)
 
+# The 2026-08-24 verb expansion (local model gets start/stop authority, not
+# just restart) -- every one of these must refuse on a critical host exactly
+# like the pre-existing restart_* functions do. No new enforcement code
+# backs these; they all go through the same _assert_actionable(), so this is
+# really testing that none of them were written to skip it.
+for fn, args in (
+    (remote.start_host, ("vault",)),
+    (remote.stop_host, ("vault",)),
+    (remote.start_container, ("vault", "anything")),
+    (remote.stop_container, ("vault", "anything")),
+    (remote.start_service, ("vault", "anything")),
+    (remote.stop_service, ("vault", "anything")),
+):
+    try:
+        fn(*args)
+        check(f"{fn.__name__} on a critical host refused", False, "it was NOT refused")
+    except remote.ActionRefused:
+        check(f"{fn.__name__} on a critical host refused", True)
+
 
 print("\n== hypervisor command construction ==")
 # remote.qm() injects the vm_id from fleet.yml, so diagnostics.yml must NOT
@@ -179,6 +201,30 @@ check("destructive command on non-critical host allowed",
 check("undeclared host is guarded like a critical one",
       claude._guard_command("mystery-box", "sudo reboot") is not None)
 
+# Config-edit guard (2026-08-24): must apply on EVERY host, unlike
+# DESTRUCTIVE_PATTERNS which only fires for critical ones -- "no config
+# changes" isn't a critical-host-only rule.
+for host in ("vault", "dockerhost1"):
+    check(f"sed -i refused on {host}",
+          claude._guard_command(host, "sudo sed -i s/foo/bar/ /etc/hosts") is not None)
+    check(f"redirect into /etc refused on {host}",
+          claude._guard_command(host, "echo nameserver 1.1.1.1 > /etc/resolv.conf") is not None)
+    check(f"tee into /etc refused on {host}",
+          claude._guard_command(host, "echo x | sudo tee /etc/theia.conf") is not None)
+    check(f"opening an editor on /etc refused on {host}",
+          claude._guard_command(host, "sudo vim /etc/nginx/nginx.conf") is not None)
+
+# The precise failure mode an earlier draft of this guard had: matching bare
+# paths/extensions also refused harmless reads. These must all be allowed.
+for cmd in (
+    "cat /etc/hosts",
+    "grep foo /etc/theia.conf",
+    "less /etc/nginx/nginx.conf",
+    "cat docker-compose.yml",
+    "docker inspect theia",
+):
+    check(f"read-only config access allowed: {cmd}", claude._guard_command("dockerhost1", cmd) is None, cmd)
+
 
 print("\n== queue semantics ==")
 store.init()
@@ -237,6 +283,19 @@ check("guard threshold from config is reached", store.recent_action_count("Probe
       >= config.flap_guard()["max_actions"])
 check("a different host is unaffected", store.recent_action_count("ProbeFailed", "theia", 3600) == 0)
 
+# The flap guard must cap total attempts on (alertname, host) regardless of
+# WHICH mechanism chose the action -- a fixed rule, or the local model's own
+# recommendation (recorded with an "action_kind" label like "start_host",
+# not "restart_container"). recent_action_count() counts by (alertname,
+# host) only, so this should already compose for free; test it explicitly
+# rather than just assume the two label formats don't interact.
+store.record_action(id3, "InstanceDown", "theia", "start_host", "", "ok")
+check("LLM-decided action labels count toward the same flap-guard total as rule-based ones",
+      store.recent_action_count("InstanceDown", "theia", 3600) == 1)
+store.record_action(id3, "InstanceDown", "theia", "restart_host", "", "failed")
+check("mixed rule-based and LLM-decided labels both count",
+      store.recent_action_count("InstanceDown", "theia", 3600) == 2)
+
 
 print("\n== storm detection ==")
 for i, h in enumerate(["dockerhost1", "frigate", "theia", "kube-c-00"]):
@@ -271,6 +330,75 @@ check("nested braces parse",
       llm._extract_json('{"a": {"b": 1}, "classification": "real"}')["classification"] == "real")
 check("garbage returns None", llm._extract_json("I could not analyse this.") is None)
 check("empty returns None", llm._extract_json("") is None)
+
+
+print("\n== local model action-decision parsing (2026-08-24) ==")
+# _normalize_action() is what stands between a small model's messy JSON and
+# something remote.py will actually execute -- errs toward "none" on
+# anything structurally incomplete rather than guessing.
+check("valid host action passes through",
+      llm._normalize_action({"action": "start", "target_kind": "host", "target": ""}) == ("start", "host", ""))
+check("valid container action passes through",
+      llm._normalize_action({"action": "restart", "target_kind": "container", "target": "frigate"})
+      == ("restart", "container", "frigate"))
+check("action with no target_kind collapses to none",
+      llm._normalize_action({"action": "start", "target_kind": "none", "target": ""}) == ("none", "none", ""))
+check("action with missing target_kind field collapses to none",
+      llm._normalize_action({"action": "restart"}) == ("none", "none", ""))
+check("container action with empty target collapses to none",
+      llm._normalize_action({"action": "restart", "target_kind": "container", "target": ""}) == ("none", "none", ""))
+check("service action with no target field at all collapses to none",
+      llm._normalize_action({"action": "start", "target_kind": "service"}) == ("none", "none", ""))
+check("host action needs no target -- empty target is fine",
+      llm._normalize_action({"action": "stop", "target_kind": "host"}) == ("stop", "host", ""))
+check("unknown action string collapses to none",
+      llm._normalize_action({"action": "delete_everything", "target_kind": "host"}) == ("none", "none", ""))
+check("unknown target_kind collapses to none",
+      llm._normalize_action({"action": "start", "target_kind": "database", "target": "x"}) == ("none", "none", ""))
+check("explicit none passes through cleanly",
+      llm._normalize_action({"action": "none"}) == ("none", "none", ""))
+check("missing action field defaults to none",
+      llm._normalize_action({}) == ("none", "none", ""))
+
+check("has_action true for a real recommendation",
+      llm.has_action({"action": "start"}) is True)
+check("has_action false for none",
+      llm.has_action({"action": "none"}) is False)
+check("has_action false for a falsy analysis (model unavailable)",
+      llm.has_action(None) is False)
+
+
+print("\n== host-down evidence gate (2026-08-24) ==")
+# Confirmed live: a 3.8B model recommended action=start, target_kind=host for
+# a DiskSpaceLow alert on a host that was demonstrably up throughout its own
+# bundle -- it defaulted to the schema's simplest completion rather than
+# correctly saying none. This gate is the code-level backstop for that,
+# independent of how well the prompt asks it not to.
+down_bundle = "--- [1] Is the VM running? (hypervisor, ok) ---\nstatus: stopped\n"
+up_bundle = "--- [1] Filesystem usage (ssh, ok) ---\nFilesystem Size Used Avail Use%\n/dev/sda1 32G 30G 512M 99%\n"
+check("qm status: stopped counts as host-down evidence", triage._host_down_evidence(down_bundle))
+check("no route to host counts as evidence",
+      triage._host_down_evidence("ssh: connect to host x port 22: No route to host"))
+check("connection refused counts as evidence",
+      triage._host_down_evidence("curl: (7) Failed to connect: Connection refused"))
+check("a normal, healthy bundle has no host-down evidence", not triage._host_down_evidence(up_bundle))
+check("case-insensitive", triage._host_down_evidence("STATUS: STOPPED"))
+
+_fake_incident = {"id": 999, "ticket_id": None, "alertname": "DiskSpaceLow", "host": "dockerhost1"}
+_real_analyse = llm.analyse
+llm.analyse = lambda bundle, action_note="": {
+    "classification": "real", "confidence": "high", "summary": "disk full", "evidence": [],
+    "action": "start", "target_kind": "host", "target": "", "notes": "guessed",
+    "model": "test",
+}
+try:
+    resolved, analysis, note = triage._try_llm_action(_fake_incident, up_bundle)
+    check("host action refused end-to-end when the bundle shows no evidence", resolved is False)
+    check("refusal note explains why", "unreachable" in (note or "").lower())
+    check("no action was actually recorded for the refused attempt",
+          store.recent_action_count("DiskSpaceLow", "dockerhost1", 3600) == 0)
+finally:
+    llm.analyse = _real_analyse
 
 
 print("\n== diagnostic output handling ==")
@@ -317,6 +445,25 @@ check("InstanceDown queries Loki before SSH",
 check("InstanceDown checks the hypervisor",
       any(s["source"] == "hypervisor" for s in diag["alerts"]["InstanceDown"]["steps"]))
 check("a fallback plan exists for new alerts", bool(diag.get("fallback", {}).get("steps")))
+
+# 2026-08-24: ticket 16093 (theia powered off, ProbeFailed fired) had no
+# hypervisor step in its bundle and never definitively showed "the host is
+# off" -- added so a ProbeFailed diagnosis doesn't depend on inferring a dead
+# host from a pile of SSH timeouts.
+check("ProbeFailed also checks the hypervisor",
+      any(s["source"] == "hypervisor" for s in diag["alerts"]["ProbeFailed"]["steps"]))
+
+alert_rules = os.path.join(FILES, "..", "..", "monitoring", "files", "alert_rules.yml")
+if os.path.exists(alert_rules):
+    with open(alert_rules) as fh:
+        rules_doc = yaml.safe_load(fh)
+    by_name = {r["alert"]: r for g in rules_doc["groups"] for r in g["rules"]}
+    check("InstanceDown for: is 10m, not the original 5m",
+          by_name["InstanceDown"]["for"] == "10m", by_name["InstanceDown"]["for"])
+    check("ProbeFailed for: is 10m, not the original 5m",
+          by_name["ProbeFailed"]["for"] == "10m", by_name["ProbeFailed"]["for"])
+else:
+    check("alert_rules.yml found for the for: duration check", False, alert_rules)
 
 
 print(f"\n{'=' * 60}")

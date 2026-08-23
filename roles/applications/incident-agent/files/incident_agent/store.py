@@ -294,8 +294,13 @@ def host_history(host, seconds, exclude_incident_id=None):
         conn.close()
 
 
-def open_incidents_for_host(host, window_seconds, exclude_incident_id):
-    """Other recent incidents on the same host -- candidates for linking."""
+def recent_incidents_for_host(host, window_seconds, exclude_incident_id):
+    """Other recent incidents on the same host -- candidates for linking.
+
+    Regardless of state (open or already closed) -- deliberately, as of
+    2026-08-24; see triage.py's _link_related() for why linking only open
+    peers was missing the common case of one outage tripping several
+    distinct Prometheus targets in quick succession."""
     conn = connect()
     try:
         rows = conn.execute(

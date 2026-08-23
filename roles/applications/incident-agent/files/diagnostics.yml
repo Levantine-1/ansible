@@ -81,14 +81,29 @@ alerts:
       - {source: ssh, command: "ls -la /media/frigate/recordings 2>/dev/null | head -20 || true", description: "Recording directory state"}
 
   ProbeFailed:
+    # Not "ssh_expected: false" like InstanceDown -- a probe failure is more
+    # often an app-level fault than a dead host, so ssh is still the primary
+    # path. But it CAN be a dead host too (confirmed live, 2026-08-24: ticket
+    # 16093, theia powered off -- the ProbeFailed bundle had every SSH attempt
+    # failing but nothing that definitively said "the host itself is off"
+    # rather than "the app is unreachable for some other reason"), so the same
+    # hypervisor qm status/config steps InstanceDown already has are added
+    # here too, cheap and fast, so a diagnosis of "the whole host is down"
+    # doesn't depend on inferring it from a pile of SSH timeouts.
     ssh_expected: true
     steps:
-      # Re-probe first: Blackbox probes every 30s and the alert has a 5m `for`,
-      # but the endpoint may have recovered in the time the grace period took.
+      # Re-probe first: Blackbox probes every 30s and the alert has a 10m
+      # `for`, but the endpoint may have recovered in the time the grace
+      # period took.
       - {source: http_probe, target: "$INSTANCE", description: "Re-probe the failing endpoint directly"}
       - {source: loki, query: '{host="$HOST"}', description: "Journal on the host serving this endpoint"}
+      # See InstanceDown's comment on the equivalent steps -- no vm id
+      # written out, remote.qm() injects it.
+      - {source: hypervisor, command: "qm status", description: "Is the VM even running from the hypervisor's view?"}
+      - {source: hypervisor, command: "qm config | head -30", description: "VM config (memory/cores/boot), in case the host is up but under-resourced"}
       - {source: ssh, command: "docker ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null | head -30 || true", description: "Container states"}
       - {source: ssh, command: "docker logs --tail 100 $SERVICE 2>&1 || true", description: "Logs for the specific container behind this probe"}
+      - {source: ssh, command: "systemctl status $SERVICE --no-pager -l 2>/dev/null | head -20 || true", description: "systemd unit state, if this service isn't containerized"}
 
 # Fallback for an alert name with no entry above -- a new rule added to
 # alert_rules.yml still gets a useful bundle instead of an empty one.

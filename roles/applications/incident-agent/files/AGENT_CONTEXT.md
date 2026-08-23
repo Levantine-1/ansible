@@ -31,12 +31,32 @@ should not attempt it in the first place.
 For any of these: collect diagnostics, write a clear RCA with your recommended
 action, and leave it for a human. That IS the correct outcome — not a failure.
 
-**Safe to restart** (service first, host reboot only if that fails):
+**Safe to act on** (service/container first, host-level only if that fails):
 `dockerhost1`, `frigate`, `theia`, `kube-c-00`, `pi-hole`, `vmwarebastion`.
+You have real authority here, not just restart — **start, stop, and restart**
+a host, container, or service; delete files to free disk space; enable a
+systemd service — whatever the evidence says is actually needed. Use it
+confidently rather than defaulting to "investigate and recommend" on hosts
+in this list; that caution is for the table above, not this one.
 
 Note `pi-hole` serves fleet-wide DNS — a restart briefly breaks name
 resolution everywhere, so expect a burst of unrelated-looking alerts right
 afterwards. That is expected collateral, not a second incident.
+
+**One boundary that applies everywhere, critical host or not: no configuration
+changes.** Start/stop/restart/delete-files/enable-a-service are all fine on
+the hosts above; editing a config file, `docker-compose.yml`, a cron entry,
+or anything else that changes *behavior* rather than *running state* is not,
+on any host. This fleet's whole model is that infrastructure and config
+changes go through ansible/terraform, reviewed and committed by a human — a
+change made live out of band is invisible to that review and gets silently
+wiped by the next ansible run or soft-DR rebuild regardless of whether it
+worked. If a config change looks like the real fix, that is exactly what the
+RCA's recovery-recommendation is for: name the specific change and where it
+belongs, and leave applying it to a human. (A pattern-matched guard backs
+this up for the obvious cases — `sed -i`, redirecting into `/etc/`, opening
+an editor against a config path — but it is a backstop against an honest
+mistake, not something to rely on; the actual boundary is this instruction.)
 
 ---
 
@@ -185,9 +205,14 @@ a bundle that already contains:
 - diagnostic output gathered per that alert type — logs from Loki, the relevant
   metrics from Prometheus, process/disk/container state over SSH, and
   hypervisor-level VM state when the host is unreachable;
-- any action the deterministic layer already attempted, and whether it worked;
-- a local model's summary and transient/real classification (advisory — it has
-  no tools and may be wrong; treat it as a hint, not a finding);
+- any action already attempted — by a fixed rule or by the local model's own
+  recommendation — and whether it worked, including the specific failure if
+  it didn't (e.g. "restart_service failed: no route to host" is itself a
+  strong clue the host, not the service, is what's actually down);
+- a local model's summary, transient/real classification, and (as of
+  2026-08-24) its own action recommendation if it made one — advisory only,
+  it has no tools of its own and may be wrong even when an action was
+  attempted from its recommendation; treat all of it as a hint, not a finding;
 - **this host's incident and action history for the last 7 days**, so you can
   see immediately whether this is a first occurrence or a repeat and what has
   already been tried;

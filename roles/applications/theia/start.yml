@@ -11,3 +11,18 @@
 
     - name: Start Theia Tailon Log Service
       shell: pm2 start "tailon -b localhost:1337 -f /opt/theia/logs/* /var/log/apache2/*.log /var/log/syslog /var/log/auth.log /var/log/dmesg /var/log/rabbitmq/log/crash.log /var/log/rabbitmq/*.log" -n tailon
+
+    # Without this, a VM power-off wipes pm2's process list -- pm2 itself is
+    # not a systemd service, so nothing brings the app tier back on boot,
+    # only mariadb/rabbitmq (which are systemd-managed) come up on their own.
+    # Confirmed live and fixed by hand during an incident (2026-08-24, ticket
+    # 16093: theia lost power, `qm start` alone was not enough, the app
+    # stayed down until `pm2 resurrect` ran). Folding that fix in here so it
+    # is not silently reverted by the next run of this role or a soft-DR
+    # rebuild -- `theia` is in the non-critical tier rebuild_fleet.sh rebuilds.
+    - name: Install a systemd unit that resurrects pm2's process list on boot
+      become: yes
+      command: pm2 startup systemd -u automation --hp /home/automation
+
+    - name: Save the current pm2 process list for that unit to resurrect
+      command: pm2 save
