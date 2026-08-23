@@ -20,13 +20,21 @@ birdseye:
 auth:
   enabled: false
 
+# Verified against this version's schema rather than the docs: ProxyConfig
+# accepts auth_secret, default_role, header_map, logout_url and separator.
+# `trusted_proxies` appears in the documentation but is rejected here, and
+# it only governs rate-limit attribution anyway -- what actually keeps this
+# safe is that Frigate is LAN-only and livecam strips any inbound
+# X-Forwarded-User before setting its own.
 proxy:
   header_map:
     user: x-forwarded-user
-  # Requests arrive from livecam on dockerhost1, via the internal LAN.
-  trusted_proxies:
-    - 192.168.1.0/24
-    - 172.16.0.0/12
+  # Everyone livecam lets through is a full viewer; livecam already decided
+  # whether this user may reach the archive at all.
+  default_role: admin
+  # Sends "log out" back to livecam's logout rather than a Frigate login
+  # page that does not exist here.
+  logout_url: /logout
 
 # Frigate ships go2rtc and drives its restream through it, so this is the
 # single go2rtc for the whole camera stack: Frigate records from it AND
