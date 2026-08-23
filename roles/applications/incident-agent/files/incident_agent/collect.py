@@ -6,7 +6,7 @@ receives as starting context so it is not rediscovering basics at API prices.
 """
 import time
 
-from . import config, observability, remote
+from . import config, observability, remote, store
 
 
 def _truncate(text, limit):
@@ -27,6 +27,41 @@ def _substitute(text, ctx):
     for key, value in ctx.items():
         text = text.replace(f"${key}", str(value if value is not None else ""))
     return text
+
+
+def history_notes(incident):
+    """Prior incidents and automated actions on this host.
+
+    Included in every bundle so the escalation tier starts knowing whether this
+    is a first occurrence or the fifth this week, and what has already been
+    tried -- questions it would otherwise spend paid turns rediscovering, and
+    which change the diagnosis substantially ("restarting fixed it three times
+    already" is a different problem from "this has never happened before").
+    """
+    host = incident.get("host")
+    if not host:
+        return []
+    incidents, actions = store.host_history(host, 7 * 86400, incident["id"])
+    if not incidents and not actions:
+        return [f"History: no other recorded incidents on {host} in the last 7 days (first occurrence)."]
+
+    lines = [f"History for {host} over the last 7 days:"]
+    if incidents:
+        for row in incidents[:8]:
+            when = time.strftime("%a %H:%M", time.localtime(row["received_at"] or 0))
+            lines.append(
+                f"  - {when} {row['alertname']} (ticket #{row['ticket_number']}) -> {row['outcome'] or 'unfinished'}"
+            )
+    else:
+        lines.append("  - no other incidents")
+    if actions:
+        lines.append("  Automated actions already taken on this host:")
+        for row in actions[:8]:
+            when = time.strftime("%a %H:%M", time.localtime(row["ts"] or 0))
+            lines.append(
+                f"  - {when} {row['action']} {row['target'] or ''} ({row['alertname']}) -> {row['result']}"
+            )
+    return lines
 
 
 def collect(alertname, host, service, instance, vm_id=None):

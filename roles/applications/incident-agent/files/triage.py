@@ -106,17 +106,21 @@ def _escalate(incident, bundle_text, reason, extra_note=None):
         store.finish(incident["id"], "escalation_unavailable", result.get("detail", ""), escalated=False)
         return
 
-    _note(ticket_id, "AI investigation (Claude)", body, internal=False)
-
     if result.get("resolved"):
-        # Do not close the ticket here even though the problem is reported
-        # fixed: Alertmanager closes it itself when the alert actually clears,
-        # and that is the signal grounded in monitoring rather than in the
-        # agent's own opinion of its work. Closing it here would also race the
-        # relay's own close and could reopen-then-close confusingly.
+        # Post the RCA and close in one call. If the fix did not actually hold,
+        # the alert keeps firing and Alertmanager's next notification opens a
+        # fresh ticket -- which is the correct outcome, since a problem that
+        # recurs after being "resolved" is genuinely a new incident and should
+        # not be quietly appended to a closed one.
+        try:
+            zammad.close_ticket(ticket_id, "Resolved by AI investigation", body, internal=False)
+        except zammad.ZammadError as e:
+            log(f"could not close ticket {ticket_id}: {e}")
+            _note(ticket_id, "AI investigation (Claude)", body, internal=False)
         _tag(ticket_id, "auto-resolved")
         store.finish(incident["id"], "escalated_resolved", result.get("rca", "")[:2000], escalated=True)
     else:
+        _note(ticket_id, "AI investigation (Claude)", body, internal=False)
         _tag(ticket_id, "needs-human")
         store.finish(incident["id"], "escalated_unresolved", result.get("rca", "")[:2000], escalated=True)
 
@@ -203,12 +207,20 @@ def handle(incident):
     notes = []
     if pol.get("note"):
         notes.append(f"Host note: {pol['note']}")
+    if pol.get("critical"):
+        # State the boundary inside the bundle itself, not only in the context
+        # doc, so the constraint travels with the incident.
+        notes.append(
+            f"POLICY: {host} is protected -- no automated action is permitted on it. "
+            f"{pol.get('reason') or ''}"
+        )
     linked = _link_related(incident)
     if linked:
         notes.append(
             "Linked related open tickets on this host: "
             + ", ".join(f"#{p.get('ticket_number')} ({p.get('alertname')})" for p in linked)
         )
+    notes.extend(collect.history_notes(incident))
 
     bundle = collect.format_bundle(incident, steps, notes)
     _note(ticket_id, f"Automated diagnostics -- {alertname}", bundle)

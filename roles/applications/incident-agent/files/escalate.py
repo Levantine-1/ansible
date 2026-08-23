@@ -78,7 +78,9 @@ def main():
         steps = collect.collect(
             incident["alertname"], incident.get("host"), incident.get("service"), incident.get("instance")
         )
-        bundle = collect.format_bundle(incident, steps)
+        # Same front-loaded history the automatic path provides, so a manual
+        # escalation is not a poorer-informed one.
+        bundle = collect.format_bundle(incident, steps, collect.history_notes(incident))
 
     if args.dry_run:
         print("\n===== BUNDLE THAT WOULD BE SENT =====\n")
@@ -92,11 +94,23 @@ def main():
     body = claude.format_result(result)
     print(body)
 
-    if incident.get("ticket_id"):
+    # Mirror the automatic path exactly (see triage.py's _escalate): a resolved
+    # investigation closes the ticket with its RCA, an unresolved one leaves it
+    # open and flagged. A manual escalation should not leave the ticket in a
+    # different state than the same investigation run automatically would.
+    ticket_id = incident.get("ticket_id")
+    if ticket_id:
         try:
-            zammad.add_article(incident["ticket_id"], "AI investigation (Claude, manual)", body, internal=False)
+            if result.get("status") == "completed" and result.get("resolved"):
+                zammad.close_ticket(ticket_id, "Resolved by AI investigation", body, internal=False)
+                zammad.add_tag(ticket_id, "auto-resolved")
+                print(f"\n(ticket {ticket_id} closed)")
+            else:
+                zammad.add_article(ticket_id, "AI investigation (Claude, manual)", body, internal=False)
+                zammad.add_tag(ticket_id, "needs-human")
+                print(f"\n(ticket {ticket_id} left open, flagged needs-human)")
         except zammad.ZammadError as e:
-            print(f"(could not post to ticket: {e})", file=sys.stderr)
+            print(f"(could not update ticket: {e})", file=sys.stderr)
 
     if incident.get("id"):
         store.finish(

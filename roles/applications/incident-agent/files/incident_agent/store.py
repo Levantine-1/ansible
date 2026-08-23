@@ -268,6 +268,32 @@ def storm_peers(window_seconds, exclude_incident_id):
         conn.close()
 
 
+def host_history(host, seconds, exclude_incident_id=None):
+    """Everything this host has done recently, for the escalation bundle.
+
+    Front-loaded rather than left for the escalation tier to discover: "has
+    this happened before, and what was tried" is one of the first questions any
+    investigation asks, and answering it from local SQLite costs nothing while
+    making Claude rediscover it costs API turns.
+    """
+    conn = connect()
+    try:
+        incidents = conn.execute(
+            """SELECT id, alertname, ticket_number, outcome, received_at, detail
+               FROM incidents WHERE host=? AND received_at >= ? AND id != COALESCE(?, -1)
+               ORDER BY received_at DESC LIMIT 20""",
+            (host, time.time() - seconds, exclude_incident_id),
+        ).fetchall()
+        actions = conn.execute(
+            """SELECT ts, alertname, action, target, result FROM actions
+               WHERE host=? AND ts >= ? ORDER BY ts DESC LIMIT 20""",
+            (host, time.time() - seconds),
+        ).fetchall()
+        return [dict(r) for r in incidents], [dict(r) for r in actions]
+    finally:
+        conn.close()
+
+
 def open_incidents_for_host(host, window_seconds, exclude_incident_id):
     """Other recent incidents on the same host -- candidates for linking."""
     conn = connect()

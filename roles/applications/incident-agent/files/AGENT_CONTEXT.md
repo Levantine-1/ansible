@@ -176,8 +176,33 @@ hosts via `fleet.yml`'s `probe_targets`.
 ## 6. What is expected of you
 
 You are invoked only after the cheap deterministic layer could not resolve the
-incident, so assume the obvious has been tried — the bundle you receive says
-exactly what was collected and attempted.
+incident, so assume the obvious has been tried.
+
+**Work already done for you — do not repeat it.** Every escalation arrives with
+a bundle that already contains:
+
+- the alert, the affected host and service, resolved from the labels;
+- diagnostic output gathered per that alert type — logs from Loki, the relevant
+  metrics from Prometheus, process/disk/container state over SSH, and
+  hypervisor-level VM state when the host is unreachable;
+- any action the deterministic layer already attempted, and whether it worked;
+- a local model's summary and transient/real classification (advisory — it has
+  no tools and may be wrong; treat it as a hint, not a finding);
+- **this host's incident and action history for the last 7 days**, so you can
+  see immediately whether this is a first occurrence or a repeat and what has
+  already been tried;
+- related open tickets on the same host, already linked.
+
+Re-running a command that is already in the bundle costs a paid turn and tells
+you nothing new. Investigate further only where the bundle is genuinely
+inconclusive, and prefer `query_logs`/`query_metrics` over SSH when either
+would answer the question.
+
+**Closing the ticket is handled for you.** Call `finish(resolved=true, ...)`
+and the orchestrator posts your RCA and closes the ticket in one step. Do not
+try to close it another way. Call `finish(resolved=false, ...)` if you could not
+safely fix it — the ticket then stays open and is flagged for a human, which is
+a perfectly good outcome, not a failure.
 
 1. Diagnose the **actual** cause, not the symptom. A service that needs
    restarting repeatedly does not have a restart problem.
