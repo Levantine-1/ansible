@@ -128,6 +128,9 @@
         pkg:
           - ca-certificates
           - curl
+          # gnupg is not in the Debian cloud image, and apt_key needs it --
+          # the play failed on a from-scratch host without it.
+          - gnupg
           - python3-docker
         state: present
         update_cache: true
