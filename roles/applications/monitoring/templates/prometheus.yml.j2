@@ -82,6 +82,11 @@ scrape_configs:
           # itself is already covered by the other app probes above, which
           # all traverse it.
           - https://livecam-lan.levantine.io/login
+          # Frigate's own API, probed directly on the LAN rather than
+          # through livecam: livecam gates it behind a session, so a probe
+          # would only ever see the login redirect and would stay green
+          # even if Frigate itself were down.
+          - http://frigate.internal.levantine.io:5000/api/version
           # DataGateway: no VIRTUAL_HOST (k8s NodePort, not behind
           # nginx-proxy), so probe the internal endpoint directly instead.
           - http://kube-c-00.internal.levantine.io:30080/mousey

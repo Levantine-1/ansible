@@ -60,4 +60,4 @@ monitored_hosts:
     # the full 3-node demo cluster is ever restored.
     - { name: 3800xt, host: "10.69.69.139" }
     - { name: fx8200, host: "10.69.69.116" }
-    - { name: cameras, host: cameras.internal.levantine.io }
+    - { name: frigate, host: frigate.internal.levantine.io }

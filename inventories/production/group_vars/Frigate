@@ -1,0 +1,17 @@
+# RTSP username/password come from Vault (kv/data/cameras/amcrest), never
+# here -- see roles/applications/frigate/install.yml.
+#
+# These names are load-bearing beyond this file: they become the go2rtc
+# stream names in Frigate's config, and livecam derives its own stream
+# names from them (`<name>`, `<name>_noaudio`, `<name>_sub`,
+# `<name>_sub_noaudio`). They also have to match the camera names in
+# roles/applications/livecam/files/permissions.yml, which is what decides
+# who may see which camera. Renaming one here without the others silently
+# removes a camera from everyone's permissions.
+cameras:
+    - name: guinea-pig-cage-1
+      ip: 10.69.69.107
+      channel: 1
+    - name: guinea-pig-cage-2
+      ip: 10.69.69.143
+      channel: 1

@@ -1,9 +1,0 @@
-# RTSP username/password come from Vault (kv/data/cameras/amcrest), never
-# here -- see roles/applications/camera_nvr/install.yml.
-cameras:
-    - name: guinea-pig-cage-1
-      ip: 10.69.69.107
-      channel: 1
-    - name: guinea-pig-cage-2
-      ip: 10.69.69.143
-      channel: 1

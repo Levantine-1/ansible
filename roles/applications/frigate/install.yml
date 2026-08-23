@@ -1,0 +1,193 @@
+---
+# Frigate NVR: continuous recording, retention, and the timeline/scrub/
+# export UI for the guinea pig cameras. Replaces ZoneMinder.
+#
+# Frigate also owns the only go2rtc in the fleet now -- it ships one and
+# drives its restream through it, so running a second copy would mean two
+# sets of camera connections and a fight over ports 1984/8554. livecam
+# points GO2RTC_URL at this host and serves live view from the same
+# instance Frigate records through.
+#
+# Everything here was measured against this exact hardware (AMD FX-8300,
+# AVX but no AVX2) before being written down; the config template carries
+# the numbers and the reasoning for each non-obvious setting.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/frigate/install.yml
+- name: Install Frigate NVR
+  hosts: Frigate
+  become: yes
+
+  vars_files:
+    - ../../../vault.yml
+
+  vars:
+    # Pinned, never :latest. Frigate requires AVX, and there are reports of
+    # "Illegal instruction" on older CPUs with newer releases -- this exact
+    # tag was verified to boot and record on this host before rollout, so
+    # an unattended pull must not be able to move it.
+    frigate_image: "ghcr.io/blakeblackshear/frigate:0.17.2"
+    # ~134GB/day measured for both cameras; 1.7TB usable is ~12-13 days.
+    frigate_retain_days: 11
+    frigate_media_path: /media/frigate
+    frigate_config_path: /opt/frigate/config
+
+  tasks:
+    - name: Retrieve camera RTSP credentials from Vault
+      set_fact:
+        camera_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/cameras/amcrest token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    # --- footage disk -------------------------------------------------
+    - name: Check if the footage disk is already formatted
+      command: blkid -o value -s TYPE /dev/sdb
+      register: nvr_disk_blkid
+      changed_when: false
+      failed_when: false
+
+    # /dev/sdb, not resolved by-id: matches the convention the rest of this
+    # repo's disk handling already uses.
+    - name: Format the footage disk (scsi1, ext4)
+      filesystem:
+        fstype: ext4
+        dev: /dev/sdb
+      when: nvr_disk_blkid.stdout == ""
+
+    # Mounted at Frigate's own default media path rather than somewhere
+    # else that Frigate then has to be told about. ZoneMinder taught this
+    # lesson expensively: it ignored ZM_DIR_EVENTS, kept writing to the
+    # 16GB root, and filled it in about an hour while the 1.9TB disk sat
+    # empty. Making the default correct means no setting can drift back.
+    - name: Create the media directory (the footage mount point)
+      file:
+        path: "{{ frigate_media_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount the footage disk at Frigate's media path
+      mount:
+        path: "{{ frigate_media_path }}"
+        src: /dev/sdb
+        fstype: ext4
+        state: mounted
+
+    - name: Fail if the media path is not actually on the footage disk
+      # Cheap guard against the exact ZoneMinder failure above: if this is
+      # still the root filesystem, recordings would silently fill the OS
+      # disk instead of the 2TB one.
+      shell: |
+        set -o pipefail
+        findmnt -no SOURCE --target {{ frigate_media_path }}
+      args:
+        executable: /bin/bash
+      register: frigate_media_source
+      changed_when: false
+      failed_when: "'/dev/sdb' not in frigate_media_source.stdout"
+
+    # --- docker -------------------------------------------------------
+    - name: Install Docker prerequisites
+      apt:
+        pkg:
+          - ca-certificates
+          - curl
+          - python3-docker
+        state: present
+        update_cache: true
+
+    - name: Add Docker GPG apt key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker engine
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    # --- config -------------------------------------------------------
+    - name: Create the Frigate config directory
+      file:
+        path: "{{ frigate_config_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Deploy the Frigate config
+      template:
+        src: templates/config.yml.j2
+        dest: "{{ frigate_config_path }}/config.yml"
+        owner: root
+        group: root
+        # 0600: embeds the cameras' RTSP credentials. A camera password was
+        # committed once already in this project's history; this file is
+        # rendered on the host and never leaves it.
+        mode: "0600"
+      no_log: true
+      register: frigate_config
+
+    # --- container ----------------------------------------------------
+    - name: Pull the pinned Frigate image
+      docker_image:
+        name: "{{ frigate_image }}"
+        source: pull
+        state: present
+
+    - name: Run Frigate
+      docker_container:
+        name: frigate
+        image: "{{ frigate_image }}"
+        # Host networking so go2rtc's RTSP/WebRTC and Frigate's UI are all
+        # reachable on the LAN without republishing each port, and so
+        # livecam can reach :1984 directly the way it did before.
+        network_mode: host
+        volumes:
+          - "{{ frigate_config_path }}:/config"
+          - "{{ frigate_media_path }}:/media/frigate"
+          - "/etc/localtime:/etc/localtime:ro"
+        # Frigate stages recording segments here before moving them to the
+        # media volume; on disk it would mean constant write amplification
+        # against the SSD for data that lives for seconds.
+        tmpfs:
+          - "/tmp/cache:size=1000000000"
+        shm_size: "128M"
+        restart_policy: unless-stopped
+        detach: yes
+        container_default_behavior: no_defaults
+        comparisons:
+          "*": strict
+      register: frigate_container
+
+    - name: Restart Frigate if its config changed
+      docker_container:
+        name: frigate
+        state: started
+        restart: yes
+      when: frigate_config.changed and not frigate_container.changed
+
+    - name: Wait for the Frigate API to answer
+      uri:
+        url: "http://{{ ansible_host | default(inventory_hostname) }}:5000/api/version"
+        status_code: 200
+        return_content: yes
+      register: frigate_version
+      retries: 30
+      delay: 5
+      until: frigate_version.status is defined and frigate_version.status == 200
+
+    - name: Report the running version
+      debug:
+        msg: "Frigate {{ frigate_version.content }} is up, recording to {{ frigate_media_path }} ({{ frigate_media_source.stdout }})."

@@ -51,15 +51,19 @@ deliberately testing that the IaC still works).
    Expect it to take a while. **Data loss is expected and accepted** for
    `pxdbc1-3` and `kube-c-00` — there's no backup/restore step for either yet.
 
-   The same applies to `cameras`: it is *not* in the exclusion list, so a
+   The same applies to `frigate`: it is *not* in the exclusion list, so a
    soft DR destroys and rebuilds it, **and all recorded camera footage goes
    with it** (the 2TB disk is part of the VM). This is a deliberate choice,
    not an oversight — the footage is disposable and the alternative is
    carving the recording disk out of the VM's lifecycle for little benefit.
-   Ansible rebuilds ZoneMinder and go2rtc from scratch, so live view and
-   recording resume automatically once the rebuild finishes; only the
-   history is lost. The host-level `nvr-hdd` Proxmox storage pool survives,
-   since it was created outside terraform.
+   Ansible rebuilds Frigate and its bundled go2rtc from scratch, so live
+   view and recording resume automatically once the rebuild finishes; only
+   the history is lost. The host-level `nvr-hdd` Proxmox storage pool
+   survives, since it was created outside terraform.
+
+   Note this takes **live view** down too, not just recordings: Frigate
+   ships the only go2rtc in the fleet and livecam streams from it, so
+   livecam's tiles stay blank until the rebuild finishes.
 
 2. **Bootstrap the Percona/Galera cluster by hand.** Deliberately not
    automated (split-brain safety — see `configure_percona_wrapper.yml`'s own

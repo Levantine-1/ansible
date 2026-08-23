@@ -23,18 +23,23 @@ supported_containers:
     env_vars:
       # Two hostnames: the public one relays via the AWS bastion, the -lan
       # one resolves to this host directly so home traffic never leaves the
-      # LAN (no egress, and ZoneMinder's 33 sub-resources load locally).
+      # LAN -- no AWS egress, and recorded playback loads at LAN speed.
       # Both are covered by the *.levantine.io wildcard cert.
       VIRTUAL_HOST: livecam.levantine.io,livecam-lan.levantine.io
       PUBLIC_HOSTNAME: livecam.levantine.io
       LAN_HOSTNAME: livecam-lan.levantine.io
-      # Two backends, deliberately: ZoneMinder serves recorded playback
-      # (it hands over the stored mp4 and the browser decodes it -- no
-      # server-side decoding involved), while go2rtc serves live view by
-      # remuxing the camera stream. Live view is NOT ZM's job here; ZM's
-      # MJPEG live path decodes every frame and is what pinned the VM.
-      ZM_BACKEND_URL: http://cameras.internal.levantine.io
-      GO2RTC_URL: http://cameras.internal.levantine.io:1984
+      # Two backends on the same host, deliberately split by job. go2rtc
+      # serves live view by remuxing the camera stream; Frigate owns
+      # recording, retention, the scrub timeline and export. Both are on
+      # the frigate VM because Frigate ships go2rtc and drives its restream
+      # through it -- one go2rtc means one connection per camera serving
+      # both recording and live view, rather than each opening its own.
+      #
+      # ZoneMinder is gone: it recorded correctly but is event-oriented
+      # rather than timeline-oriented, with no continuous scrub bar and no
+      # live previews.
+      FRIGATE_URL: http://frigate.internal.levantine.io:5000
+      GO2RTC_URL: http://frigate.internal.levantine.io:1984
       PERMISSIONS_FILE: /app/config/permissions.yml
     # Just the Flask session secret now. The ZM_DB_* credentials that used
     # to be here are gone with the code that needed them: livecam resolved a

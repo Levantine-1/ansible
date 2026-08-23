@@ -1,0 +1,116 @@
+{{ ansible_managed | comment }}
+# Rendered from roles/applications/frigate/templates/config.yml.j2.
+# Contains RTSP credentials (from Vault) -- not world-readable, never
+# committed. Edit the template, not this file.
+
+mqtt:
+  enabled: false
+
+# Birdseye decodes every camera and re-encodes a combined mosaic to
+# mpeg1video. Measured on this hardware it was a large part of a 2-core VM
+# sitting at 80% CPU while doing nothing but recording. livecam owns live
+# view, so this is pure waste here.
+birdseye:
+  enabled: false
+
+# livecam authenticates every request before it reaches Frigate and passes
+# the username on, so Frigate's own login is off. Without proxy.header_map
+# Frigate would show its own login page and we would be back to the two
+# separate logins that made ZoneMinder annoying.
+auth:
+  enabled: false
+
+proxy:
+  header_map:
+    user: x-forwarded-user
+  # Requests arrive from livecam on dockerhost1, via the internal LAN.
+  trusted_proxies:
+    - 192.168.1.0/24
+    - 172.16.0.0/12
+
+# Frigate ships go2rtc and drives its restream through it, so this is the
+# single go2rtc for the whole camera stack: Frigate records from it AND
+# livecam serves live view from it (GO2RTC_URL points at :1984 on this
+# host). One connection per camera serves both, instead of each system
+# opening its own.
+#
+# These four variants per camera are exactly what livecam expects -- see
+# resolve_stream_name() and resolve_hls_source() in the livecam repo. Do
+# not rename them without changing that code.
+go2rtc:
+  streams:
+{% for cam in cameras %}
+    # --- {{ cam.name }} ---
+    # Main stream, 2960x1668 (~7 Mbps).
+    {{ cam.name }}: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ cam.ip }}:554/cam/realmonitor?channel={{ cam.channel | default(1) }}&subtype=0"
+
+    # Audio-stripped variant. #video=copy remuxes video through untouched
+    # and drops audio entirely -- verified against a live camera: a
+    # video-only track list, not merely a muted one, so a user without
+    # audio permission genuinely cannot receive audio.
+    #
+    # NOTE: these _noaudio chains are for livecam's MP4 path only. They are
+    # deliberately NOT used for HLS -- go2rtc's TS muxer loses the H.264
+    # parameter sets across an ffmpeg chain, so HLS segments built from
+    # them decode with continuous "non-existing PPS" errors. livecam's HLS
+    # path uses the direct streams below plus a track filter instead.
+    {{ cam.name }}_noaudio: "ffmpeg:{{ cam.name }}#video=copy"
+
+    # Substream, 704x480 (~0.6 Mbps, ~11x cheaper). Used for livecam's grid
+    # tiles, and as Frigate's own decode input below.
+    {{ cam.name }}_sub: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ cam.ip }}:554/cam/realmonitor?channel={{ cam.channel | default(1) }}&subtype=1"
+    {{ cam.name }}_sub_noaudio: "ffmpeg:{{ cam.name }}_sub#video=copy"
+{% endfor %}
+
+# Applied to every camera below.
+#
+# detect.enabled: false is a measured decision, not caution. Frigate derives
+# motion markers from the detect pipeline, so leaving it on was the only way
+# to get them -- but on this FX-8300 the detector process alone measured
+# ~177% CPU for a SINGLE camera, and dropping detect fps from 5 to 2 changed
+# nothing (194% vs 196%), because the CPU detector saturates regardless of
+# frame rate. `objects.track: []` does not prevent it either; the TFLite
+# XNNPACK delegate still starts and runs. Two cameras would need roughly
+# four cores to mark guinea pigs moving. So: no motion markers.
+#
+# The detect *input* still matters even with detection off. Frigate decodes
+# whichever input carries the detect role to build the timeline previews and
+# thumbnails, and with no detect role it falls back to decoding the 2K
+# record stream -- which measured 72-90% CPU. Pointing the detect role at
+# the 704x480 substream drops the whole thing to 22-27%, and previews are
+# still generated.
+cameras:
+{% for cam in cameras %}
+  {{ cam.name }}:
+    enabled: true
+    ffmpeg:
+      inputs:
+        # Decode input: the cheap substream, via go2rtc's restream so the
+        # camera is still only connected once.
+        - path: rtsp://127.0.0.1:8554/{{ cam.name }}_sub
+          input_args: preset-rtsp-restream
+          roles: [detect]
+        # Recording input: full quality, copied to disk without re-encoding.
+        - path: rtsp://127.0.0.1:8554/{{ cam.name }}
+          input_args: preset-rtsp-restream
+          roles: [record]
+      output_args:
+        # The default re-encodes audio to AAC; these cameras already send
+        # AAC, so that is wasted CPU for an identical result.
+        record: preset-record-generic-audio-copy
+    detect:
+      enabled: false
+      width: 704
+      height: 480
+    birdseye:
+      enabled: false
+    record:
+      enabled: true
+      retain:
+        # ~134GB/day for both cameras measured against 1.7TB usable gives
+        # roughly 12-13 days. Set just inside that so Frigate ages footage
+        # out on a schedule rather than relying on its emergency cleanup
+        # (which only kicks in with under an hour of space left).
+        days: {{ frigate_retain_days }}
+        mode: all
+{% endfor %}

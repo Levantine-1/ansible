@@ -11,10 +11,10 @@
 # added by editing this file and re-running the playbook, which is the right
 # trade for a handful of family members.
 #
-# These are livecam's own accounts, deliberately separate from ZoneMinder's.
-# Everyday live viewing never touches ZM's UI; ZM prompts for its own login
-# when someone opens "recordings & settings", and keeps enforcing its own
-# native per-user monitor permissions there. So each person has two logins.
+# livecam is the only login now. Frigate replaced ZoneMinder for recording
+# and playback, and Frigate's own auth is disabled in favour of proxy
+# authentication -- livecam authenticates, then passes the username on. One
+# account per person, not two.
 #
 # Generate a hash without ever committing the password:
 #
@@ -26,32 +26,31 @@
 # machine generating it has to be verifiable by whatever version the
 # container image happens to pull.
 #
-# What livecam adds over ZM's native permissions is the two things ZM has no
-# concept of: a time-of-day window, and audio on/off per user.
+# livecam enforces three things per user: which cameras, whether audio is
+# permitted, and a time-of-day window.
 #
 # Camera names must match the go2rtc stream names, which come from the
-# `cameras` list in group_vars/Cameras.
-
-# Maps ZoneMinder's numeric Monitor IDs to camera names, used for gating
-# recorded playback (ZM refers to monitors by ID, not name). Keys starting
-# with `_` are metadata and are never treated as users.
-_monitor_id_to_name:
-  1: guinea-pig-cage-1
-  2: guinea-pig-cage-2
+# `cameras` list in group_vars/Frigate.
 
 # Password in Vault at kv/data/livecam/users, key `admin` -- stored there so
 # it's recoverable, since only the hash exists here and hashes don't reverse.
+# `recordings: true` grants Frigate -- the timeline, scrubbing, export and
+# every recorded clip. It is a separate grant from live viewing because
+# Frigate has no per-camera or per-audio gating that matches the model
+# below: anyone who reaches it sees every camera and hears recorded audio.
+# So it stays off by default and goes only to accounts that should have
+# unrestricted access to the archive.
 admin:
   password_hash: "pbkdf2:sha256:600000$2EbyTI7YeysEDk9w$21fca30809a1a306259327b3aa0174d1a38219d37691c0df9a736d63a846c663"
   cameras:
     - guinea-pig-cage-1
     - guinea-pig-cage-2
   audio: true
+  recordings: true
 
 # Shared account for the rest of the household. livecam only -- there is no
-# matching ZoneMinder user, so "recordings & settings" will simply prompt
-# for a ZM login nobody has, which is the intended boundary: live viewing
-# for family, recordings and admin for the admin account.
+# recordings grant (see below), which is the intended boundary: live
+# viewing for family, the recorded archive for the admin account.
 #
 # audio: false is enforced server-side by which go2rtc stream gets
 # requested (the _noaudio variants have the track genuinely removed, not
@@ -68,6 +67,9 @@ family:
     - guinea-pig-cage-1
     - guinea-pig-cage-2
   audio: false
+  # No recordings access: this account is deliberately audio-free, and
+  # Frigate would hand over recorded audio for both cameras.
+  recordings: false
 
 # Template for a restricted family viewer -- one camera, no audio, daytime
 # only. Copy, rename, and give it its own hash. The time window is
@@ -79,6 +81,7 @@ family:
 #   cameras:
 #     - guinea-pig-cage-1
 #   audio: false
+#   recordings: false
 #   time_window:
 #     start: "08:00:00"
 #     end: "20:00:00"
