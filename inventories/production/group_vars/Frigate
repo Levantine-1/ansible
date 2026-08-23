@@ -8,10 +8,17 @@
 # roles/applications/livecam/files/permissions.yml, which is what decides
 # who may see which camera. Renaming one here without the others silently
 # removes a camera from everyone's permissions.
+# `name` is the machine identity: it becomes the go2rtc stream name, the
+# Frigate camera key, and therefore part of the on-disk recording path
+# (/media/frigate/recordings/<date>/<hour>/<name>/). Keep it a slug.
+# `friendly_name` is what Frigate displays; livecam derives the same label
+# by title-casing the slug, so there is no second list to drift.
 cameras:
-    - name: guinea-pig-cage-1
+    - name: the-boiz
+      friendly_name: "The Boiz"
       ip: 10.69.69.107
       channel: 1
-    - name: guinea-pig-cage-2
+    - name: the-gurlz
+      friendly_name: "The Gurlz"
       ip: 10.69.69.143
       channel: 1

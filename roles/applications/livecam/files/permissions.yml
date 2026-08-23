@@ -26,8 +26,22 @@
 # machine generating it has to be verifiable by whatever version the
 # container image happens to pull.
 #
-# livecam enforces three things per user: which cameras, whether audio is
+# livecam enforces three things per user: which cameras, where audio is
 # permitted, and a time-of-day window.
+#
+# `audio` takes either form:
+#
+#   audio: true                  every camera this user may see
+#   audio: false                 none
+#   audio: [the-boiz, baby-cam]  only those
+#
+# The list is intersected with `cameras`, so naming a camera under `audio`
+# that the user cannot see grants nothing -- audio can never become a way
+# to reach a camera the allow-list withheld.
+#
+# Camera names here are the machine slugs from group_vars/Frigate, not the
+# display names. They must match exactly: a name that no longer matches a
+# go2rtc stream silently removes that camera from everyone's access.
 #
 # Camera names must match the go2rtc stream names, which come from the
 # `cameras` list in group_vars/Frigate.
@@ -41,10 +55,10 @@
 # So it stays off by default and goes only to accounts that should have
 # unrestricted access to the archive.
 admin:
-  password_hash: "pbkdf2:sha256:600000$2EbyTI7YeysEDk9w$21fca30809a1a306259327b3aa0174d1a38219d37691c0df9a736d63a846c663"
+  password_hash: "pbkdf2:sha256:600000$cPw3P8h1Lkq5HyZ7$ac15a26d8b989fbb4171e69f9af1ee0f6de44ba8ca2530e06ab8094f856eb1ed"
   cameras:
-    - guinea-pig-cage-1
-    - guinea-pig-cage-2
+    - the-boiz
+    - the-gurlz
   audio: true
   recordings: true
 
@@ -64,8 +78,8 @@ admin:
 family:
   password_hash: "pbkdf2:sha256:600000$CioPzqEyAPnpLBk4$c9363e50a2d103561aa61802b66f4ec08a210c99a17115028770b79c42fe8642"
   cameras:
-    - guinea-pig-cage-1
-    - guinea-pig-cage-2
+    - the-boiz
+    - the-gurlz
   audio: false
   # No recordings access: this account is deliberately audio-free, and
   # Frigate would hand over recorded audio for both cameras.
@@ -79,7 +93,7 @@ family:
 # guest:
 #   password_hash: "pbkdf2:sha256:600000$..."
 #   cameras:
-#     - guinea-pig-cage-1
+#     - the-boiz
 #   audio: false
 #   recordings: false
 #   time_window:

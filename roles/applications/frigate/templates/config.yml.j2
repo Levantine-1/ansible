@@ -91,6 +91,9 @@ cameras:
 {% for cam in cameras %}
   {{ cam.name }}:
     enabled: true
+{% if cam.friendly_name is defined %}
+    friendly_name: "{{ cam.friendly_name }}"
+{% endif %}
     ffmpeg:
       inputs:
         # Decode input: the cheap substream, via go2rtc's restream so the

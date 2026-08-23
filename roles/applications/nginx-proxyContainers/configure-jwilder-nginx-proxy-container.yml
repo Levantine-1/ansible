@@ -27,9 +27,9 @@
     # TLS on dockerhost1 exists so the LAN can serve HTTPS directly. Without
     # it only the AWS bastion terminated TLS, so any https:// request from
     # home resolved out to Oregon and was relayed back through WireGuard --
-    # video going up the uplink and back down, billed as egress, and the
-    # reason ZoneMinder felt slow (a console page pulls 33 sub-resources,
-    # each round-tripping to AWS).
+    # video going up the uplink and back down, billed as egress. It was also
+    # why the recordings UI felt slow back when ZoneMinder served it: a
+    # console page pulled 33 sub-resources, each round-tripping to AWS.
     #
     # Named after the bare domain on purpose: jwilder matches a wildcard
     # cert by that filename, so levantine.io.crt covers every *.levantine.io

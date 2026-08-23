@@ -25,13 +25,33 @@ groups:
         annotations:
           summary: "{{ $labels.instance }} memory usage above 90% for 10+ minutes"
 
+      # /media/frigate is excluded deliberately: it is the NVR recording disk,
+      # and Frigate is configured to fill it and age footage out -- running
+      # near-full is the intended steady state, not a fault. At 11-day
+      # retention it projects to ~80% used, so this rule sits only ten points
+      # away from firing forever. An alert that is always on is an alert
+      # nobody reads; see the dedicated rule below for the case that actually
+      # means something.
       - alert: DiskSpaceLow
-        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 10
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay", mountpoint!="/media/frigate"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay", mountpoint!="/media/frigate"}) * 100 < 10
         for: 15m
         labels:
           severity: warning
         annotations:
           summary: "{{ $labels.instance }} filesystem {{ $labels.mountpoint }} below 10% free space"
+
+      # The NVR disk gets its own, much lower threshold. Frigate's own
+      # emergency cleanup keeps roughly an hour of space free, so crossing
+      # below 2% means retention has actually stopped working rather than
+      # that the disk is doing its job. Worth alerting on precisely because
+      # silent retention failure is invisible otherwise.
+      - alert: NVRRetentionFailing
+        expr: (node_filesystem_avail_bytes{mountpoint="/media/frigate"} / node_filesystem_size_bytes{mountpoint="/media/frigate"}) * 100 < 2
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} NVR disk below 2% free -- Frigate retention is not keeping up"
 
       - alert: ProbeFailed
         expr: probe_success == 0
