@@ -632,8 +632,8 @@
   </widgets>
   <revision>
     <username>root@192.168.1.50</username>
-    <description>/api/unbound/settings/addHostOverride made changes</description>
-    <time>1787511729.15</time>
+    <description>/api/unbound/settings/setHostOverride/43f8b416-3a01-47ec-a132-74599d8962da made changes</description>
+    <time>1787516984.50</time>
   </revision>
   <OPNsense>
     <wireguard>
@@ -1111,7 +1111,7 @@
       <queues/>
       <rules/>
     </TrafficShaper>
-    <unboundplus version="1.0.15" persisted_at="1787511729.15" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1787516984.50" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -1451,10 +1451,10 @@
           <mxprio/>
           <mx/>
           <ttl/>
-          <server>192.168.1.50</server>
+          <server>10.69.69.133</server>
           <txtdata/>
           <addptr>1</addptr>
-          <description>ops dashboard, LAN</description>
+          <description>ops dashboard, home LAN</description>
         </host>
       </hosts>
       <aliases/>
