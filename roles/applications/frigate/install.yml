@@ -40,18 +40,57 @@
       no_log: true
 
     # --- footage disk -------------------------------------------------
+    # Addressed by-id, NOT /dev/sdb. On this VM the kernel enumerates the
+    # 1.9TB footage disk as sda and the 32GB OS disk as sdb -- the reverse
+    # of the old cameras VM, where the same role hardcoded /dev/sdb. That
+    # would have run mkfs over the root disk: /dev/sdb has no filesystem on
+    # the raw device (it is partitioned), so the "already formatted?" check
+    # would have said no and the format would have proceeded.
+    #
+    # by-id maps straight to terraform's `interface = "scsi1"`, so it says
+    # what is actually meant -- the second disk this VM was declared with --
+    # rather than whatever order the kernel happened to probe in.
+    - name: Resolve the footage disk
+      stat:
+        path: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
+        follow: yes
+      register: footage_disk
+
+    - name: Fail if the footage disk is missing
+      fail:
+        msg: >-
+          scsi1 not found. Frigate will not be installed rather than risk
+          recording to the OS disk.
+      when: not footage_disk.stat.exists
+
+    - name: Identify the root disk, so it can never be the format target
+      shell: |
+        set -o pipefail
+        lsblk -no PKNAME "$(findmnt -no SOURCE /)"
+      args:
+        executable: /bin/bash
+      register: root_disk
+      changed_when: false
+
+    - name: Refuse to touch the disk holding the root filesystem
+      # The guard that makes the by-id lookup above safe rather than merely
+      # correct-looking: if these ever resolve to the same device, stop.
+      assert:
+        that: footage_disk.stat.path | basename != root_disk.stdout | trim
+        fail_msg: >-
+          The resolved footage disk ({{ footage_disk.stat.path | basename }})
+          is the root disk ({{ root_disk.stdout | trim }}). Refusing to format.
+
     - name: Check if the footage disk is already formatted
-      command: blkid -o value -s TYPE /dev/sdb
+      command: "blkid -o value -s TYPE {{ footage_disk.stat.path }}"
       register: nvr_disk_blkid
       changed_when: false
       failed_when: false
 
-    # /dev/sdb, not resolved by-id: matches the convention the rest of this
-    # repo's disk handling already uses.
     - name: Format the footage disk (scsi1, ext4)
       filesystem:
         fstype: ext4
-        dev: /dev/sdb
+        dev: "{{ footage_disk.stat.path }}"
       when: nvr_disk_blkid.stdout == ""
 
     # Mounted at Frigate's own default media path rather than somewhere
@@ -68,7 +107,9 @@
     - name: Mount the footage disk at Frigate's media path
       mount:
         path: "{{ frigate_media_path }}"
-        src: /dev/sdb
+        # by-id in fstab too, so a reboot that reorders sda/sdb cannot
+        # silently mount the wrong device (or nothing) here.
+        src: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
         fstype: ext4
         state: mounted
 
@@ -83,7 +124,7 @@
         executable: /bin/bash
       register: frigate_media_source
       changed_when: false
-      failed_when: "'/dev/sdb' not in frigate_media_source.stdout"
+      failed_when: footage_disk.stat.path | basename not in frigate_media_source.stdout
 
     # --- docker -------------------------------------------------------
     - name: Install Docker prerequisites
