@@ -633,7 +633,7 @@
   <revision>
     <username>root@192.168.1.50</username>
     <description>/api/unbound/settings/addHostOverride made changes</description>
-    <time>1787503492.46</time>
+    <time>1787511729.15</time>
   </revision>
   <OPNsense>
     <wireguard>
@@ -1111,7 +1111,7 @@
       <queues/>
       <rules/>
     </TrafficShaper>
-    <unboundplus version="1.0.15" persisted_at="1787503492.46" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1787511729.15" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -1442,6 +1442,19 @@
           <txtdata/>
           <addptr>1</addptr>
           <description>incident-agent VM (automated incident triage)</description>
+        </host>
+        <host uuid="43f8b416-3a01-47ec-a132-74599d8962da">
+          <enabled>1</enabled>
+          <hostname>service</hostname>
+          <domain>levantine.io</domain>
+          <rr>A</rr>
+          <mxprio/>
+          <mx/>
+          <ttl/>
+          <server>192.168.1.50</server>
+          <txtdata/>
+          <addptr>1</addptr>
+          <description>ops dashboard, LAN</description>
         </host>
       </hosts>
       <aliases/>
