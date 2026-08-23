@@ -9,6 +9,12 @@ apiVersion: 1
 deleteDatasources:
   - name: Prometheus
     orgId: 1
+  # Same reconciliation issue as Prometheus above, now that the logs
+  # dashboard (dashboards/logs.json) needs to reference this datasource by a
+  # stable uid rather than whatever Grafana auto-generated on first
+  # provisioning.
+  - name: Loki
+    orgId: 1
 
 datasources:
   - name: Prometheus
@@ -25,6 +31,7 @@ datasources:
     editable: false
 
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://localhost:3100

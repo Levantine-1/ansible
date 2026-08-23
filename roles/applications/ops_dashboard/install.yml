@@ -1,22 +1,39 @@
 ---
-# A single landing page on `service` (port 80) linking to every ops app
+# A single landing page on `service` (port 80/443) linking to every ops app
 # running there, so nobody has to remember port numbers. Grafana/
-# Prometheus/Alertmanager get true subpath reverse-proxying (they
+# Prometheus/Alertmanager/chat get true subpath reverse-proxying (they
 # natively support it); Semaphore/Zammad/OPNsense get direct-port/IP
 # links on the same page instead, since their frontends don't support
 # being served from a subpath cleanly.
+#
+# Also runs a small chat app (native Flask process, files/chat_app.py)
+# talking to the fleet's Ollama instance on `incident-agent` -- for ad-hoc
+# use, unrelated to the incident-triage pipeline that also uses that model.
 - name: Deploy ops dashboard
   hosts: service
   become: yes
 
   vars:
     ops_dashboard_title: "Homelab Ops"
+    ops_dashboard_chat_port: 5055
+    ops_dashboard_ollama_url: "http://incident-agent.internal.levantine.io:11434"
+    ops_dashboard_ollama_model: "phi4-mini"
 
   tasks:
     - name: Install nginx
       package:
         name: nginx
         state: present
+
+    - name: Install Python dependencies for the chat app
+      # Just Flask -- everything else (the Ollama HTTP call) is stdlib
+      # urllib, matching zammad_relay.py's dependency-light style. No venv,
+      # same reasoning as opnsense's backup_opnsense_config.py: one small
+      # dependency doesn't need the isolation overhead.
+      pip:
+        name: flask
+        executable: pip3
+        extra_args: --break-system-packages
 
     - name: Remove stock default site
       file:
@@ -40,6 +57,27 @@
         group: www-data
         mode: "0644"
 
+    - name: Ensure the nginx snippets directory exists
+      file:
+        path: /etc/nginx/snippets
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy the shared proxy-locations snippet
+      # Not templated -- every value in this file is a hardcoded internal
+      # address, none of it varies per environment, so a plain copy keeps it
+      # simple. Included by both the HTTP and HTTPS server blocks in
+      # ops-dashboard.conf.j2, so it exists exactly once.
+      copy:
+        src: files/ops-dashboard-locations.conf
+        dest: /etc/nginx/snippets/ops-dashboard-locations.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload nginx
+
     - name: Deploy ops-dashboard nginx site config
       template:
         src: templates/ops-dashboard.conf.j2
@@ -54,6 +92,66 @@
         name: nginx
         enabled: yes
         state: started
+
+    - name: Deploy chat app
+      copy:
+        src: files/chat_app.py
+        dest: /usr/local/bin/ops_dashboard_chat.py
+        owner: root
+        group: root
+        mode: "0755"
+      register: chat_app_script
+
+    - name: Deploy chat app environment file
+      copy:
+        dest: /etc/ops-dashboard-chat.env
+        content: |
+          OLLAMA_URL={{ ops_dashboard_ollama_url }}
+          OLLAMA_MODEL={{ ops_dashboard_ollama_model }}
+        owner: root
+        group: root
+        mode: "0644"
+      register: chat_app_env
+
+    - name: Deploy chat app systemd unit
+      copy:
+        dest: /etc/systemd/system/ops-dashboard-chat.service
+        content: |
+          [Unit]
+          Description=Ops dashboard chat UI (talks to Ollama on incident-agent)
+          After=network.target
+
+          [Service]
+          Environment=PYTHONUNBUFFERED=1
+          EnvironmentFile=/etc/ops-dashboard-chat.env
+          ExecStart=/usr/bin/python3 /usr/local/bin/ops_dashboard_chat.py
+          Restart=on-failure
+          RestartSec=5
+          User=www-data
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: chat_app_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: chat_app_unit.changed
+
+    - name: Enable and start the chat app
+      systemd:
+        name: ops-dashboard-chat
+        enabled: yes
+        state: started
+
+    - name: Restart chat app if its script or config changed
+      systemd:
+        name: ops-dashboard-chat
+        state: restarted
+      when: chat_app_script.changed or chat_app_env.changed or chat_app_unit.changed
 
   handlers:
     - name: reload nginx

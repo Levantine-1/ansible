@@ -61,6 +61,7 @@
       loop:
         - fleet-overview.json
         - host-detail.json
+        - logs.json
       register: dashboard_files
 
     - name: Deploy alertmanager.yml (templated to point at zammad-relay)

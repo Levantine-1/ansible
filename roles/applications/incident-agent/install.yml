@@ -106,11 +106,49 @@
       shell: curl -fsSL https://ollama.com/install.sh | sh
       when: not ollama_bin.stat.exists
 
+    - name: Create the Ollama systemd override directory
+      file:
+        path: /etc/systemd/system/ollama.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Bind Ollama to the LAN interface, not just localhost
+      # Ollama's packaged unit binds 127.0.0.1 by default. That was fine when
+      # the only caller was this same host's own triage/escalate code, but
+      # the ops-dashboard chat feature (roles/applications/ops_dashboard)
+      # calls this API from `service` over the LAN -- confirmed live as a
+      # bare connection-refused until this override existed. 0.0.0.0 rather
+      # than pinning to 192.168.1.51 specifically: this is a homelab LAN with
+      # no other untrusted hosts on it, and pinning to one address would
+      # silently break again the next time this VM's IP changes.
+      copy:
+        dest: /etc/systemd/system/ollama.service.d/override.conf
+        content: |
+          [Service]
+          Environment="OLLAMA_HOST=0.0.0.0:11434"
+        owner: root
+        group: root
+        mode: "0644"
+      register: ollama_bind_override
+
+    - name: Reload systemd daemon for the Ollama override
+      systemd:
+        daemon_reload: yes
+      when: ollama_bind_override.changed
+
     - name: Ensure Ollama service is enabled and running
       systemd:
         name: ollama
         enabled: yes
         state: started
+
+    - name: Restart Ollama if its bind address changed
+      systemd:
+        name: ollama
+        state: restarted
+      when: ollama_bind_override.changed
 
     - name: Wait for Ollama to accept connections
       wait_for:
