@@ -215,6 +215,10 @@ def grace_seconds():
     return int((policy().get("grace") or {}).get("seconds", 300))
 
 
+def unreachable_retry_config():
+    return (policy().get("unreachable_retry") or {"interval_seconds": 900, "max_retries": 6})
+
+
 def estimate_cost(usage):
     """USD estimate for one API response's token usage."""
     if not usage:

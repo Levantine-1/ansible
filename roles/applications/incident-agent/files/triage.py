@@ -139,6 +139,22 @@ def _host_down_evidence(bundle_text):
     return any(s in lowered for s in signals)
 
 
+def _hypervisor_unreachable(steps):
+    """Whether every hypervisor-directed diagnostic step failed -- the
+    affected host's physical server isn't answering SSH at all, not just the
+    guest VM.
+
+    Distinct from _host_down_evidence: that one looks for evidence the GUEST
+    is down (used to gate host-level start/stop/restart recommendations, still
+    something a local `qm start` can fix); this one is about the underlying
+    HARDWARE being unreachable, used to gate whether escalating to Claude is
+    even worth attempting at all -- Claude's SSH-based tools would hit the
+    exact same wall reaching the same hypervisor over the same network.
+    """
+    hypervisor_steps = [s for s in steps if s.get("source") == "hypervisor"]
+    return bool(hypervisor_steps) and all(not s["ok"] for s in hypervisor_steps)
+
+
 def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
     """Ask the local model for an action recommendation and, if it produces a
     valid one, attempt it -- subject to the same flap guard every other
@@ -302,6 +318,86 @@ def _escalate(incident, bundle_text, reason, extra_note=None):
         store.finish(incident["id"], "escalated_unresolved", result.get("rca", "")[:2000], escalated=True)
 
 
+def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
+    """The routine-vs-disaster gate (2026-08-24), used wherever an
+    unconditional _escalate() call used to sit for the critical-host,
+    no-rule, and rule-failed paths.
+
+    Falls straight through to a normal _escalate(), unchanged, if the
+    affected host's hypervisor answered fine -- this function only adds a
+    gate for the unreachable case, never narrows the ordinary path.
+
+    When the hypervisor IS unreachable, that is always treated as isolated
+    and worth retrying via store.requeue_for_retry() -- deterministically,
+    not put to the model. This is safe, not just convenient: every call site
+    that reaches this function does so from a branch of handle() that runs
+    AFTER the is_storm branch has already returned, so by construction fewer
+    than storm_cfg['min_hosts'] hosts are alerting whenever this function is
+    reached. A single unreachable hypervisor in that context cannot be a
+    multi-host event; there is nothing for a "widespread" verdict to
+    correctly mean here. Confirmed live (2026-08-24) this was not just a
+    theoretical simplification: asked anyway, the model classified this
+    exact single-host scenario as "widespread", reasoning "hypervisor
+    unresponsive -> potential hardware issue -> widespread" -- conflating
+    the CAUSE looking hardware-related with the SCOPE being broad, despite
+    the prompt explicitly telling it to default to isolated and explicitly
+    stating only 1 host was affected. Removing the question here removes the
+    failure mode; the model still makes this call where it is genuinely
+    ambiguous, in handle()'s storm-parent branch (multiple hosts really are
+    alerting together there, so "shared cause or coincidence" is a real
+    question worth asking).
+
+    The disaster case (incident-agent has no external connectivity at all)
+    is checked once, earlier in handle(), before this function is ever
+    reached -- by the time control gets here, connectivity is already known
+    to be fine.
+    """
+    host = incident.get("host")
+    ticket_id = incident.get("ticket_id")
+
+    if not _hypervisor_unreachable(steps):
+        _escalate(incident, bundle, reason, extra_note=extra_note)
+        return
+
+    retry_cfg = config.unreachable_retry_config()
+    was_first_attempt = incident.get("retry_count", 0) == 0
+    requeued = store.requeue_for_retry(incident["id"], retry_cfg["interval_seconds"], retry_cfg["max_retries"])
+
+    if requeued:
+        if was_first_attempt:
+            # Only on the first detection -- retry_count was 0 before this
+            # call incremented it, so a ticket note on every subsequent retry
+            # (every ~15 min, potentially for hours) would just be spam.
+            _note(ticket_id, "Hypervisor unreachable -- will keep checking", (
+                f"The hypervisor for {host} is not responding to any diagnostic check. Treating "
+                f"this as an isolated problem, not a wider outage (incident-agent's own "
+                f"connectivity is fine, and nothing else currently points at a shared cause), "
+                f"rather than escalating immediately.\n\n"
+                f"Will re-check every {retry_cfg['interval_seconds'] // 60} minutes, up to "
+                f"{retry_cfg['max_retries']} times "
+                f"(~{retry_cfg['interval_seconds'] * retry_cfg['max_retries'] // 60} minutes total), "
+                f"and either resolve normally once it answers again or escalate if it's still "
+                f"unreachable after that."
+            ))
+        _tag(ticket_id, "auto-retry")
+        log(
+            f"incident {incident['id']}: hypervisor for {host} unreachable, requeued for retry "
+            f"({'first attempt' if was_first_attempt else 'retry ' + str(incident.get('retry_count', 0) + 1)})"
+        )
+        return
+
+    total_minutes = retry_cfg["max_retries"] * retry_cfg["interval_seconds"] // 60
+    _escalate(
+        incident, bundle,
+        reason=(
+            f"{reason} The hypervisor for {host} has been unreachable across "
+            f"{retry_cfg['max_retries']} retries over roughly {total_minutes} minutes -- no longer "
+            f"treating this as transient."
+        ),
+        extra_note=extra_note,
+    )
+
+
 def handle(incident):
     ticket_id = incident.get("ticket_id")
     alertname = incident.get("alertname")
@@ -402,11 +498,59 @@ def handle(incident):
     bundle = collect.format_bundle(incident, steps, notes)
     _note(ticket_id, f"Automated diagnostics -- {alertname}", bundle)
 
+    # --- Disaster check: deterministic override -------------------------
+    # Only checked when there's already a sign of real trouble -- the
+    # affected host's hypervisor not answering, or a storm -- since this is a
+    # real network call and the vast majority of incidents (a crashed
+    # container, a stuck service) have nothing to do with connectivity.
+    # Runs once, ahead of every remaining branch (critical-host, storm-parent,
+    # no-rule, rule-failed): if incident-agent itself has no path to the
+    # internet, nothing downstream should even be attempted, and this is the
+    # one signal unambiguous enough not to need the model's judgment --
+    # getting it wrong (escalating to Claude during a real site-wide outage)
+    # is exactly the waste this exists to prevent.
+    hypervisor_down = _hypervisor_unreachable(steps)
+    if (hypervisor_down or is_storm) and not observability.external_connectivity_ok():
+        _note(ticket_id, "Likely a network or power outage, not a single-host problem", (
+            "incident-agent itself has no external connectivity right now. Claude's tools would "
+            "reach the fleet over this same network and hit the same wall, so escalating would "
+            "only spend money confirming that. Left for a human -- this needs physical "
+            "intervention, not more automation. The ticket will close automatically once the "
+            "underlying alert clears on its own."
+        ))
+        _tag(ticket_id, "needs-human")
+        _tag(ticket_id, "physical-intervention")
+        store.finish(incident["id"], "unfixable_remotely", "no external connectivity")
+        log(f"incident {incident['id']}: no external connectivity -- treating as a disaster, not escalating")
+        return
+
     # --- Storm parent: investigate the whole event once -----------------
     if is_storm:
         summary = "\n".join(
             f"- {p.get('alertname')} on {p.get('host')} (ticket #{p.get('ticket_number')})" for p in peers
         )
+        storm_scope_context = (
+            f"Evidence for how widespread this looks: {len(hosts_alerting)} distinct hosts alerted "
+            f"within {window}s of each other (the storm-detection threshold). incident-agent's own "
+            f"external connectivity is confirmed fine (checked separately, this call would not have "
+            f"happened otherwise). This many hosts failing together usually IS a shared cause (a "
+            f"hypervisor, the network, DNS) rather than coincidence -- classify scope as widespread "
+            f"unless the evidence gives a specific reason to think these are actually unrelated."
+        )
+        storm_analysis = llm.analyse(bundle, action_note=storm_scope_context)
+        if storm_analysis and storm_analysis.get("scope") == "widespread":
+            _note(ticket_id, "Local model: this is a widespread event, not worth escalating per-incident", (
+                f"{llm.format_analysis(storm_analysis) or '(no detail)'}\n\n"
+                f"Not escalating to Claude -- {len(hosts_alerting)} hosts down together usually "
+                f"means a shared cause Claude's SSH-based tools would hit the same way. Left for a "
+                f"human; the ticket closes automatically once the underlying alert clears."
+            ))
+            _tag(ticket_id, "needs-human")
+            _tag(ticket_id, "physical-intervention")
+            store.finish(incident["id"], "unfixable_remotely", "storm classified as widespread")
+            log(f"incident {incident['id']}: storm classified widespread, not escalating")
+            return
+
         _escalate(
             incident,
             bundle + f"\n\n--- Other alerts in this event ---\n{summary}\n",
@@ -427,7 +571,7 @@ def handle(incident):
         return
 
     if pol["critical"] or not pol["known"]:
-        _escalate(incident, bundle, reason=(
+        _escalate_or_retry(incident, bundle, steps, reason=(
             f"'{host}' is protected from automated action. {pol.get('reason') or ''} "
             f"Investigate and recommend; do not restart it."
         ))
@@ -435,6 +579,18 @@ def handle(incident):
 
     rule = config.match_restart_rule(alertname, host, service)
     if not rule:
+        if hypervisor_down:
+            # No point asking the model for an action -- nothing can reach
+            # this hypervisor to execute anything anyway. Straight to the
+            # routine-vs-disaster gate instead of burning a CPU-bound
+            # inference call on a recommendation that could only ever fail.
+            _escalate_or_retry(incident, bundle, steps, reason=(
+                f"No restart_allowlist.yml rule covers {alertname} on {host}"
+                + (f" (service {service})" if service else "")
+                + ", and the hypervisor is unreachable so no action could be attempted anyway."
+            ))
+            return
+
         # No allow-list entry. This is where the local model earns its keep --
         # as of 2026-08-24, it gets a real vote here, not just an opinion:
         # given the bundle's evidence, it can recommend starting/stopping/
@@ -464,7 +620,7 @@ def handle(incident):
 
         extra_parts = [p for p in (note, llm.format_analysis(analysis) if analysis else None) if p]
         extra = "\n\n".join(extra_parts) or None
-        _escalate(incident, bundle, reason=(
+        _escalate_or_retry(incident, bundle, steps, reason=(
             f"No restart_allowlist.yml rule covers {alertname} on {host}"
             + (f" (service {service})" if service else "")
             + ", and the local model did not recommend an action it could safely take."
@@ -475,7 +631,7 @@ def handle(incident):
     guard = config.flap_guard()
     recent = store.recent_action_count(alertname, host, guard.get("window_seconds", 3600))
     if recent >= guard.get("max_actions", 2):
-        _escalate(incident, bundle, reason=(
+        _escalate_or_retry(incident, bundle, steps, reason=(
             f"Flap guard tripped: {alertname} on {host} has already been auto-actioned {recent} times "
             f"in the last {guard.get('window_seconds', 3600) // 60} minutes. Restarting is clearly not "
             f"fixing the underlying problem -- find the real cause rather than bouncing it again."
@@ -512,6 +668,20 @@ def handle(incident):
         # is a different fix than the rule assumed. Reuses this rule's own
         # verify: block, since "is the endpoint healthy" is the right check
         # regardless of which action got it there.
+        action_failure_note = f"Attempted {action} `{target or host}` on `{host}` -- failed:\n\n```\n{output[:2000]}\n```"
+
+        if hypervisor_down:
+            # Already known unreachable from the pre-diagnostics check --
+            # consistent with why the action just failed. No point asking the
+            # model for an alternative either; nothing can execute against
+            # this hypervisor right now regardless of what it recommends.
+            _escalate_or_retry(incident, bundle, steps, reason=(
+                f"Automated {action} of '{target or host}' on {host} FAILED, and the hypervisor "
+                f"itself is unreachable -- consistent with the failure, and no action can succeed "
+                f"until it answers again."
+            ), extra_note=action_failure_note)
+            return
+
         failure_context = (
             f"An automated action was already attempted and failed.\n"
             f"Attempted: {action} on target '{target or host}' (host {host}).\n"
@@ -527,14 +697,14 @@ def handle(incident):
         if resolved:
             return
 
-        extra = f"Attempted {action} `{target or host}` on `{host}` -- failed:\n\n```\n{output[:2000]}\n```"
+        extra = action_failure_note
         if note:
             extra += f"\n\n{note}"
         elif analysis:
             extra += f"\n\n{llm.format_analysis(analysis) or ''}"
 
-        _escalate(
-            incident, bundle,
+        _escalate_or_retry(
+            incident, bundle, steps,
             reason=(
                 f"Automated {action} of '{target or host}' on {host} FAILED"
                 + (", and the local model's alternative also failed." if note else

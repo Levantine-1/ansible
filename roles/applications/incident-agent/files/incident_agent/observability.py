@@ -133,6 +133,37 @@ def _parse_duration(text):
         return 1800
 
 
+def external_connectivity_ok(timeout=5):
+    """Can this host (incident-agent) reach the outside internet at all?
+
+    Distinguishes "this one host/service is unreachable" from "the network,
+    gateway, or power itself is out" -- used as the deterministic signal for
+    whether an escalation is worth attempting at all. If this comes back
+    False, nothing else being unreachable in a bundle is informative:
+    Claude's own tools would reach the fleet over this exact same network
+    path and hit the same wall, so escalating anyway is pure waste.
+
+    Unlike http_probe(), a non-2xx response still counts as connectivity
+    working -- getting ANY HTTP response, even an error page, proves the
+    network path to the internet is intact. Only a genuine connection-level
+    failure (timeout, DNS failure, connection refused, network unreachable)
+    means the path itself is down. Tries two anchors before giving up, in
+    case one happens to be blocked or rate-limiting rather than the network
+    actually being out.
+    """
+    for url in ("https://1.1.1.1", "https://8.8.8.8"):
+        try:
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("User-Agent", "incident-agent/1.0")
+            urllib.request.urlopen(req, timeout=timeout)
+            return True
+        except urllib.error.HTTPError:
+            return True
+        except Exception:  # noqa: BLE001 -- any connection-level failure, try the next anchor
+            continue
+    return False
+
+
 def http_probe(url, timeout=10):
     """Re-probe an endpoint the same way Blackbox does, to see whether it has
     recovered since the alert fired."""

@@ -1,20 +1,23 @@
 groups:
   - name: fleet
     rules:
-      # for: 5m -> 10m (2026-08-24): this and ProbeFailed were the only two
-      # rules still at 5m -- every other rule here already learned this
-      # lesson and sits at 10-30m. Data-driven, not a guess: audited every
-      # Zammad ticket this pipeline had produced (91 real tickets), and 63%
-      # closed within 20 minutes of being created -- InstanceDown itself was
-      # 77% closed within 20 minutes. Matches the existing precedent in this
-      # file rather than inventing a new number.
+      # for: 10m -> back to 5m (2026-08-24, same day as the 10m bump). The
+      # noise-reduction case for 10m was real, but the calculus changed the
+      # same day: the local tier gained real action authority (start/stop/
+      # restart, not just classify-or-escalate) plus a routine-vs-disaster
+      # gate that avoids wasting Claude calls on unfixable-by-anyone
+      # failures -- so a faster-firing alert now more often gets handled
+      # cheaply and quickly by the local tier instead of sitting noisily.
+      # 5m matches ProbeFailed and is back to being the fastest-firing rule
+      # in this file, by design -- detection speed matters again now that
+      # something competent and cheap responds to it.
       - alert: InstanceDown
         expr: up == 0
-        for: 10m
+        for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.instance }} ({{ $labels.job }}) has been down for 10+ minutes"
+          summary: "{{ $labels.instance }} ({{ $labels.job }}) has been down for 5+ minutes"
 
       - alert: HighCPUUsage
         expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
@@ -60,10 +63,10 @@ groups:
         annotations:
           summary: "{{ $labels.instance }} NVR disk below 2% free -- Frigate retention is not keeping up"
 
-      # See InstanceDown's comment above -- same data-driven bump, same reason.
+      # See InstanceDown's comment above -- same revert, same reason.
       - alert: ProbeFailed
         expr: probe_success == 0
-        for: 10m
+        for: 5m
         labels:
           severity: critical
         annotations:

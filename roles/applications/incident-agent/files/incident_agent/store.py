@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS incidents (
     claimed_at        REAL,
     finished_at       REAL,
     parent_ticket_id  INTEGER,
-    escalated         INTEGER DEFAULT 0
+    escalated         INTEGER DEFAULT 0,
+    retry_count       INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_incidents_state ON incidents(state, not_before);
 CREATE INDEX IF NOT EXISTS idx_incidents_recent ON incidents(received_at);
@@ -95,6 +96,18 @@ def init():
     try:
         conn.executescript(SCHEMA)
         conn.commit()
+        # CREATE TABLE IF NOT EXISTS does not retroactively add columns to an
+        # already-existing table -- this fleet's incident-agent already has a
+        # live incidents.db predating retry_count, so it needs an explicit
+        # migration. SQLite has no ADD COLUMN IF NOT EXISTS; catching the
+        # "duplicate column" error is the idiomatic way to make this
+        # re-runnable against both a fresh and an already-migrated database.
+        try:
+            conn.execute("ALTER TABLE incidents ADD COLUMN retry_count INTEGER DEFAULT 0")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
     finally:
         conn.close()
 
@@ -188,6 +201,38 @@ def finish(incident_id, outcome, detail="", escalated=False, parent_ticket_id=No
             (outcome, detail[:8000], time.time(), 1 if escalated else 0, parent_ticket_id, incident_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def requeue_for_retry(incident_id, delay_seconds, max_retries):
+    """Push a still-blocked incident back onto the queue for another look
+    later, instead of giving up on it immediately.
+
+    For the case a host's hypervisor is briefly unreachable but the rest of
+    the fleet and incident-agent's own connectivity are fine -- routine, not
+    a disaster, so worth checking again rather than escalating (or worse,
+    silently giving up) the moment it's first seen. Reuses claim_next()'s
+    existing not_before gate rather than building a second scheduling
+    mechanism; the requeued row is re-processed from scratch next time it's
+    claimed -- fresh diagnostics, fresh reachability check, fresh model call.
+
+    Returns True if requeued, False if retry_count is already at max_retries
+    (caller should stop retrying and escalate instead -- a single host still
+    unreachable after the full retry window is worth Claude's attention).
+    """
+    conn = connect()
+    try:
+        row = conn.execute("SELECT retry_count FROM incidents WHERE id=?", (incident_id,)).fetchone()
+        if row is None or row["retry_count"] >= max_retries:
+            return False
+        conn.execute(
+            """UPDATE incidents SET state='queued', not_before=?, claimed_at=NULL,
+               retry_count=retry_count+1 WHERE id=?""",
+            (time.time() + delay_seconds, incident_id),
+        )
+        conn.commit()
+        return True
     finally:
         conn.close()
 

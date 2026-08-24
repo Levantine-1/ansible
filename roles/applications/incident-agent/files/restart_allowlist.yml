@@ -93,3 +93,15 @@ grace:
   # (5-15m there), so a genuinely stuck service has already been failing for
   # some minutes before this adds five more.
   seconds: 300
+
+# How long to keep re-checking a host whose hypervisor is unreachable before
+# giving up and escalating -- the routine (not disaster) case: one box briefly
+# unreachable, worth another look later rather than an immediate escalation or
+# a silent give-up (2026-08-24). ~15 minutes apart, ~1.5 hours total: long
+# enough for "someone flipped the breaker back," short enough not to sit
+# forever. Does not apply to the disaster case (incident-agent has no
+# external connectivity, or a storm reads as widespread) -- those are left
+# alone entirely, no retry loop, see triage.py's routine-vs-disaster gate.
+unreachable_retry:
+  interval_seconds: 900
+  max_retries: 6

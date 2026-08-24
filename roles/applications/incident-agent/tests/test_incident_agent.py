@@ -273,6 +273,47 @@ check("requeued incident can be claimed again", recovered and recovered["id"] ==
 store.finish(id4, "test")
 
 
+print("\n== unreachable-hypervisor retry (2026-08-24) ==")
+id5, _ = store.enqueue(make_alert("dddd4444", instance="frigate.internal.levantine.io:9100"), 104, "104", "frigate", None, past)
+row = store.claim_next(limit_running=5)
+check("retry_count starts at 0", row["retry_count"] == 0)
+
+ok1 = store.requeue_for_retry(id5, delay_seconds=900, max_retries=2)
+check("first requeue succeeds", ok1 is True)
+conn = store.connect()
+r = conn.execute("SELECT state, retry_count, not_before, claimed_at FROM incidents WHERE id=?", (id5,)).fetchone()
+check("requeued incident goes back to queued", r["state"] == "queued")
+check("retry_count increments", r["retry_count"] == 1)
+check("not_before pushed into the future", r["not_before"] > time.time())
+check("claimed_at cleared so it isn't mistaken for a stale claim", r["claimed_at"] is None)
+conn.close()
+
+check("still inside its pushed-out grace window, not claimable yet",
+      store.claim_next(limit_running=5) is None)
+
+# Force it claimable again to drive it to the cap, matching how the real
+# worker would eventually pick it back up.
+conn = store.connect()
+conn.execute("UPDATE incidents SET not_before=? WHERE id=?", (past, id5))
+conn.commit()
+conn.close()
+store.claim_next(limit_running=5)
+ok2 = store.requeue_for_retry(id5, delay_seconds=900, max_retries=2)
+check("second requeue succeeds (at the cap, not over it)", ok2 is True)
+
+conn = store.connect()
+conn.execute("UPDATE incidents SET not_before=? WHERE id=?", (past, id5))
+conn.commit()
+conn.close()
+store.claim_next(limit_running=5)
+ok3 = store.requeue_for_retry(id5, delay_seconds=900, max_retries=2)
+check("third requeue refused -- max_retries=2 already reached", ok3 is False)
+store.finish(id5, "test")
+
+check("requeue_for_retry on a nonexistent incident id returns False, not an error",
+      store.requeue_for_retry(999999, 900, 6) is False)
+
+
 print("\n== flap guard ==")
 check("no actions recorded yet", store.recent_action_count("ProbeFailed", "frigate", 3600) == 0)
 store.record_action(id3, "ProbeFailed", "frigate", "restart_container", "frigate", "ok")
@@ -298,11 +339,21 @@ check("mixed rule-based and LLM-decided labels both count",
 
 
 print("\n== storm detection ==")
+_storm_ids = []
 for i, h in enumerate(["dockerhost1", "frigate", "theia", "kube-c-00"]):
-    store.enqueue(make_alert(f"storm{i}", instance=f"{h}.internal.levantine.io:9100"), 200 + i, str(200 + i), h, None, past)
+    sid, _ = store.enqueue(make_alert(f"storm{i}", instance=f"{h}.internal.levantine.io:9100"), 200 + i, str(200 + i), h, None, past)
+    _storm_ids.append(sid)
 hosts = store.distinct_hosts_alerting(600)
 check("distinct alerting hosts counted", len(hosts) >= 4, f"got {hosts}")
 check("threshold from config would trigger a storm", len(hosts) >= config.storm_config()["min_hosts"])
+# Finish these explicitly rather than leaving them in state='queued' -- an
+# unfinished row here is immediately claimable (not_before=past) and, left
+# around, gets silently picked up by any claim_next() call in a LATER test
+# section instead of whatever that section actually enqueued. Found live:
+# this exact bug made the routine-vs-disaster tests below operate on the
+# wrong row entirely.
+for sid in _storm_ids:
+    store.finish(sid, "test")
 
 
 print("\n== budget accounting ==")
@@ -401,6 +452,98 @@ finally:
     llm.analyse = _real_analyse
 
 
+print("\n== routine vs. disaster gate (2026-08-24) ==")
+all_failed_hv_steps = [
+    {"source": "hypervisor", "ok": False, "output": "timeout"},
+    {"source": "hypervisor", "ok": False, "output": "timeout"},
+    {"source": "ssh", "ok": False, "output": "no route to host"},
+]
+mixed_hv_steps = [
+    {"source": "hypervisor", "ok": True, "output": "status: running"},
+    {"source": "hypervisor", "ok": False, "output": "timeout"},
+]
+no_hv_steps = [{"source": "ssh", "ok": True, "output": "uptime: ..."}]
+check("every hypervisor step failing counts as unreachable", triage._hypervisor_unreachable(all_failed_hv_steps))
+check("at least one hypervisor step succeeding does not count as unreachable",
+      not triage._hypervisor_unreachable(mixed_hv_steps))
+check("no hypervisor steps at all does not count as unreachable (nothing to judge from)",
+      not triage._hypervisor_unreachable(no_hv_steps))
+check("an empty steps list does not count as unreachable", not triage._hypervisor_unreachable([]))
+
+# _escalate_or_retry never asks the model anything -- confirmed live
+# (2026-08-24) that asking it to classify a single unreachable hypervisor as
+# isolated/widespread was unreliable: the model answered "widespread" for a
+# genuinely single-host case despite the prompt explicitly telling it to
+# default to isolated and explicitly stating only 1 host was affected, by
+# reasoning "hypervisor unresponsive -> potential hardware issue ->
+# widespread" -- conflating cause-type with scope-breadth. Fixed by removing
+# the question: every call site reaching this function does so from a branch
+# of handle() that runs after is_storm has already returned, so a single
+# unreachable hypervisor here can never actually be a multi-host event, and
+# there is nothing left for the model to correctly get wrong.
+_escalate_calls = []
+_real_claude_escalate = claude.escalate
+claude.escalate = lambda incident, bundle, reason: (
+    _escalate_calls.append(reason) or {"status": "completed", "resolved": False, "rca": "test", "state": {}}
+)
+_scope_calls = []
+_real_analyse_for_scope = llm.analyse
+
+
+def _tracking_analyse(bundle, action_note=""):
+    _scope_calls.append(action_note)
+    return _real_analyse_for_scope(bundle, action_note=action_note)
+
+
+llm.analyse = _tracking_analyse
+try:
+    fake_incident_reachable = {"id": 9001, "ticket_id": None, "alertname": "ProbeFailed", "host": "theia"}
+    triage._escalate_or_retry(fake_incident_reachable, "bundle text", mixed_hv_steps, reason="test reason")
+    check("reachable hypervisor: escalate() called normally", len(_escalate_calls) == 1)
+    check("reachable hypervisor: no model call made", len(_scope_calls) == 0)
+
+    id_unreachable, _ = store.enqueue(make_alert("ffff6666", instance="theia.internal.levantine.io:9100"), 106, "106", "theia", None, past)
+    unreachable_incident = store.claim_next(limit_running=5)
+    _escalate_calls.clear()
+    _scope_calls.clear()
+    triage._escalate_or_retry(unreachable_incident, "bundle text", all_failed_hv_steps, reason="test reason")
+    check("unreachable hypervisor: still no model call made (deterministic, not consulted)", len(_scope_calls) == 0)
+    check("unreachable hypervisor: no Claude call on first attempt (requeued instead)", len(_escalate_calls) == 0)
+
+    conn = store.connect()
+    r = conn.execute("SELECT state, retry_count FROM incidents WHERE id=?", (id_unreachable,)).fetchone()
+    conn.close()
+    check("unreachable hypervisor requeues rather than finishing", r["state"] == "queued")
+    check("first attempt increments retry_count to 1", r["retry_count"] == 1)
+finally:
+    claude.escalate = _real_claude_escalate
+    llm.analyse = _real_analyse_for_scope
+    store.finish(id_unreachable, "test")
+
+# Retry cap exhausted: escalates to Claude, citing total elapsed retry time,
+# still without ever consulting the model about scope.
+id_exhausted, _ = store.enqueue(make_alert("eeee5555", instance="theia.internal.levantine.io:9100"), 105, "105", "theia", None, past)
+exhausted_incident = store.claim_next(limit_running=5)
+conn = store.connect()
+conn.execute("UPDATE incidents SET retry_count=? WHERE id=?", (config.unreachable_retry_config()["max_retries"], id_exhausted))
+conn.commit()
+conn.close()
+exhausted_incident = dict(exhausted_incident)
+exhausted_incident["retry_count"] = config.unreachable_retry_config()["max_retries"]
+_escalate_calls.clear()
+_scope_calls.clear()
+claude.escalate = lambda incident, bundle, reason: _escalate_calls.append(reason) or {"status": "completed", "resolved": False, "rca": "test", "state": {}}
+llm.analyse = _tracking_analyse
+try:
+    triage._escalate_or_retry(exhausted_incident, "bundle text", all_failed_hv_steps, reason="test reason")
+    check("retry cap exhausted: escalates to Claude", len(_escalate_calls) == 1)
+    check("escalation reason cites the retry history", "retries" in _escalate_calls[0].lower() or "unreachable" in _escalate_calls[0].lower())
+    check("retry cap exhausted: still no model call made", len(_scope_calls) == 0)
+finally:
+    claude.escalate = _real_claude_escalate
+    llm.analyse = _real_analyse_for_scope
+
+
 print("\n== diagnostic output handling ==")
 truncated = collect._truncate("x" * 9000, 4000)
 check("long output is truncated", len(truncated) < 9000)
@@ -458,10 +601,13 @@ if os.path.exists(alert_rules):
     with open(alert_rules) as fh:
         rules_doc = yaml.safe_load(fh)
     by_name = {r["alert"]: r for g in rules_doc["groups"] for r in g["rules"]}
-    check("InstanceDown for: is 10m, not the original 5m",
-          by_name["InstanceDown"]["for"] == "10m", by_name["InstanceDown"]["for"])
-    check("ProbeFailed for: is 10m, not the original 5m",
-          by_name["ProbeFailed"]["for"] == "10m", by_name["ProbeFailed"]["for"])
+    # Bumped to 10m same day, then reverted back to 5m the same day: local-tier
+    # action authority + the routine-vs-disaster gate changed the cost of
+    # faster detection, so 5m is intentional again, not a leftover default.
+    check("InstanceDown for: is 5m",
+          by_name["InstanceDown"]["for"] == "5m", by_name["InstanceDown"]["for"])
+    check("ProbeFailed for: is 5m",
+          by_name["ProbeFailed"]["for"] == "5m", by_name["ProbeFailed"]["for"])
 else:
     check("alert_rules.yml found for the for: duration check", False, alert_rules)
 

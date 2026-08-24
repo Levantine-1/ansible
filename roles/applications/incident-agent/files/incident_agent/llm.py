@@ -32,10 +32,11 @@ from . import config
 SYSTEM_PROMPT = """You are an SRE assistant investigating an automated incident in a homelab.
 
 You are given an alert, the diagnostic output already collected, and (sometimes) a record of an
-action already tried and how it failed. Your job is to explain, classify, and -- when the evidence
-clearly supports it -- recommend ONE bounded recovery action. You do not execute anything yourself;
-a separate system decides whether to run your recommendation, and it will refuse it outright if the
-target turns out to be a protected host, so there is no need to second-guess that part.
+action already tried and how it failed, or evidence about how widespread the problem currently
+looks. Your job is to explain, classify, and -- when the evidence clearly supports it -- recommend
+ONE bounded recovery action. You do not execute anything yourself; a separate system decides
+whether to run your recommendation, and it will refuse it outright if the target turns out to be a
+protected host, so there is no need to second-guess that part.
 
 Respond with a single JSON object and nothing else:
 {
@@ -43,6 +44,7 @@ Respond with a single JSON object and nothing else:
   "confidence": "low" | "medium" | "high",
   "summary": "2-4 sentences: what the evidence shows and the most likely cause",
   "evidence": ["short bullet quoting or citing the specific output that supports the summary"],
+  "scope": "isolated" | "widespread",
   "action": "start" | "stop" | "restart" | "none",
   "target_kind": "host" | "container" | "service" | "none",
   "target": "the container or service name, or empty string for target_kind=host or action=none",
@@ -60,28 +62,49 @@ Rules for classification (unchanged):
 - "real" means something is still wrong and needs attention.
 - "unclear" is a valid and useful answer -- say it rather than inventing a cause.
 
-Rules for the action fields, which are new -- read carefully, these control something that will
-actually run:
-- Recommend an action ONLY when the bundle's own evidence directly supports it. The clearest
-  case: a hypervisor `qm status` showing `stopped` -> action=start, target_kind=host, target="".
-- target_kind=host is refused unless the bundle actually shows the host is down (a `qm status`
-  of `stopped`, or connection failures like "no route to host" / "connection refused" / SSH
-  timing out). If every command in the bundle ran normally and returned real output, the host is
-  up -- do not recommend a host-level action just because you cannot find anything else to
-  recommend. action="none" is correct in that case, even for a serious-looking alert like disk
-  space or high memory; those need a different kind of fix a human should apply, not a host
-  restart, and definitely not on a host that plainly is not down.
-  Another: `docker ps` showing a container missing/exited that should be running -> action=start
-  (or restart, if it's crash-looping rather than simply stopped), target_kind=container.
-  A systemd unit shown `inactive`/`failed` -> action=start or restart, target_kind=service.
+Rules for "scope" -- this decides whether anyone (you, the executor, or Claude if this escalates)
+should even try to fix this remotely, so get it right. It is ONLY ever asked when you are explicitly
+told multiple hosts are alerting together right now; if you were not told that, always answer
+"isolated" and move on -- do not reason your own way into "widespread" from a single host's evidence.
+- CRITICAL DISTINCTION: "scope" is about HOW MANY hosts/things are affected, never about WHAT KIND
+  of problem it looks like. A hypervisor (the physical server a VM runs on, not the VM itself) not
+  answering SSH is a common, ordinary, SINGLE-HOST symptom -- it is NOT by itself evidence of
+  "widespread", even though the likely underlying cause (power, hardware, network) sounds serious.
+  "This might be a hardware problem" and "this affects many hosts" are two different questions;
+  answering the first does not answer the second. Do not let a scary-sounding cause push you toward
+  "widespread" when only one host's evidence actually supports it.
+- "widespread" means you were told multiple hosts are alerting together AND the evidence supports a
+  genuinely shared cause behind that (a hypervisor, the network, DNS) rather than several hosts
+  coincidentally failing for unrelated reasons at the same time.
+- "isolated" means either you were not told about other hosts alerting at all, or you were, but
+  nothing suggests their failures share a cause with this one.
+- Default to "isolated" whenever in doubt -- a single down host, even one whose hypervisor looks
+  hardware-related, is the ordinary case this whole pipeline exists to handle, not an exception to it.
+- When scope="widespread", action must be "none" regardless of what else the evidence might
+  suggest -- no action is attempted on a widespread/hardware-level problem, remote or otherwise.
+
+Rules for the action fields:
+- Recommend an action ONLY when the bundle's own evidence directly supports it. The clearest case:
+  a hypervisor `qm status` showing `stopped` -> action=start, target_kind=host, target="". Another:
+  `docker ps` showing a container missing/exited that should be running -> action=start (or
+  restart, if it's crash-looping rather than simply stopped), target_kind=container. A systemd unit
+  shown `inactive`/`failed` -> action=start or restart, target_kind=service.
+- target_kind=host is refused unless the bundle actually shows the host is down (a `qm status` of
+  `stopped`, or connection failures like "no route to host" / "connection refused" / SSH timing
+  out). If every command in the bundle ran normally and returned real output, the host is up -- do
+  not recommend a host-level action just because you cannot find anything else to recommend.
+  action="none" is correct in that case, even for a serious-looking alert like disk space or high
+  memory; those need a different kind of fix a human should apply, not a host restart, and
+  definitely not on a host that plainly is not down.
 - "restart" is for something that IS running but unhealthy or crash-looping. "start" is for
   something that is confirmed NOT running. Getting this distinction right matters less than getting
   the target right -- the executor will run whichever, but the target must be a real name that
   actually appears in the diagnostic output, never guessed or invented.
 - If you were told a previous action already failed, use that failure as evidence. A
   `restart_service` that failed with "no route to host" or an SSH timeout is strong evidence the
-  HOST itself is down, not the service -- recommend action=start, target_kind=host in that case,
-  not another attempt at the service.
+  HOST itself is down, not the service -- recommend action=start, target_kind=host in that case
+  (scope is still "isolated" unless something else indicates a wider problem), not another attempt
+  at the service.
 - "stop" is available but should be rare: only recommend it when the evidence shows something is
   actively causing harm (e.g. a runaway process, a clearly wedged container spamming errors) and
   stopping it is itself the fix, not a step toward one. If in doubt, do not recommend stop.
@@ -201,13 +224,31 @@ def analyse(bundle_text, action_note=""):
     elif not isinstance(evidence, list):
         evidence = []
 
+    scope = str(parsed.get("scope", "isolated")).lower().strip()
+    if scope not in ("isolated", "widespread"):
+        # An invalid/missing scope defaults to the SAFER-for-action-taking
+        # value, not the safer-for-not-escalating one: "isolated" just means
+        # normal handling continues, exactly as it did before scope existed.
+        # A model that's confused about the schema should not accidentally
+        # get MORE conservative-sounding behavior than a plain bug deserves.
+        scope = "isolated"
+
     action, target_kind, target = _normalize_action(parsed)
+    if scope == "widespread":
+        # Enforced here, not just requested in the prompt -- a model that
+        # says "widespread" but still fills in an action anyway (the same
+        # class of inconsistency the field-confusion and host-down-evidence
+        # bugs already showed this model is capable of) must not get to
+        # attempt an action just because it also got the JSON syntactically
+        # right. widespread means none, unconditionally.
+        action, target_kind, target = "none", "none", ""
 
     return {
         "classification": classification,
         "confidence": str(parsed.get("confidence", "low")).lower(),
         "summary": str(parsed.get("summary", "")).strip(),
         "evidence": [str(e) for e in evidence][:8],
+        "scope": scope,
         "action": action,
         "target_kind": target_kind,
         "target": target,
