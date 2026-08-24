@@ -98,6 +98,13 @@ check("service-parameterised rule refuses when service is unknown", rule is None
 rule = config.match_restart_rule("HighCPUUsage", "dockerhost1", None)
 check("no rule for an uncovered alert", rule is None)
 
+# theia InstanceDown: confirmed live twice (2026-08-24, tickets #16093-era and
+# #16097-99) as the same "VM fully off" signature frigate's own InstanceDown
+# rule already covers -- promoted from the local model's discretion to a
+# deterministic rule, same as frigate's, once it stopped being ambiguous.
+rule = config.match_restart_rule("InstanceDown", "theia")
+check("theia InstanceDown has a rule now", rule is not None and rule["action"] == "restart_host", str(rule))
+
 # The important one: a rule must never grant an exception to fleet.yml.
 config.policy()["rules"].append(
     {"alert": "InstanceDown", "host": "vault", "action": "restart_host", "target": "vault"}

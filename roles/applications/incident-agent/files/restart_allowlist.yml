@@ -64,6 +64,21 @@ rules:
     target: theia
     verify: {type: http, url: "http://theia.internal.levantine.io"}
 
+  # InstanceDown here means the whole VM is off (confirmed twice now, same
+  # signature both times: theia.tf#16093-era and #16097-99, 2026-08-24 --
+  # `qm status` showing `stopped`, an ACPI power-button event in the guest's
+  # own journal, nothing wrong with the hypervisor). That's not an ambiguous
+  # call for the local model to make -- it's the exact same fix as frigate's
+  # rule above, proven the same way frigate's did, so it belongs here rather
+  # than depending on the model to correctly read "status: stopped" and
+  # translate it into an action every time. restart_host() already falls
+  # back to `qm start` when the VM isn't running (see remote.py), so this
+  # handles both "wedged" and "fully off" with one rule, same as frigate's.
+  - alert: InstanceDown
+    host: theia
+    action: restart_host
+    verify: {type: http, url: "http://theia.internal.levantine.io"}
+
 # How many times the same (alert, host) pair may be auto-actioned inside the
 # window before the agent stops trying and escalates instead. A service that
 # needs restarting three times an hour does not have a restart problem, it has
