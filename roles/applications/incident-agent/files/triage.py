@@ -52,12 +52,12 @@ def _tag(ticket_id, tag):
         log(f"could not tag ticket {ticket_id} with '{tag}': {e}")
 
 
-def _note(ticket_id, subject, body, internal=True):
+def _note(ticket_id, subject, body, internal=True, author="script"):
     if not ticket_id:
         log(f"no ticket to write to; would have posted: {subject}")
         return
     try:
-        zammad.add_article(ticket_id, subject, body, internal=internal)
+        zammad.add_article(ticket_id, subject, body, internal=internal, author=author)
     except zammad.ZammadError as e:
         log(f"could not post article to ticket {ticket_id}: {e}")
 
@@ -273,6 +273,7 @@ def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
         f"This ticket is left open deliberately: Alertmanager closes it automatically once the "
         f"alert clears, so it staying open means monitoring has not yet confirmed the fix.",
         internal=False,
+        author=config.OLLAMA_MODEL,
     )
     _tag(ticket_id, "auto-resolved")
     _tag(ticket_id, "llm-decided")
@@ -293,8 +294,13 @@ def _escalate(incident, bundle_text, reason, extra_note=None):
     if extra_note:
         body = f"{extra_note}\n\n{body}"
 
+    # Claude only gets credit for content it actually wrote -- "completed"
+    # means it ran and produced this body; anything else (no API key, budget
+    # exhausted, an error) is a script message reporting that it didn't.
+    author = "claude" if result["status"] == "completed" else "script"
+
     if result["status"] != "completed":
-        _note(ticket_id, "Escalation skipped", body)
+        _note(ticket_id, "Escalation skipped", body, author=author)
         _tag(ticket_id, "needs-human")
         store.finish(incident["id"], "escalation_unavailable", result.get("detail", ""), escalated=False)
         return
@@ -306,14 +312,14 @@ def _escalate(incident, bundle_text, reason, extra_note=None):
         # recurs after being "resolved" is genuinely a new incident and should
         # not be quietly appended to a closed one.
         try:
-            zammad.close_ticket(ticket_id, "Resolved by AI investigation", body, internal=False)
+            zammad.close_ticket(ticket_id, "Resolved by AI investigation", body, internal=False, author=author)
         except zammad.ZammadError as e:
             log(f"could not close ticket {ticket_id}: {e}")
-            _note(ticket_id, "AI investigation (Claude)", body, internal=False)
+            _note(ticket_id, "AI investigation (Claude)", body, internal=False, author=author)
         _tag(ticket_id, "auto-resolved")
         store.finish(incident["id"], "escalated_resolved", result.get("rca", "")[:2000], escalated=True)
     else:
-        _note(ticket_id, "AI investigation (Claude)", body, internal=False)
+        _note(ticket_id, "AI investigation (Claude)", body, internal=False, author=author)
         _tag(ticket_id, "needs-human")
         store.finish(incident["id"], "escalated_unresolved", result.get("rca", "")[:2000], escalated=True)
 
@@ -554,7 +560,7 @@ def handle(incident):
                 f"Not escalating to Claude -- {len(hosts_alerting)} hosts down together usually "
                 f"means a shared cause Claude's SSH-based tools would hit the same way. Left for a "
                 f"human; the ticket closes automatically once the underlying alert clears."
-            ))
+            ), author=config.OLLAMA_MODEL)
             _tag(ticket_id, "needs-human")
             _tag(ticket_id, "physical-intervention")
             store.finish(incident["id"], "unfixable_remotely", "storm classified as widespread")
@@ -622,7 +628,7 @@ def handle(incident):
         # deterministic signal here, never override it.
         recheck = observability.alert_is_firing(incident.get("fingerprint"), alertname, incident.get("instance"))
         if recheck is False and analysis and analysis["classification"] == "transient" and analysis["confidence"] in ("medium", "high"):
-            _note(ticket_id, "Assessed as transient", llm.format_analysis(analysis))
+            _note(ticket_id, "Assessed as transient", llm.format_analysis(analysis), author=config.OLLAMA_MODEL)
             _tag(ticket_id, "auto-transient")
             store.finish(incident["id"], "transient", analysis["summary"][:2000])
             log(f"incident {incident['id']} assessed transient, escalation skipped")

@@ -98,15 +98,19 @@ def main():
     # investigation closes the ticket with its RCA, an unresolved one leaves it
     # open and flagged. A manual escalation should not leave the ticket in a
     # different state than the same investigation run automatically would.
+    # Same author derivation as _escalate() too: Claude only gets credit for
+    # content it actually wrote ("completed"), not for a script message
+    # reporting that it didn't run.
+    author = "claude" if result.get("status") == "completed" else "script"
     ticket_id = incident.get("ticket_id")
     if ticket_id:
         try:
             if result.get("status") == "completed" and result.get("resolved"):
-                zammad.close_ticket(ticket_id, "Resolved by AI investigation", body, internal=False)
+                zammad.close_ticket(ticket_id, "Resolved by AI investigation", body, internal=False, author=author)
                 zammad.add_tag(ticket_id, "auto-resolved")
                 print(f"\n(ticket {ticket_id} closed)")
             else:
-                zammad.add_article(ticket_id, "AI investigation (Claude, manual)", body, internal=False)
+                zammad.add_article(ticket_id, "AI investigation (Claude, manual)", body, internal=False, author=author)
                 zammad.add_tag(ticket_id, "needs-human")
                 print(f"\n(ticket {ticket_id} left open, flagged needs-human)")
         except zammad.ZammadError as e:
