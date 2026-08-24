@@ -520,8 +520,11 @@ finally:
     llm.analyse = _real_analyse_for_scope
     store.finish(id_unreachable, "test")
 
-# Retry cap exhausted: escalates to Claude, citing total elapsed retry time,
-# still without ever consulting the model about scope.
+# Retry cap exhausted: flagged for a human, NEVER escalated to Claude -- a
+# hypervisor being unreachable is physical/infrastructure, not something
+# agentic reasoning fixes remotely, so Claude is never invoked for this case
+# regardless of how long it's been down (2026-08-24, per explicit steer).
+# Still without ever consulting the model about scope.
 id_exhausted, _ = store.enqueue(make_alert("eeee5555", instance="theia.internal.levantine.io:9100"), 105, "105", "theia", None, past)
 exhausted_incident = store.claim_next(limit_running=5)
 conn = store.connect()
@@ -536,9 +539,15 @@ claude.escalate = lambda incident, bundle, reason: _escalate_calls.append(reason
 llm.analyse = _tracking_analyse
 try:
     triage._escalate_or_retry(exhausted_incident, "bundle text", all_failed_hv_steps, reason="test reason")
-    check("retry cap exhausted: escalates to Claude", len(_escalate_calls) == 1)
-    check("escalation reason cites the retry history", "retries" in _escalate_calls[0].lower() or "unreachable" in _escalate_calls[0].lower())
+    check("retry cap exhausted: never escalates to Claude", len(_escalate_calls) == 0)
     check("retry cap exhausted: still no model call made", len(_scope_calls) == 0)
+
+    conn = store.connect()
+    r_exhausted = conn.execute("SELECT state, outcome, escalated FROM incidents WHERE id=?", (id_exhausted,)).fetchone()
+    conn.close()
+    check("retry cap exhausted: finished, not left queued", r_exhausted["state"] == "done")
+    check("retry cap exhausted: outcome is unfixable_remotely", r_exhausted["outcome"] == "unfixable_remotely")
+    check("retry cap exhausted: never marked escalated", r_exhausted["escalated"] == 0)
 finally:
     claude.escalate = _real_claude_escalate
     llm.analyse = _real_analyse_for_scope

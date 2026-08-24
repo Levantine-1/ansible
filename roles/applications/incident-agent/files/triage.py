@@ -347,6 +347,14 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
     alerting together there, so "shared cause or coincidence" is a real
     question worth asking).
 
+    A hypervisor not answering SSH is physical, not something any amount of
+    agentic reasoning fixes remotely -- per your steer (2026-08-24), this
+    never reaches Claude, at any point, first attempt or after every retry is
+    exhausted. Once retries run out it is flagged for a human exactly like
+    the disaster case below, not escalated. The retry loop still runs first
+    purely because it is free and self-resolves the common "briefly
+    unreachable, came back" case without bothering anyone at all.
+
     The disaster case (incident-agent has no external connectivity at all)
     is checked once, earlier in handle(), before this function is ever
     reached -- by the time control gets here, connectivity is already known
@@ -371,13 +379,13 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
             _note(ticket_id, "Hypervisor unreachable -- will keep checking", (
                 f"The hypervisor for {host} is not responding to any diagnostic check. Treating "
                 f"this as an isolated problem, not a wider outage (incident-agent's own "
-                f"connectivity is fine, and nothing else currently points at a shared cause), "
-                f"rather than escalating immediately.\n\n"
+                f"connectivity is fine, and nothing else currently points at a shared cause).\n\n"
                 f"Will re-check every {retry_cfg['interval_seconds'] // 60} minutes, up to "
                 f"{retry_cfg['max_retries']} times "
                 f"(~{retry_cfg['interval_seconds'] * retry_cfg['max_retries'] // 60} minutes total), "
-                f"and either resolve normally once it answers again or escalate if it's still "
-                f"unreachable after that."
+                f"and resolve normally if it answers again. A hypervisor being unreachable is "
+                f"physical, not something remote tooling (including Claude) can fix -- if it is "
+                f"still unreachable after that, this is flagged for a human rather than escalated."
             ))
         _tag(ticket_id, "auto-retry")
         log(
@@ -387,15 +395,17 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
         return
 
     total_minutes = retry_cfg["max_retries"] * retry_cfg["interval_seconds"] // 60
-    _escalate(
-        incident, bundle,
-        reason=(
-            f"{reason} The hypervisor for {host} has been unreachable across "
-            f"{retry_cfg['max_retries']} retries over roughly {total_minutes} minutes -- no longer "
-            f"treating this as transient."
-        ),
-        extra_note=extra_note,
-    )
+    _note(ticket_id, "Hypervisor still unreachable -- needs a human", (
+        f"The hypervisor for {host} has been unreachable across {retry_cfg['max_retries']} retries "
+        f"over roughly {total_minutes} minutes. Not escalating to Claude -- an unreachable "
+        f"hypervisor is a physical/infrastructure problem, and Claude's tools would hit the exact "
+        f"same wall over the same network. This needs a human. The ticket will close automatically "
+        f"once the underlying alert clears on its own."
+    ))
+    _tag(ticket_id, "needs-human")
+    _tag(ticket_id, "physical-intervention")
+    store.finish(incident["id"], "unfixable_remotely", f"hypervisor unreachable after {retry_cfg['max_retries']} retries")
+    log(f"incident {incident['id']}: hypervisor for {host} still unreachable after {retry_cfg['max_retries']} retries, flagging for human, not escalating")
 
 
 def handle(incident):
