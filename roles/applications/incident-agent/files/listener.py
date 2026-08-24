@@ -19,7 +19,15 @@ alert is not there -- it is recorded as self-resolved and nothing is acted on.
 That cross-check against the real monitoring system, not the transport, is what
 makes the handoff trustworthy, which is also why it must never be weakened into
 "assume firing if Alertmanager cannot be reached".
+
+As of 2026-08-24 this also backs the ops-dashboard control panel on `service`:
+GET /status (worker online + what it's currently processing, if anything),
+GET /toggles and POST /toggles (the Claude/local-LLM tier switches). These
+read/write store.py directly rather than going through triage.py, which has
+no HTTP surface of its own -- this stays the one process on this host reached
+cross-host, same as it always was for alert intake.
 """
+import fcntl
 import json
 import os
 import sys
@@ -29,10 +37,40 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from incident_agent import config, store  # noqa: E402
+import triage  # noqa: E402 -- for _WORKER_LOCK_PATH only, to derive worker liveness
 
 
 def log(message):
     print(f"[listener] {time.strftime('%FT%TZ', time.gmtime())} {message}", flush=True)
+
+
+def _worker_online():
+    """Whether the triage worker process is currently running -- derived
+    from the SAME flock() triage.py's main() holds for its whole lifetime
+    (see triage._acquire_singleton_lock's docstring), not a separate
+    heartbeat. Opening with "w" truncates the file, which is harmless here:
+    flock() locks are tied to the inode/open-file-description, not file
+    content, so truncating it does not disturb a lock another process
+    already holds on it."""
+    try:
+        with open(triage._WORKER_LOCK_PATH, "w") as fh:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return True  # already held elsewhere -- worker is running
+            fcntl.flock(fh, fcntl.LOCK_UN)
+            return False  # we could acquire it ourselves -- nobody's running
+    except OSError:
+        # Lock file's directory doesn't exist yet -- worker has never started.
+        return False
+
+
+def _status_payload():
+    processing = store.currently_processing()
+    return {
+        "worker_online": _worker_online(),
+        "processing": processing,
+    }
 
 
 def accept(payload):
@@ -66,6 +104,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         log(f"{self.address_string()} - {fmt % args}")
 
+    def _write_json(self, obj, status=200):
+        body = json.dumps(obj).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -74,6 +119,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(400)
             self.end_headers()
             self.wfile.write(f"bad request: {e}".encode())
+            return
+
+        if self.path == "/toggles":
+            # Dashboard control-panel writes (2026-08-24). Same no-auth
+            # convention as everything else on this port (see this file's
+            # own docstring) -- a forged toggle flip is a real behavior
+            # change, unlike a forged alert handoff, but this dashboard and
+            # everything reaching it is LAN-only by the same convention the
+            # rest of this repo already relies on.
+            try:
+                for name in ("claude_enabled", "local_llm_enabled"):
+                    if name in payload:
+                        store.set_toggle(name, bool(payload[name]))
+                self._write_json(store.get_toggles())
+            except Exception as e:  # noqa: BLE001
+                log(f"ERROR setting toggles: {type(e).__name__}: {e}")
+                self._write_json({"error": str(e)}, status=500)
             return
 
         try:
@@ -92,6 +154,16 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"accepted-with-error")
 
     def do_GET(self):
+        if self.path == "/status":
+            self._write_json(_status_payload())
+            return
+        if self.path == "/toggles":
+            self._write_json(store.get_toggles())
+            return
+        # Every other path (including the bare "/" the ansible deploy and
+        # zammad_relay's own reachability check both poll) -- unchanged
+        # shallow liveness check, deliberately not deeper than "is this HTTP
+        # server thread accepting connections."
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"ok")

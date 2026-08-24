@@ -13,6 +13,7 @@ and post-action verification -- a bad recommendation costs a failed attempt
 that falls through to escalation, never an unsupervised action on something
 protected.
 """
+import fcntl
 import json
 import os
 import sys
@@ -21,6 +22,34 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from incident_agent import claude, collect, config, llm, observability, remote, store, zammad  # noqa: E402
+
+# Only one worker may ever be actively claiming incidents at a time
+# (2026-08-24, per explicit request). store.claim_next()'s own UPDATE...WHERE
+# state='queued' already makes double-claiming the SAME incident impossible
+# across processes -- what this adds is a guarantee a second process never
+# runs at all, so two workers can't process two DIFFERENT incidents
+# concurrently either. A plain flock(), not a PID file: PID files can go
+# stale if a process dies uncleanly and need explicit cleanup logic; an flock
+# is released by the OS automatically the instant the holding process exits,
+# crash or clean shutdown alike, so there's nothing to go stale. Also doubles
+# as the liveness signal for the dashboard's "online" status (see
+# listener.py's /status route) -- a second, independent non-blocking flock
+# attempt against this same file tells you whether a worker is currently
+# alive without needing a separate heartbeat mechanism.
+_WORKER_LOCK_PATH = os.path.join(config.STATE_DIR, "worker.lock")
+
+
+def _acquire_singleton_lock():
+    os.makedirs(config.STATE_DIR, exist_ok=True)
+    fh = open(_WORKER_LOCK_PATH, "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log("another incident-agent worker already holds the lock -- exiting rather than running concurrently")
+        sys.exit(1)
+    # Returned and kept referenced by the caller for the life of the process:
+    # closing (or garbage-collecting) this file object releases the lock.
+    return fh
 
 # Maps an (action, target_kind) pair from llm.analyse() onto the matching
 # remote.py function. Every entry here is already gated through
@@ -117,9 +146,9 @@ def _verify(rule, incident):
     return None, "(no verification configured for this rule)"
 
 
-def _host_down_evidence(bundle_text):
-    """Whether the bundle actually shows signs the host itself is
-    unreachable, as opposed to the model merely asserting so.
+def _host_down_evidence(steps):
+    """Whether the LIVE diagnostic steps actually show signs the host itself
+    is unreachable, as opposed to the model merely asserting so.
 
     Confirmed live (2026-08-24): a 3.8B model recommended action=start,
     target_kind=host for a DiskSpaceLow alert on a host that was
@@ -130,13 +159,22 @@ def _host_down_evidence(bundle_text):
     refuses it with an error), but `stop`/`restart` against a healthy host
     would not be -- this check gates all three host-level verbs regardless,
     since none of them make sense without real evidence anyway.
+
+    Takes the structured step list, NOT the formatted bundle text -- changed
+    2026-08-24 when history_notes() grew excerpts of past incidents' stored
+    detail (which can itself legitimately contain these same phrases, e.g. a
+    past "no route to host" failure quoted for context). Scanning the whole
+    bundle would let a HISTORICAL mention of these phrases permanently trip
+    this gate for every future incident on that host regardless of current
+    health -- reopening the exact bug this function exists to prevent, just
+    via a poisoned bundle instead of a hallucination. Only live command
+    output is trustworthy evidence of the CURRENT state.
     """
-    lowered = bundle_text.lower()
     signals = (
         "status: stopped", "no route to host", "connection refused",
         "ssh timed out", "could not connect", "connection timed out",
     )
-    return any(s in lowered for s in signals)
+    return any(s in (step.get("output") or "").lower() for step in steps for s in signals)
 
 
 def _hypervisor_unreachable(steps):
@@ -155,7 +193,25 @@ def _hypervisor_unreachable(steps):
     return bool(hypervisor_steps) and all(not s["ok"] for s in hypervisor_steps)
 
 
-def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
+def _post_llm_finding(ticket_id, subject, note_text, analysis):
+    """Always-post a standalone, locally-attributed note documenting what the
+    local model found, tried, and expected -- even when none of it led to a
+    resolution (2026-08-24, per explicit request).
+
+    Without this, every _try_llm_action() outcome except success folds into
+    whatever note comes next -- often attributed to Claude or script once it
+    escalates -- so the free tier's own reasoning, including WHY it isn't
+    confident enough to act, was invisible. `note_text` is the specific
+    refusal/failure detail already built by the caller at that point (or
+    None when there isn't one, e.g. the model simply recommended nothing);
+    `analysis` supplies the model's own classification/evidence/summary via
+    format_analysis(), which already self-signs with the model name.
+    """
+    parts = [p for p in (note_text, llm.format_analysis(analysis)) if p]
+    _note(ticket_id, subject, "\n\n".join(parts) or "(no detail)", author=config.OLLAMA_MODEL)
+
+
+def _try_llm_action(incident, bundle, steps, extra_context=None, rule_for_verify=None):
     """Ask the local model for an action recommendation and, if it produces a
     valid one, attempt it -- subject to the same flap guard every other
     action goes through, and the same _assert_actionable() gate in remote.py.
@@ -185,19 +241,27 @@ def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
 
     analysis = llm.analyse(bundle, action_note=extra_context or "")
     if not llm.has_action(analysis):
+        if analysis is not None:
+            # A real consultation that just didn't produce an action -- still
+            # worth a note. analysis is None means the model was never
+            # actually reached (Ollama down, or disabled via the dashboard
+            # toggle) -- nothing to report in that case.
+            _post_llm_finding(ticket_id, "Local model: no action recommended", None, analysis)
         return False, analysis, None
 
-    if analysis["target_kind"] == "host" and not _host_down_evidence(bundle):
+    if analysis["target_kind"] == "host" and not _host_down_evidence(steps):
         log(
             f"incident {incident['id']}: local model recommended {analysis['action']} host "
             f"on {host}, but the bundle has no evidence the host is actually down -- refusing "
             f"(see _host_down_evidence's docstring)"
         )
-        return False, analysis, (
+        note_text = (
             f"Local model recommended {analysis['action']} host `{host}`, but nothing in the "
             f"diagnostic bundle actually shows the host is unreachable -- refused as an "
             f"unsupported recommendation rather than attempted."
         )
+        _post_llm_finding(ticket_id, "Local model: recommendation refused -- no supporting evidence", note_text, analysis)
+        return False, analysis, note_text
 
     guard = config.flap_guard()
     recent = store.recent_action_count(alertname, host, guard.get("window_seconds", 3600))
@@ -207,15 +271,18 @@ def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
             f"{analysis['action']} {analysis['target_kind']}, but the flap guard already "
             f"tripped ({recent} attempts on {alertname}/{host} this window) -- not attempting it"
         )
-        return False, analysis, (
+        note_text = (
             f"Local model recommended {analysis['action']} {analysis['target_kind']} "
             f"`{analysis['target'] or host}`, but {alertname} on {host} has already been "
             f"auto-actioned {recent} times this window -- not attempting another."
         )
+        _post_llm_finding(ticket_id, "Local model: recommendation not attempted -- flap guard already tripped", note_text, analysis)
+        return False, analysis, note_text
 
     action, kind, target = analysis["action"], analysis["target_kind"], analysis["target"]
     fn = _ACTION_FUNCS.get((action, kind))
     if fn is None:
+        _post_llm_finding(ticket_id, "Local model: recommendation could not be executed", None, analysis)
         return False, analysis, None
 
     log(
@@ -227,17 +294,19 @@ def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
         ok, output = fn(host, target)
     except remote.ActionRefused as e:
         store.record_action(incident["id"], alertname, host, action_label, target, "refused", str(e))
-        return False, analysis, (
-            f"Local model recommended {action} {kind} `{target or host}` -- refused by policy: {e}"
-        )
+        note_text = f"Local model recommended {action} {kind} `{target or host}` -- refused by policy: {e}"
+        _post_llm_finding(ticket_id, "Local model: recommendation refused by policy", note_text, analysis)
+        return False, analysis, note_text
 
     store.record_action(incident["id"], alertname, host, action_label, target, "ok" if ok else "failed", output)
 
     if not ok:
-        return False, analysis, (
+        note_text = (
             f"Local model recommended {action} {kind} `{target or host}` "
             f"({analysis['notes']}) -- attempted, but it failed:\n```\n{output[:2000]}\n```"
         )
+        _post_llm_finding(ticket_id, f"Local model: attempted {action} {kind} on {host} -- failed", note_text, analysis)
+        return False, analysis, note_text
 
     if rule_for_verify:
         verified, verify_detail = _verify(rule_for_verify, incident)
@@ -263,7 +332,9 @@ def _try_llm_action(incident, bundle, extra_context=None, rule_for_verify=None):
     )
 
     if verified is False:
-        return False, analysis, action_note_text + "\n\n(action completed, but did not resolve the alert)"
+        note_text = action_note_text + "\n\n(action completed, but did not resolve the alert)"
+        _post_llm_finding(ticket_id, f"Local model: {action} {kind} on {host} did not resolve the alert", note_text, analysis)
+        return False, analysis, note_text
 
     narrative = llm.format_analysis(analysis) or llm.fallback_summary("no response from Ollama")
     _note(
@@ -567,6 +638,19 @@ def handle(incident):
             log(f"incident {incident['id']}: storm classified widespread, not escalating")
             return
 
+        # scope == "isolated" (or the model was unreachable/disabled and
+        # storm_analysis is None): still worth posting the local model's own
+        # reasoning as its own note before escalating, rather than letting it
+        # vanish -- matches the always-leave-a-comment rule everywhere else.
+        # Posted standalone rather than folded into the escalation note (which
+        # would just repeat the same content Claude's own note doesn't need).
+        if storm_analysis:
+            _post_llm_finding(
+                ticket_id, "Local model: storm scope assessment",
+                "Classified as isolated rather than a shared cause -- escalating per-incident.",
+                storm_analysis,
+            )
+
         _escalate(
             incident,
             bundle + f"\n\n--- Other alerts in this event ---\n{summary}\n",
@@ -615,7 +699,7 @@ def handle(incident):
         # same _assert_actionable() gate and flap guard as every other
         # action). One inference call does both the action decision and the
         # classification below, so this doesn't cost a second round-trip.
-        resolved, analysis, note = _try_llm_action(incident, bundle)
+        resolved, analysis, note = _try_llm_action(incident, bundle, steps)
         if resolved:
             return
 
@@ -626,21 +710,41 @@ def handle(incident):
         # read the evidence as transient, skip a Sonnet call that would only
         # confirm "it's fine now." The model can only agree with the
         # deterministic signal here, never override it.
+        #
+        # analysis is None (2026-08-24: local LLM unavailable OR disabled via
+        # the dashboard toggle) no longer blocks this -- the Alertmanager
+        # recheck is independent, real evidence regardless of whether the
+        # model corroborates it, so a plainly self-cleared alert shouldn't
+        # cost a Claude call just to confirm what's already known for free.
         recheck = observability.alert_is_firing(incident.get("fingerprint"), alertname, incident.get("instance"))
-        if recheck is False and analysis and analysis["classification"] == "transient" and analysis["confidence"] in ("medium", "high"):
-            _note(ticket_id, "Assessed as transient", llm.format_analysis(analysis), author=config.OLLAMA_MODEL)
+        if recheck is False and (
+            analysis is None
+            or (analysis["classification"] == "transient" and analysis["confidence"] in ("medium", "high"))
+        ):
+            if analysis:
+                detail, author, summary = llm.format_analysis(analysis), config.OLLAMA_MODEL, analysis["summary"]
+            else:
+                detail = (
+                    "The alert has independently cleared per Alertmanager. No model corroboration "
+                    "available (local model unavailable or disabled) -- resolved on that "
+                    "deterministic signal alone."
+                )
+                author, summary = "script", "self-resolved (no model consulted)"
+            _note(ticket_id, "Assessed as transient", detail, author=author)
             _tag(ticket_id, "auto-transient")
-            store.finish(incident["id"], "transient", analysis["summary"][:2000])
+            store.finish(incident["id"], "transient", summary[:2000])
             log(f"incident {incident['id']} assessed transient, escalation skipped")
             return
 
-        extra_parts = [p for p in (note, llm.format_analysis(analysis) if analysis else None) if p]
-        extra = "\n\n".join(extra_parts) or None
+        # `note`/`analysis` are already posted as their own standalone,
+        # locally-attributed note by _try_llm_action() above -- not repeated
+        # here as extra_note, which would just duplicate the same content
+        # under Claude's own note.
         _escalate_or_retry(incident, bundle, steps, reason=(
             f"No restart_allowlist.yml rule covers {alertname} on {host}"
             + (f" (service {service})" if service else "")
             + ", and the local model did not recommend an action it could safely take."
-        ), extra_note=extra)
+        ))
         return
 
     # --- Flap guard -----------------------------------------------------
@@ -708,17 +812,15 @@ def handle(incident):
             f"repeating the same target."
         )
         resolved, analysis, note = _try_llm_action(
-            incident, bundle, extra_context=failure_context, rule_for_verify=rule
+            incident, bundle, steps, extra_context=failure_context, rule_for_verify=rule
         )
         if resolved:
             return
 
-        extra = action_failure_note
-        if note:
-            extra += f"\n\n{note}"
-        elif analysis:
-            extra += f"\n\n{llm.format_analysis(analysis) or ''}"
-
+        # note/analysis are already posted as their own standalone,
+        # locally-attributed note by _try_llm_action() above -- action_failure_note
+        # (what the deterministic RULE tried and how it failed) is the one
+        # thing not covered there, so that's all extra_note needs to carry.
         _escalate_or_retry(
             incident, bundle, steps,
             reason=(
@@ -726,7 +828,7 @@ def handle(incident):
                 + (", and the local model's alternative also failed." if note else
                    ", and the local model had no better recommendation.")
             ),
-            extra_note=extra,
+            extra_note=action_failure_note,
         )
         return
 
@@ -772,6 +874,7 @@ def handle(incident):
 
 
 def main():
+    _lock_fh = _acquire_singleton_lock()  # noqa: F841 -- held for the process lifetime, never explicitly released
     store.init()
     log(f"worker starting (max concurrent={config.MAX_CONCURRENT_TRIAGE}, grace={config.grace_seconds()}s)")
     recovered = store.requeue_stale()
@@ -814,6 +917,9 @@ def main():
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--once":
         # Single-shot mode for testing: process one ready incident and exit.
+        # Same singleton lock as main() -- a manual --once run must not be
+        # able to claim an incident out from under the real systemd worker.
+        _lock_fh = _acquire_singleton_lock()  # noqa: F841
         store.init()
         job = store.claim_next(config.MAX_CONCURRENT_TRIAGE)
         if job is None:

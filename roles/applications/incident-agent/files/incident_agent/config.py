@@ -219,6 +219,24 @@ def unreachable_retry_config():
     return (policy().get("unreachable_retry") or {"interval_seconds": 900, "max_retries": 6})
 
 
+def claude_enabled():
+    """Whether the dashboard's toggle allows the Claude escalation tier to
+    run (2026-08-24). Lazy import -- store.py already imports config at
+    module level, so a top-level import here would be circular. Read live
+    from the DB every call rather than the _cache dict above: the toggle is
+    written by an unprivileged process on a different host, so genuine
+    liveness matters more than the cheap SQLite read costs."""
+    from . import store
+    return store.get_toggles().get("claude_enabled", True)
+
+
+def local_llm_enabled():
+    """Whether the dashboard's toggle allows the local model tier to run.
+    See claude_enabled()'s docstring -- same reasoning, same mechanism."""
+    from . import store
+    return store.get_toggles().get("local_llm_enabled", True)
+
+
 def estimate_cost(usage):
     """USD estimate for one API response's token usage."""
     if not usage:

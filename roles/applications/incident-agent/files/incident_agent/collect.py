@@ -29,38 +29,119 @@ def _substitute(text, ctx):
     return text
 
 
+_RESOLVED_OUTCOMES = ("llm_auto_resolved", "auto_resolved", "escalated_resolved")
+
+# Fleet-wide fallback lookback -- longer than the same-host window below since
+# a repeat of the same alert type on a DIFFERENT host is rarer than a repeat on
+# the same one; a 7-day window would too often find nothing worth surfacing.
+_FLEETWIDE_LOOKBACK_SECONDS = 30 * 86400
+
+
+def _fix_excerpt(detail, limit=400):
+    """A short, readable excerpt of a past incident's stored outcome detail,
+    for the tiered historical-fix lookup (2026-08-24).
+
+    No structural marker to extract a tighter "just the fix" section from:
+    checked claude.py's format_result() -- its "### Actions taken" section is
+    built from ephemeral tool-call state that never reaches store.finish(),
+    so only raw RCA prose is ever persisted for escalated_resolved rows. A
+    bounded prefix is the best available signal regardless of outcome type --
+    llm_auto_resolved/auto_resolved rows already front-load the action in
+    their first sentence, and the reading model can pull meaning from raw
+    prose better than a fragile regex could.
+    """
+    if not detail:
+        return None
+    detail = detail.strip()
+    if len(detail) <= limit:
+        return detail
+    return detail[:limit] + "..."
+
+
+def _same_alertname_precedent(incidents, alertname):
+    """Most recent same-host, same-alertname incident with a resolved-ish
+    outcome, or None. `incidents` is host_history()'s own result -- already
+    fetched, no new query needed; this just filters what's already in hand."""
+    for row in incidents:
+        if row["alertname"] == alertname and row.get("outcome") in _RESOLVED_OUTCOMES and row.get("detail"):
+            return row
+    return None
+
+
 def history_notes(incident):
-    """Prior incidents and automated actions on this host.
+    """Prior incidents and automated actions on this host, plus (2026-08-24)
+    a tiered lookup for how a similar past incident was actually fixed --
+    same host first, then fleet-wide for the same alert type if nothing
+    matched here.
 
     Included in every bundle so the escalation tier starts knowing whether this
     is a first occurrence or the fifth this week, and what has already been
     tried -- questions it would otherwise spend paid turns rediscovering, and
     which change the diagnosis substantially ("restarting fixed it three times
     already" is a different problem from "this has never happened before").
+
+    The historical-fix excerpts included here are STORED text (past
+    detail/RCA), never live diagnostic output -- deliberately kept out of
+    what _host_down_evidence() scans (see its docstring), since a quoted past
+    failure must never be mistaken for current evidence of one.
     """
     host = incident.get("host")
     if not host:
         return []
+    alertname = incident.get("alertname")
     incidents, actions = store.host_history(host, 7 * 86400, incident["id"])
-    if not incidents and not actions:
-        return [f"History: no other recorded incidents on {host} in the last 7 days (first occurrence)."]
+    # A host with literally no history of its own still trivially has no
+    # same-host precedent for this alertname either -- must NOT early-return
+    # here, or the fleet-wide fallback below never gets a chance to run for
+    # exactly the case it exists to help with: the first time this alert type
+    # has ever happened on THIS host, even though it's happened elsewhere.
+    same_host_precedent = _same_alertname_precedent(incidents, alertname) if incidents else None
 
-    lines = [f"History for {host} over the last 7 days:"]
-    if incidents:
-        for row in incidents[:8]:
-            when = time.strftime("%a %H:%M", time.localtime(row["received_at"] or 0))
-            lines.append(
-                f"  - {when} {row['alertname']} (ticket #{row['ticket_number']}) -> {row['outcome'] or 'unfinished'}"
-            )
+    if not incidents and not actions:
+        lines = [f"History: no other recorded incidents on {host} in the last 7 days (first occurrence)."]
     else:
-        lines.append("  - no other incidents")
-    if actions:
-        lines.append("  Automated actions already taken on this host:")
-        for row in actions[:8]:
-            when = time.strftime("%a %H:%M", time.localtime(row["ts"] or 0))
+        lines = [f"History for {host} over the last 7 days:"]
+        if incidents:
+            for row in incidents[:8]:
+                when = time.strftime("%a %H:%M", time.localtime(row["received_at"] or 0))
+                lines.append(
+                    f"  - {when} {row['alertname']} (ticket #{row['ticket_number']}) -> {row['outcome'] or 'unfinished'}"
+                )
+                if same_host_precedent and row["id"] == same_host_precedent["id"]:
+                    excerpt = _fix_excerpt(row.get("detail"))
+                    if excerpt:
+                        lines.append(f"    Past fix (this host, same alert type): {excerpt}")
+        else:
+            lines.append("  - no other incidents")
+        if actions:
+            lines.append("  Automated actions already taken on this host:")
+            for row in actions[:8]:
+                when = time.strftime("%a %H:%M", time.localtime(row["ts"] or 0))
+                lines.append(
+                    f"  - {when} {row['action']} {row['target'] or ''} ({row['alertname']}) -> {row['result']}"
+                )
+
+    if not same_host_precedent and alertname:
+        # Same-host tier found nothing for this alert type -- fall back to
+        # the fleet-wide tier before giving up on historical context entirely.
+        fleetwide = store.similar_incidents_other_hosts(alertname, host, _FLEETWIDE_LOOKBACK_SECONDS)
+        if fleetwide:
             lines.append(
-                f"  - {when} {row['action']} {row['target'] or ''} ({row['alertname']}) -> {row['result']}"
+                f"  No same-host precedent for {alertname}. Elsewhere in the fleet (weaker evidence -- "
+                f"a different host may have a different root cause; only apply this if the CURRENT "
+                f"evidence independently supports it too):"
             )
+            for row in fleetwide:
+                when = time.strftime("%a %H:%M", time.localtime(row["received_at"] or 0))
+                excerpt = _fix_excerpt(row.get("detail"))
+                # alertname isn't in the row -- similar_incidents_other_hosts()
+                # queries for exactly this alertname, so it's the same for every
+                # row and just referenced from the enclosing scope instead.
+                lines.append(
+                    f"  - {when} {alertname} on {row['host']} (ticket #{row['ticket_number']}) "
+                    f"-> {row['outcome']}" + (f": {excerpt}" if excerpt else "")
+                )
+
     return lines
 
 

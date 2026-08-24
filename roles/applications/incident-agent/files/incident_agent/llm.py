@@ -108,6 +108,14 @@ Rules for the action fields:
 - "stop" is available but should be rare: only recommend it when the evidence shows something is
   actively causing harm (e.g. a runaway process, a clearly wedged container spamming errors) and
   stopping it is itself the fix, not a step toward one. If in doubt, do not recommend stop.
+- The diagnostic bundle may include a "History" section showing how a similar alert was resolved
+  before -- weigh it by WHERE it happened, not just that it happened: a past fix on THIS SAME host
+  for THIS SAME alert type is strong precedent and may justify recommending the same action again,
+  the same way a previous action's failure already counts as evidence above. A fix on a DIFFERENT
+  host (labeled "elsewhere in the fleet") is weaker -- different hardware, config, or root cause may
+  apply -- treat it as a hint worth checking, not something to copy blindly; only recommend the same
+  action if the CURRENT bundle's own evidence independently supports it too, not merely because
+  another host once had the same alert name.
 - Say action="none" whenever the evidence is ambiguous, you are not confident, or this looks like
   it needs a human's judgment (data loss risk, security-relevant signs, something you've already
   seen fail once this way). "none" is a correct, useful answer, not a failure to find something.
@@ -174,9 +182,16 @@ def _extract_json(text):
 def analyse(bundle_text, action_note=""):
     """Summarise and classify a diagnostic bundle.
 
-    Returns a dict, or None if the model is unavailable or unusable -- callers
-    must handle None rather than assuming a result.
+    Returns a dict, or None if the model is unavailable or unusable, OR
+    disabled via the dashboard's local-LLM toggle (2026-08-24) -- callers
+    must handle None rather than assuming a result. Deliberately the SAME
+    return value as "Ollama unreachable": every caller already has a
+    correct, tested None-handling branch for that existing failure mode, so
+    disabling the tier needs no new branches anywhere else.
     """
+    if not config.local_llm_enabled():
+        return None
+
     user = (
         f"{action_note}\n\n" if action_note else ""
     ) + (

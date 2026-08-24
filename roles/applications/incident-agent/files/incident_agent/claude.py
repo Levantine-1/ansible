@@ -393,6 +393,16 @@ def escalate(incident, bundle_text, reason):
     Never raises -- an escalation that fails must still leave the incident
     documented and visible rather than vanishing.
     """
+    if not config.claude_enabled():
+        return {
+            "status": "disabled",
+            "detail": (
+                "The Claude escalation tier is currently disabled via the dashboard toggle. "
+                "Diagnostics were collected and are on the ticket; a human needs to take it from "
+                "here until it's turned back on."
+            ),
+        }
+
     if not config.ANTHROPIC_API_KEY:
         return {
             "status": "unavailable",

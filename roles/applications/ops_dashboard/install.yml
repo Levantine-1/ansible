@@ -6,9 +6,11 @@
 # links on the same page instead, since their frontends don't support
 # being served from a subpath cleanly.
 #
-# Also runs a small chat app (native Flask process, files/chat_app.py)
-# talking to the fleet's Ollama instance on `incident-agent` -- for ad-hoc
-# use, unrelated to the incident-triage pipeline that also uses that model.
+# Also runs two small native Flask processes: a chat app (files/chat_app.py)
+# talking to the fleet's Ollama instance on `incident-agent` for ad-hoc use,
+# unrelated to the incident-triage pipeline that also uses that model; and
+# (2026-08-24) an incident-agent status/controls app (files/incident_status_app.py)
+# proxying to listener.py's /status and /toggles routes on incident-agent.
 - name: Deploy ops dashboard
   hosts: service
   become: yes
@@ -18,6 +20,8 @@
     ops_dashboard_chat_port: 5055
     ops_dashboard_ollama_url: "http://incident-agent.internal.levantine.io:11434"
     ops_dashboard_ollama_model: "phi4-mini"
+    ops_dashboard_incidents_port: 5056
+    ops_dashboard_incident_agent_url: "http://incident-agent.internal.levantine.io:9098"
 
   tasks:
     - name: Install nginx
@@ -152,6 +156,65 @@
         name: ops-dashboard-chat
         state: restarted
       when: chat_app_script.changed or chat_app_env.changed or chat_app_unit.changed
+
+    - name: Deploy incident-agent status app
+      copy:
+        src: files/incident_status_app.py
+        dest: /usr/local/bin/ops_dashboard_incidents.py
+        owner: root
+        group: root
+        mode: "0755"
+      register: incidents_app_script
+
+    - name: Deploy incident-agent status app environment file
+      copy:
+        dest: /etc/ops-dashboard-incidents.env
+        content: |
+          INCIDENT_AGENT_URL={{ ops_dashboard_incident_agent_url }}
+        owner: root
+        group: root
+        mode: "0644"
+      register: incidents_app_env
+
+    - name: Deploy incident-agent status app systemd unit
+      copy:
+        dest: /etc/systemd/system/ops-dashboard-incidents.service
+        content: |
+          [Unit]
+          Description=Ops dashboard incident-agent status + controls
+          After=network.target
+
+          [Service]
+          Environment=PYTHONUNBUFFERED=1
+          EnvironmentFile=/etc/ops-dashboard-incidents.env
+          ExecStart=/usr/bin/python3 /usr/local/bin/ops_dashboard_incidents.py
+          Restart=on-failure
+          RestartSec=5
+          User=www-data
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: incidents_app_unit
+
+    - name: Reload systemd daemon (incident-agent status app)
+      systemd:
+        daemon_reload: yes
+      when: incidents_app_unit.changed
+
+    - name: Enable and start the incident-agent status app
+      systemd:
+        name: ops-dashboard-incidents
+        enabled: yes
+        state: started
+
+    - name: Restart incident-agent status app if its script or config changed
+      systemd:
+        name: ops-dashboard-incidents
+        state: restarted
+      when: incidents_app_script.changed or incidents_app_env.changed or incidents_app_unit.changed
 
   handlers:
     - name: reload nginx

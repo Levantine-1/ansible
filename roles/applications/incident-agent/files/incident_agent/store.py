@@ -76,7 +76,22 @@ CREATE TABLE IF NOT EXISTS api_usage (
     cost_usd            REAL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON api_usage(ts);
+
+-- Tier on/off switches (2026-08-24), written by the ops-dashboard control
+-- panel on `service` -- an unprivileged process on a DIFFERENT host, which
+-- is exactly why this lives in the DB the listener already owns and already
+-- handles concurrent access to, rather than a YAML file under
+-- /etc/incident-agent (root-owned, Ansible-deployed, meant to be edited by
+-- someone with repo access -- see claude.py's CONFIG_EDIT_PATTERNS comment
+-- for why config changes otherwise always go through Ansible, not a live
+-- write from a web click).
+CREATE TABLE IF NOT EXISTS toggles (
+    name     TEXT PRIMARY KEY,
+    enabled  INTEGER NOT NULL
+);
 """
+
+_DEFAULT_TOGGLES = {"claude_enabled": 1, "local_llm_enabled": 1}
 
 
 def connect():
@@ -108,6 +123,43 @@ def init():
         except sqlite3.OperationalError as e:
             if "duplicate column" not in str(e).lower():
                 raise
+        # INSERT OR IGNORE rather than a blanket seed: re-running init() (every
+        # process start) must not clobber a toggle someone already flipped via
+        # the dashboard.
+        conn.executemany(
+            "INSERT OR IGNORE INTO toggles (name, enabled) VALUES (?, ?)",
+            list(_DEFAULT_TOGGLES.items()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_toggles():
+    conn = connect()
+    try:
+        rows = conn.execute("SELECT name, enabled FROM toggles").fetchall()
+        toggles = {r["name"]: bool(r["enabled"]) for r in rows}
+        # Fall back to defaults for any toggle not yet in the table (e.g. a
+        # brand-new toggle added after this DB was first created, before its
+        # own INSERT OR IGNORE default has ever run) -- fails open the same
+        # direction the tiers already fail when genuinely unreachable.
+        for name, default in _DEFAULT_TOGGLES.items():
+            toggles.setdefault(name, bool(default))
+        return toggles
+    finally:
+        conn.close()
+
+
+def set_toggle(name, enabled):
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT INTO toggles (name, enabled) VALUES (?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET enabled=excluded.enabled",
+            (name, 1 if enabled else 0),
+        )
+        conn.commit()
     finally:
         conn.close()
 
@@ -257,6 +309,26 @@ def requeue_stale(older_than_seconds=3600):
         conn.close()
 
 
+def currently_processing(stale_after_seconds=3600):
+    """The incident currently claimed and being worked, if any -- backs the
+    dashboard's "actively processing" status (2026-08-24). Reuses
+    requeue_stale()'s own staleness threshold so a claim abandoned by a
+    crashed worker (which only gets cleaned up at the next main() startup,
+    not on a timer while running) doesn't get reported as in-flight."""
+    conn = connect()
+    try:
+        cutoff = time.time() - stale_after_seconds
+        row = conn.execute(
+            """SELECT id, ticket_id, ticket_number, alertname, host, service, claimed_at
+               FROM incidents WHERE state='running' AND claimed_at >= ?
+               ORDER BY claimed_at LIMIT 1""",
+            (cutoff,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
 def record_action(incident_id, alertname, host, action, target, result, detail=""):
     conn = connect()
     try:
@@ -335,6 +407,35 @@ def host_history(host, seconds, exclude_incident_id=None):
             (host, time.time() - seconds),
         ).fetchall()
         return [dict(r) for r in incidents], [dict(r) for r in actions]
+    finally:
+        conn.close()
+
+
+_RESOLVED_OUTCOMES = ("llm_auto_resolved", "auto_resolved", "escalated_resolved")
+
+
+def similar_incidents_other_hosts(alertname, exclude_host, seconds, limit=3):
+    """Same-alertname incidents resolved on OTHER hosts recently -- the
+    fleet-wide fallback for history_notes() when nothing on THIS host
+    matches (2026-08-24). A weaker precedent than a same-host repeat
+    (different hardware/config), so callers must present it as needing
+    independent corroboration from the current evidence, not blind reuse.
+
+    Longer lookback than host_history()'s 7 days -- fleet-wide repeats of
+    the same alert type are rarer than same-host repeats, so a shorter
+    window would too often find nothing worth surfacing.
+    """
+    conn = connect()
+    try:
+        rows = conn.execute(
+            f"""SELECT id, host, ticket_number, outcome, received_at, detail
+               FROM incidents
+               WHERE alertname=? AND host IS NOT NULL AND host != ? AND received_at >= ?
+                 AND outcome IN ({",".join("?" * len(_RESOLVED_OUTCOMES))})
+               ORDER BY received_at DESC LIMIT ?""",
+            (alertname, exclude_host, time.time() - seconds, *_RESOLVED_OUTCOMES, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 

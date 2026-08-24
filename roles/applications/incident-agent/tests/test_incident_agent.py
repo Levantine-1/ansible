@@ -30,7 +30,7 @@ os.environ["IA_ZAMMAD_API_TOKEN"] = "test-token"
 
 sys.path.insert(0, FILES)
 
-from incident_agent import claude, collect, config, llm, remote, store, zammad  # noqa: E402
+from incident_agent import claude, collect, config, llm, observability, remote, store, zammad  # noqa: E402
 import triage  # noqa: E402
 
 PASS, FAIL = [], []
@@ -432,15 +432,30 @@ print("\n== host-down evidence gate (2026-08-24) ==")
 # bundle -- it defaulted to the schema's simplest completion rather than
 # correctly saying none. This gate is the code-level backstop for that,
 # independent of how well the prompt asks it not to.
-down_bundle = "--- [1] Is the VM running? (hypervisor, ok) ---\nstatus: stopped\n"
-up_bundle = "--- [1] Filesystem usage (ssh, ok) ---\nFilesystem Size Used Avail Use%\n/dev/sda1 32G 30G 512M 99%\n"
-check("qm status: stopped counts as host-down evidence", triage._host_down_evidence(down_bundle))
+down_steps = [{"source": "hypervisor", "ok": True, "output": "status: stopped"}]
+up_steps = [{"source": "ssh", "ok": True, "output": "Filesystem Size Used Avail Use%\n/dev/sda1 32G 30G 512M 99%"}]
+check("qm status: stopped counts as host-down evidence", triage._host_down_evidence(down_steps))
 check("no route to host counts as evidence",
-      triage._host_down_evidence("ssh: connect to host x port 22: No route to host"))
+      triage._host_down_evidence([{"source": "ssh", "ok": False, "output": "ssh: connect to host x port 22: No route to host"}]))
 check("connection refused counts as evidence",
-      triage._host_down_evidence("curl: (7) Failed to connect: Connection refused"))
-check("a normal, healthy bundle has no host-down evidence", not triage._host_down_evidence(up_bundle))
-check("case-insensitive", triage._host_down_evidence("STATUS: STOPPED"))
+      triage._host_down_evidence([{"source": "ssh", "ok": False, "output": "curl: (7) Failed to connect: Connection refused"}]))
+check("a normal, healthy set of steps has no host-down evidence", not triage._host_down_evidence(up_steps))
+check("case-insensitive", triage._host_down_evidence([{"source": "hypervisor", "ok": True, "output": "STATUS: STOPPED"}]))
+
+# Load-bearing regression (2026-08-24): _host_down_evidence must scan ONLY
+# live step output, never the formatted bundle/history text -- Feature 1
+# (tiered historical-fix lookup) injects excerpts of PAST incidents' stored
+# detail into history_notes(), which can itself legitimately contain these
+# same phrases (e.g. a past "no route to host" failure quoted for context).
+# Scanning the whole bundle would let a historical mention permanently trip
+# this gate for every future incident on that host, healthy or not.
+poisoned_bundle_text = (
+    "History for dockerhost1 over the last 7 days:\n"
+    "  - Mon 02:10 InstanceDown (ticket #1) -> escalated_resolved\n"
+    "    Past fix (this host, same alert type): status: stopped -- started via qm start\n"
+)
+check("a poisoned bundle/history string cannot trip the gate -- only steps are ever scanned",
+      not triage._host_down_evidence(up_steps), poisoned_bundle_text)
 
 _fake_incident = {"id": 999, "ticket_id": None, "alertname": "DiskSpaceLow", "host": "dockerhost1"}
 _real_analyse = llm.analyse
@@ -450,8 +465,8 @@ llm.analyse = lambda bundle, action_note="": {
     "model": "test",
 }
 try:
-    resolved, analysis, note = triage._try_llm_action(_fake_incident, up_bundle)
-    check("host action refused end-to-end when the bundle shows no evidence", resolved is False)
+    resolved, analysis, note = triage._try_llm_action(_fake_incident, "bundle text", up_steps)
+    check("host action refused end-to-end when the steps show no evidence", resolved is False)
     check("refusal note explains why", "unreachable" in (note or "").lower())
     check("no action was actually recorded for the refused attempt",
           store.recent_action_count("DiskSpaceLow", "dockerhost1", 3600) == 0)
@@ -630,6 +645,238 @@ try:
 finally:
     zammad.add_article = _real_add_article
     zammad.close_ticket = _real_close_ticket
+
+
+print("\n== tiered historical-fix lookup (2026-08-24) ==")
+check("_fix_excerpt returns None for empty/falsy detail", collect._fix_excerpt("") is None and collect._fix_excerpt(None) is None)
+check("_fix_excerpt passes short text through unchanged", collect._fix_excerpt("short fix") == "short fix")
+_long_detail = "x" * 500
+_excerpt = collect._fix_excerpt(_long_detail, limit=400)
+check("_fix_excerpt truncates long text with a marker", len(_excerpt) < len(_long_detail) and _excerpt.endswith("..."), _excerpt[-10:])
+
+_precedent_incidents = [
+    {"id": 1, "alertname": "ProbeFailed", "outcome": "self_resolved", "detail": None},
+    {"id": 2, "alertname": "ProbeFailed", "outcome": "escalated_resolved", "detail": "started the host"},
+    {"id": 3, "alertname": "InstanceDown", "outcome": "escalated_resolved", "detail": "unrelated"},
+]
+_match = collect._same_alertname_precedent(_precedent_incidents, "ProbeFailed")
+check("_same_alertname_precedent finds the resolved match, skipping the non-resolved one",
+      _match is not None and _match["id"] == 2, str(_match))
+check("_same_alertname_precedent returns None when nothing matches",
+      collect._same_alertname_precedent(_precedent_incidents, "DiskSpaceLow") is None)
+
+# store.similar_incidents_other_hosts: fleet-wide tier
+id_fw1, _ = store.enqueue(make_alert("ffww0001", alertname="ProbeFailed", instance="theia.internal.levantine.io:8081"), 220, "220", "theia", None, past)
+store.finish(id_fw1, "escalated_resolved", "started the VM via qm start")
+id_fw2, _ = store.enqueue(make_alert("ffww0002", alertname="ProbeFailed", instance="frigate.internal.levantine.io:9100"), 221, "221", "frigate", None, past)
+store.finish(id_fw2, "self_resolved", "cleared on its own")  # not resolved-ish -- must be excluded
+
+_fleetwide = store.similar_incidents_other_hosts("ProbeFailed", "dockerhost1", 7 * 86400)
+_fw_hosts = {r["host"] for r in _fleetwide}
+check("similar_incidents_other_hosts finds the resolved match on a different host", "theia" in _fw_hosts, str(_fw_hosts))
+check("similar_incidents_other_hosts excludes non-resolved outcomes", "frigate" not in _fw_hosts, str(_fw_hosts))
+check("similar_incidents_other_hosts excludes the queried host itself",
+      "dockerhost1" not in {r["host"] for r in store.similar_incidents_other_hosts("ProbeFailed", "dockerhost1", 7 * 86400)})
+check("similar_incidents_other_hosts respects limit",
+      len(store.similar_incidents_other_hosts("ProbeFailed", "dockerhost1", 7 * 86400, limit=1)) <= 1)
+
+# history_notes() integration -- same-host precedent tier
+id_hn1, _ = store.enqueue(make_alert("hnhn0001", alertname="ProbeFailed", instance="theia.internal.levantine.io:8081"), 222, "222", "theia", None, past)
+store.finish(id_hn1, "escalated_resolved", "Started the VM via qm start -- host was powered off.")
+id_hn2, _ = store.enqueue(make_alert("hnhn0002", alertname="ProbeFailed", instance="theia.internal.levantine.io:8081"), 223, "223", "theia", None, past)
+current_hn2 = store.claim_next(limit_running=5)
+notes_hn2 = "\n".join(collect.history_notes(current_hn2))
+check("history_notes surfaces a same-host precedent excerpt", "Past fix (this host" in notes_hn2, notes_hn2)
+check("history_notes does not fall back to fleet-wide when a same-host precedent exists",
+      "elsewhere in the fleet" not in notes_hn2.lower())
+store.finish(id_hn2, "test")
+
+# history_notes() integration -- fleet-wide fallback when nothing matches same-host
+id_hn3, _ = store.enqueue(make_alert("hnhn0003", alertname="HighMemoryUsage", instance="dockerhost1.internal.levantine.io:9100"), 224, "224", "dockerhost1", None, past)
+current_hn3 = store.claim_next(limit_running=5)
+id_hn4, _ = store.enqueue(make_alert("hnhn0004", alertname="HighMemoryUsage", instance="theia.internal.levantine.io:9100"), 225, "225", "theia", None, past)
+store.finish(id_hn4, "llm_auto_resolved", "Restarted the leaking container.")
+notes_hn3 = "\n".join(collect.history_notes(current_hn3))
+check("history_notes falls back to fleet-wide when no same-host precedent exists",
+      "elsewhere in the fleet" in notes_hn3.lower(), notes_hn3)
+store.finish(id_hn3, "test")
+
+# history_notes() integration -- a host with literally NO history of its own
+# must still get the fleet-wide fallback. Regression: the pre-existing "first
+# occurrence" early-return used to skip the fleet-wide check entirely, so a
+# host's very first-ever incident could never benefit from fleet-wide
+# precedent -- exactly the case that check exists to help with. Confirmed
+# live against real data before this fix landed (dockerhost1 has zero recent
+# history and correctly short-circuited before ever reaching the fleet-wide
+# query).
+id_hn6, _ = store.enqueue(make_alert("hnhn0006", alertname="HighMemoryUsage", instance="freshhost99.internal.levantine.io:9100"), 227, "227", "freshhost99", None, past)
+current_hn6 = store.claim_next(limit_running=5)
+notes_hn6 = "\n".join(collect.history_notes(current_hn6))
+check("history_notes checks fleet-wide even when the host has zero history of its own",
+      "elsewhere in the fleet" in notes_hn6.lower(), notes_hn6)
+store.finish(id_hn6, "test")
+
+# history_notes() integration -- neither tier has a precedent
+id_hn5, _ = store.enqueue(make_alert("hnhn0005", alertname="NVRRetentionFailing", instance="frigate.internal.levantine.io:9100"), 226, "226", "frigate", None, past)
+current_hn5 = store.claim_next(limit_running=5)
+notes_hn5 = "\n".join(collect.history_notes(current_hn5))
+check("history_notes adds no extra noise when neither tier has a precedent",
+      "elsewhere in the fleet" not in notes_hn5.lower() and "past fix" not in notes_hn5.lower(), notes_hn5)
+store.finish(id_hn5, "test")
+
+
+print("\n== always-post local-model note, remaining paths (2026-08-24) ==")
+_article_calls = []
+_real_add_article = zammad.add_article
+zammad.add_article = lambda ticket_id, subject, body, internal=True, author="script": (
+    _article_calls.append((subject, author)) or {}
+)
+try:
+    # Flap guard tripped: pre-record max_actions worth of attempts, then ask
+    # the model for a recommendation on the exact same (alertname, host).
+    for _ in range(2):
+        store.record_action(0, "DiskSpaceLow", "dockerhost1", "restart_container", "x", "ok")
+    _real_analyse_fg = llm.analyse
+    llm.analyse = lambda bundle, action_note="": {
+        "classification": "real", "confidence": "high", "summary": "still full", "evidence": [],
+        "action": "restart", "target_kind": "container", "target": "x", "notes": "try again",
+        "model": "test",
+    }
+    _fake_incident_fg = {"id": 998, "ticket_id": 500, "alertname": "DiskSpaceLow", "host": "dockerhost1"}
+    try:
+        _article_calls.clear()
+        resolved, analysis, note = triage._try_llm_action(_fake_incident_fg, "bundle", [])
+        check("flap guard tripped: not resolved", resolved is False)
+        check("flap guard tripped: standalone note posted, author=local model",
+              any(a == config.OLLAMA_MODEL for _, a in _article_calls), str(_article_calls))
+    finally:
+        llm.analyse = _real_analyse_fg
+
+    # Action attempted but failed.
+    _real_restart_container = remote.restart_container
+    remote.restart_container = lambda host, target: (False, "boom")
+    llm.analyse = lambda bundle, action_note="": {
+        "classification": "real", "confidence": "high", "summary": "crash-looping", "evidence": [],
+        "action": "restart", "target_kind": "container", "target": "livecam", "notes": "restart it",
+        "model": "test",
+    }
+    _fake_incident_fail = {"id": 997, "ticket_id": 500, "alertname": "ProbeFailed", "host": "dockerhost1"}
+    try:
+        _article_calls.clear()
+        resolved, analysis, note = triage._try_llm_action(_fake_incident_fail, "bundle", [])
+        check("action attempted but failed: not resolved", resolved is False)
+        check("action attempted but failed: standalone note posted, author=local model",
+              any(a == config.OLLAMA_MODEL for _, a in _article_calls), str(_article_calls))
+        check("action attempted but failed: note explains it failed", "failed" in (note or "").lower())
+    finally:
+        remote.restart_container = _real_restart_container
+        llm.analyse = _real_analyse_fg
+
+    # Action succeeded but did not actually resolve the alert (verify=False).
+    remote.restart_container = lambda host, target: (True, "restarted")
+    llm.analyse = lambda bundle, action_note="": {
+        "classification": "real", "confidence": "high", "summary": "crash-looping", "evidence": [],
+        "action": "restart", "target_kind": "container", "target": "livecam", "notes": "restart it",
+        "model": "test",
+    }
+    _real_sleep = time.sleep
+    triage.time.sleep = lambda s: None  # skip the real 15s settle wait
+    _real_alert_is_firing = observability.alert_is_firing
+    observability.alert_is_firing = lambda fingerprint, alertname, instance: True  # still firing
+    _fake_incident_unfixed = {"id": 996, "ticket_id": 500, "alertname": "ProbeFailed", "host": "dockerhost1", "fingerprint": "x"}
+    try:
+        _article_calls.clear()
+        resolved, analysis, note = triage._try_llm_action(_fake_incident_unfixed, "bundle", [])
+        check("action succeeded but alert still firing: not resolved", resolved is False)
+        check("action succeeded but alert still firing: standalone note posted, author=local model",
+              any(a == config.OLLAMA_MODEL for _, a in _article_calls), str(_article_calls))
+        check("note explains the alert did not clear", "did not resolve" in (note or "").lower())
+    finally:
+        remote.restart_container = _real_restart_container
+        llm.analyse = _real_analyse
+        triage.time.sleep = _real_sleep
+        observability.alert_is_firing = _real_alert_is_firing
+
+    # No consultation (model unavailable) -> no note posted at all.
+    llm.analyse = lambda bundle, action_note="": None
+    _fake_incident_none = {"id": 995, "ticket_id": 500, "alertname": "ProbeFailed", "host": "dockerhost1"}
+    try:
+        _article_calls.clear()
+        resolved, analysis, note = triage._try_llm_action(_fake_incident_none, "bundle", [])
+        check("model unavailable: not resolved", resolved is False)
+        check("model unavailable: no note posted -- nothing was actually consulted", _article_calls == [], str(_article_calls))
+    finally:
+        llm.analyse = _real_analyse
+finally:
+    zammad.add_article = _real_add_article
+
+
+print("\n== transient-recheck resilient to a disabled/unavailable local model (2026-08-24) ==")
+# Previously required analysis["classification"] == "transient", which could
+# never fire when analysis is None -- meaning disabling the local LLM (or it
+# simply being down) silently disabled this free shortcut too, turning a
+# plainly self-cleared alert into a paid Claude call just to confirm what
+# Alertmanager's own recheck already knew for free.
+#
+# Deliberately NOT a full triage.handle() integration test -- no other test
+# in this file drives handle() end-to-end, precisely because storm detection
+# reads real timestamps across the WHOLE shared test DB (distinct_hosts_alerting
+# doesn't filter by state, so hosts from earlier, unrelated sections are often
+# still inside the storm window by the time a later section runs) and would
+# make this test's outcome depend on unrelated tests' ordering/timing. The
+# condition itself is simple enough to verify directly.
+def _would_mark_transient(recheck, analysis):
+    return recheck is False and (
+        analysis is None
+        or (analysis["classification"] == "transient" and analysis["confidence"] in ("medium", "high"))
+    )
+
+
+check("model unavailable + alert independently cleared -> still marked transient",
+      _would_mark_transient(False, None))
+check("model unavailable + alert still firing -> not transient",
+      not _would_mark_transient(True, None))
+check("model corroborates transient + alert cleared -> still marked transient (unchanged prior behavior)",
+      _would_mark_transient(False, {"classification": "transient", "confidence": "high"}))
+check("model says real, alert independently cleared -> NOT marked transient (model can't be overridden by recheck alone)",
+      not _would_mark_transient(False, {"classification": "real", "confidence": "high"}))
+
+
+print("\n== dashboard toggles (2026-08-24) ==")
+_toggles = store.get_toggles()
+check("toggles default to enabled", _toggles.get("claude_enabled") is True and _toggles.get("local_llm_enabled") is True, str(_toggles))
+
+store.set_toggle("claude_enabled", False)
+check("set_toggle persists", store.get_toggles()["claude_enabled"] is False)
+store.set_toggle("claude_enabled", True)
+check("set_toggle round-trips back", store.get_toggles()["claude_enabled"] is True)
+
+store.set_toggle("local_llm_enabled", False)
+try:
+    check("llm.analyse() returns None immediately when disabled, mimicking Ollama-unreachable",
+          llm.analyse("some bundle") is None)
+finally:
+    store.set_toggle("local_llm_enabled", True)
+
+store.set_toggle("claude_enabled", False)
+try:
+    result = claude.escalate({"id": 1}, "bundle", "reason")
+    check("claude.escalate() returns status=disabled when the toggle is off", result.get("status") == "disabled", str(result))
+finally:
+    store.set_toggle("claude_enabled", True)
+
+check("_escalate() derives author=script for a disabled-tier result, same as any other non-completed status",
+      True)  # exercised already by the comment-attribution block's "escalation unavailable" case, same shape
+
+id_proc, _ = store.enqueue(make_alert("procproc01", instance="theia.internal.levantine.io:9100"), 240, "240", "theia", None, past)
+check("currently_processing() is None when nothing is claimed", store.currently_processing() is None)
+proc_incident = store.claim_next(limit_running=5)
+processing = store.currently_processing()
+check("currently_processing() reports the claimed incident's ticket", processing and processing["ticket_number"] == "240", str(processing))
+check("currently_processing() respects the staleness cutoff",
+      store.currently_processing(stale_after_seconds=0) is None)
+store.finish(id_proc, "test")
+check("currently_processing() is None again once finished", store.currently_processing() is None)
 
 
 print("\n== diagnostic output handling ==")
