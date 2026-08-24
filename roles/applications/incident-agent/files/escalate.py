@@ -100,8 +100,18 @@ def main():
     # different state than the same investigation run automatically would.
     # Same author derivation as _escalate() too: Claude only gets credit for
     # content it actually wrote ("completed"), not for a script message
-    # reporting that it didn't run.
-    author = "claude" if result.get("status") == "completed" else "script"
+    # reporting that it didn't run -- labeled with the actual model name and
+    # the specific skip reason respectively, not the bare words "claude"/
+    # "script", matching triage.py's own attribution.
+    _skip_labels = {
+        "disabled": "script: escalation gate (disabled via dashboard)",
+        "unavailable": "script: escalation gate (Claude tier unavailable)",
+        "budget_exhausted": "script: escalation gate (monthly budget exhausted)",
+        "error": "script: escalation gate (error)",
+    }
+    author = config.ANTHROPIC_MODEL if result.get("status") == "completed" else _skip_labels.get(
+        result.get("status"), "script: escalation gate"
+    )
     ticket_id = incident.get("ticket_id")
     if ticket_id:
         try:

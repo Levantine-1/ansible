@@ -607,7 +607,9 @@ try:
     check("explicit local-model author is forwarded, not the default", _article_calls == [("article", config.OLLAMA_MODEL)])
 
     # _escalate()'s status-based derivation: Claude only gets credit for
-    # content it actually wrote. Unavailable (status != completed) -> script.
+    # content it actually wrote. Unavailable (status != completed) -> a
+    # specific script label naming WHY escalation didn't run, not the bare
+    # word "script" (2026-08-24).
     _article_calls.clear()
     _real_claude_escalate2 = claude.escalate
     claude.escalate = lambda incident, bundle, reason: {
@@ -616,35 +618,106 @@ try:
     try:
         fake_incident_banner = {"id": 9002, "ticket_id": 999, "alertname": "ProbeFailed", "host": "theia"}
         triage._escalate(fake_incident_banner, "bundle", reason="test")
-        check("escalation unavailable: banner author is script, not claude", _article_calls == [("article", "script")])
+        check("escalation unavailable: banner names the specific reason, not bare 'script'",
+              _article_calls == [("article", "script: escalation gate (Claude tier unavailable)")], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
 
-    # Completed and resolved -> close_ticket gets author=claude.
+    # Different skip reasons get different labels.
+    _article_calls.clear()
+    claude.escalate = lambda incident, bundle, reason: {"status": "budget_exhausted", "detail": "over budget"}
+    try:
+        triage._escalate(fake_incident_banner, "bundle", reason="test")
+        check("escalation skipped for budget: banner names that specifically",
+              _article_calls == [("article", "script: escalation gate (monthly budget exhausted)")], str(_article_calls))
+    finally:
+        claude.escalate = _real_claude_escalate2
+
+    # Completed and resolved -> close_ticket gets author=the actual Claude model name.
     _article_calls.clear()
     claude.escalate = lambda incident, bundle, reason: {
         "status": "completed", "resolved": True, "rca": "fixed it", "state": {},
     }
     try:
         triage._escalate(fake_incident_banner, "bundle", reason="test")
-        check("escalation resolved: close_ticket gets author=claude", _article_calls == [("close", "claude")])
+        check("escalation resolved: close_ticket gets author=the configured Claude model name",
+              _article_calls == [("close", config.ANTHROPIC_MODEL)], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
 
-    # Completed but unresolved -> _note gets author=claude too (Claude wrote
-    # this content, it just didn't fix anything).
+    # Completed but unresolved -> _note gets the same real model name too
+    # (Claude wrote this content, it just didn't fix anything).
     _article_calls.clear()
     claude.escalate = lambda incident, bundle, reason: {
         "status": "completed", "resolved": False, "rca": "could not fix it", "state": {},
     }
     try:
         triage._escalate(fake_incident_banner, "bundle", reason="test")
-        check("escalation completed-unresolved: article gets author=claude", _article_calls == [("article", "claude")])
+        check("escalation completed-unresolved: article gets author=the configured Claude model name",
+              _article_calls == [("article", config.ANTHROPIC_MODEL)], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
 finally:
     zammad.add_article = _real_add_article
     zammad.close_ticket = _real_close_ticket
+
+
+print("\n== split rule-success documentation (2026-08-24) ==")
+# Regression test grounded in a real ticket (#16100): a matched
+# restart_allowlist.yml rule's fact record and the model's own retrospective
+# narrative used to be ONE note under a single "script" banner, even though
+# the narrative carried the model's own signature at the bottom -- confusing
+# about who actually wrote what. _document_rule_success() now posts them
+# as two separately-attributed notes.
+_article_calls = []
+_real_add_article = zammad.add_article
+zammad.add_article = lambda ticket_id, subject, body, internal=True, author="script": (
+    _article_calls.append((subject, author, body)) or {}
+)
+_analyse_contexts = []
+_real_analyse_drs = llm.analyse
+
+
+def _tracking_analyse_drs(bundle, action_note=""):
+    _analyse_contexts.append(action_note)
+    return {
+        "classification": "real", "confidence": "high", "summary": "restarted theia", "evidence": [],
+        "action": "none", "target_kind": "none", "target": "", "notes": "Restarted theia because qm status showed stopped.",
+        "model": "test",
+    }
+
+
+llm.analyse = _tracking_analyse_drs
+try:
+    _drs_incident = {"id": 9010, "ticket_id": 999, "alertname": "InstanceDown", "host": "theia"}
+    triage._document_rule_success(_drs_incident, "InstanceDown", "theia", "restart_host", "bundle", "Applied `restart_host`...")
+    check("two separate notes posted, not one merged note", len(_article_calls) == 2, str(_article_calls))
+    fact_subject, fact_author, fact_body = _article_calls[0]
+    narrative_subject, narrative_author, narrative_body = _article_calls[1]
+    check("fact-record note names the specific rule, not bare 'script'",
+          fact_author == "script: restart_allowlist.yml rule (InstanceDown/theia -> restart_host)", fact_author)
+    check("narrative note is attributed to the local model by name",
+          narrative_author == config.OLLAMA_MODEL, narrative_author)
+    check("narrative note's subject is clearly distinct from the fact record's",
+          fact_subject != narrative_subject, str((fact_subject, narrative_subject)))
+    check("the model was told the action already happened, not asked to recommend one",
+          "ALREADY been executed" in _analyse_contexts[0], _analyse_contexts[0])
+    check("the model was told to use past tense / confirming language",
+          "past tense" in _analyse_contexts[0].lower(), _analyse_contexts[0])
+finally:
+    llm.analyse = _real_analyse_drs
+
+# When the model isn't actually reachable (unavailable or disabled), no
+# narrative note should post -- the fact record alone already documents what
+# happened, and a placeholder note attributed to nobody would just be noise.
+_article_calls.clear()
+llm.analyse = lambda bundle, action_note="": None
+try:
+    triage._document_rule_success(_drs_incident, "ProbeFailed", "dockerhost1", "restart_container", "bundle", "Applied...")
+    check("model unavailable: only the fact record posts, no narrative note", len(_article_calls) == 1, str(_article_calls))
+finally:
+    llm.analyse = _real_analyse_drs
+    zammad.add_article = _real_add_article
 
 
 print("\n== tiered historical-fix lookup (2026-08-24) ==")
@@ -865,8 +938,8 @@ try:
 finally:
     store.set_toggle("claude_enabled", True)
 
-check("_escalate() derives author=script for a disabled-tier result, same as any other non-completed status",
-      True)  # exercised already by the comment-attribution block's "escalation unavailable" case, same shape
+check("_escalate() derives a specific 'script: escalation gate (...)' label for a disabled-tier result",
+      True)  # exercised already by the comment-attribution block's escalation-skip cases, same shape
 
 id_proc, _ = store.enqueue(make_alert("procproc01", instance="theia.internal.levantine.io:9100"), 240, "240", "theia", None, past)
 check("currently_processing() is None when nothing is claimed", store.currently_processing() is None)

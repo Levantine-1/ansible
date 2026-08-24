@@ -367,8 +367,18 @@ def _escalate(incident, bundle_text, reason, extra_note=None):
 
     # Claude only gets credit for content it actually wrote -- "completed"
     # means it ran and produced this body; anything else (no API key, budget
-    # exhausted, an error) is a script message reporting that it didn't.
-    author = "claude" if result["status"] == "completed" else "script"
+    # exhausted, disabled via the dashboard toggle, an error) is a script
+    # message reporting that it didn't, labeled with the specific reason
+    # rather than the bare word "script" so it's clear at a glance why.
+    _skip_labels = {
+        "disabled": "script: escalation gate (disabled via dashboard)",
+        "unavailable": "script: escalation gate (Claude tier unavailable)",
+        "budget_exhausted": "script: escalation gate (monthly budget exhausted)",
+        "error": "script: escalation gate (error)",
+    }
+    author = config.ANTHROPIC_MODEL if result["status"] == "completed" else _skip_labels.get(
+        result["status"], "script: escalation gate"
+    )
 
     if result["status"] != "completed":
         _note(ticket_id, "Escalation skipped", body, author=author)
@@ -463,7 +473,7 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
                 f"and resolve normally if it answers again. A hypervisor being unreachable is "
                 f"physical, not something remote tooling (including Claude) can fix -- if it is "
                 f"still unreachable after that, this is flagged for a human rather than escalated."
-            ))
+            ), author="script: hypervisor-retry loop")
         _tag(ticket_id, "auto-retry")
         log(
             f"incident {incident['id']}: hypervisor for {host} unreachable, requeued for retry "
@@ -478,7 +488,7 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
         f"hypervisor is a physical/infrastructure problem, and Claude's tools would hit the exact "
         f"same wall over the same network. This needs a human. The ticket will close automatically "
         f"once the underlying alert clears on its own."
-    ))
+    ), author="script: hypervisor-retry loop")
     _tag(ticket_id, "needs-human")
     _tag(ticket_id, "physical-intervention")
     store.finish(incident["id"], "unfixable_remotely", f"hypervisor unreachable after {retry_cfg['max_retries']} retries")
@@ -502,6 +512,7 @@ def handle(incident):
             "This alert is about the host running the incident agent, which is excluded from its "
             "own triage: if it is genuinely down it cannot investigate, and if it is up the alert "
             "is stale. This needs a human.",
+            author="script: self-exclusion check",
         )
         _tag(ticket_id, "needs-human")
         store.finish(incident["id"], "self_excluded")
@@ -517,6 +528,7 @@ def handle(incident):
             f"raised, so no investigation was performed and nothing was restarted.\n\n"
             f"No diagnostics were collected deliberately -- there was nothing left to collect, and "
             f"skipping SSH and inference here is most of why running this automatically is cheap.",
+            author="script: grace-period check",
         )
         _tag(ticket_id, "auto-transient")
         store.finish(incident["id"], "self_resolved")
@@ -554,6 +566,7 @@ def handle(incident):
                 f"No action was taken on this host: when this many hosts fail together the cause is "
                 f"usually shared (a hypervisor, the network, DNS), and restarting individual guests "
                 f"treats the symptom while destroying evidence.",
+                author="script: storm detector",
             )
             _tag(ticket_id, "storm-child")
             store.finish(incident["id"], "storm_child", parent_ticket_id=parent.get("ticket_id"))
@@ -583,7 +596,7 @@ def handle(incident):
     notes.extend(collect.history_notes(incident))
 
     bundle = collect.format_bundle(incident, steps, notes)
-    _note(ticket_id, f"Automated diagnostics -- {alertname}", bundle)
+    _note(ticket_id, f"Automated diagnostics -- {alertname}", bundle, author="script: diagnostic collector")
 
     # --- Disaster check: deterministic override -------------------------
     # Only checked when there's already a sign of real trouble -- the
@@ -604,7 +617,7 @@ def handle(incident):
             "only spend money confirming that. Left for a human -- this needs physical "
             "intervention, not more automation. The ticket will close automatically once the "
             "underlying alert clears on its own."
-        ))
+        ), author="script: connectivity check")
         _tag(ticket_id, "needs-human")
         _tag(ticket_id, "physical-intervention")
         store.finish(incident["id"], "unfixable_remotely", "no external connectivity")
@@ -729,7 +742,7 @@ def handle(incident):
                     "available (local model unavailable or disabled) -- resolved on that "
                     "deterministic signal alone."
                 )
-                author, summary = "script", "self-resolved (no model consulted)"
+                author, summary = "script: transient-recheck (Alertmanager confirmed cleared)", "self-resolved (no model consulted)"
             _note(ticket_id, "Assessed as transient", detail, author=author)
             _tag(ticket_id, "auto-transient")
             store.finish(incident["id"], "transient", summary[:2000])
@@ -851,9 +864,24 @@ def handle(incident):
         )
         return
 
-    # Restarted and either verified healthy, or no verification configured.
-    analysis = llm.analyse(bundle, action_note=f"Action already taken automatically: {action_note}")
-    narrative = llm.format_analysis(analysis) or llm.fallback_summary("no response from Ollama")
+    _document_rule_success(incident, alertname, host, action, bundle, action_note)
+
+
+def _document_rule_success(incident, alertname, host, action, bundle, action_note):
+    """Document a restart_allowlist.yml rule's action after it ran and
+    verified healthy (or had no verification configured) -- pulled out of
+    handle() as its own function purely for testability, matching
+    _post_llm_finding()'s precedent.
+
+    Posts two separate notes, not one merged note (2026-08-24) -- the fact
+    record (what the rule did) and the model's own retrospective narrative
+    (why, in its own words) are genuinely different authors, and folding them
+    into one note under a single banner was exactly the confusion a real
+    ticket (#16100) surfaced: the banner said "script" while the body also
+    carried the model's own signature at the bottom, with no way to tell
+    where one author's contribution ended and the other's began.
+    """
+    ticket_id = incident.get("ticket_id")
 
     # The ticket is left open on purpose rather than closed here. Alertmanager
     # closes it via zammad_relay.py when the alert actually clears, which is a
@@ -863,14 +891,42 @@ def handle(incident):
     _note(
         ticket_id,
         f"Auto-resolved -- {action} on {host}",
-        f"{action_note}\n\n{narrative}\n\n"
+        f"{action_note}\n\n"
         f"This ticket is left open deliberately: Alertmanager closes it automatically once the "
         f"alert clears, so it staying open means monitoring has not yet confirmed the fix.",
         internal=False,
+        author=f"script: restart_allowlist.yml rule ({alertname}/{host} -> {action})",
     )
     _tag(ticket_id, "auto-resolved")
     store.finish(incident["id"], "auto_resolved", action_note[:2000])
     log(f"incident {incident['id']} auto-resolved via {action} on {host}")
+
+    # Retrospective narrative, the model's own separate note -- deliberately
+    # told explicitly that the action already ran and was verified, since the
+    # default prompt framing ("what a human should check or do next") produced
+    # confusingly forward-looking language here otherwise. Confirmed live,
+    # ticket #16100: "A restart may resolve the issue" for a restart that had
+    # already happened and already verified healthy one paragraph above it.
+    retrospective_context = (
+        f"The `{action}` action shown below has ALREADY been executed and verified as part of "
+        f"handling this incident -- you are not recommending anything, you are writing a short "
+        f"retrospective summary of what was done and why. Use past tense and confirming language "
+        f"(\"restarted the host because X\", not \"a restart may help\"). Set action to \"none\": "
+        f"there is nothing left to recommend. If the diagnostic bundle's History section shows a "
+        f"past incident on this host was resolved the same way, say so explicitly and cite its "
+        f"ticket number.\n\n"
+        f"Action already taken automatically: {action_note}"
+    )
+    analysis = llm.analyse(bundle, action_note=retrospective_context)
+    if analysis:
+        # Nothing posted when the model wasn't actually reached (unavailable
+        # or disabled) -- the fact-record note above already fully documents
+        # what happened; a placeholder "no response from Ollama" note here
+        # would just be noise attributed to nobody.
+        _note(
+            ticket_id, f"Local model: retrospective summary -- {action} on {host}",
+            llm.format_analysis(analysis), author=config.OLLAMA_MODEL,
+        )
 
 
 def main():
@@ -901,6 +957,7 @@ def main():
                     "Automated triage failed",
                     f"The incident agent hit an unexpected error and could not complete triage:\n\n"
                     f"```\n{type(e).__name__}: {e}\n```\n\nThis ticket needs a human.",
+                    author="script: worker error handler",
                 )
                 _tag(incident.get("ticket_id"), "needs-human")
                 store.finish(incident["id"], "error", f"{type(e).__name__}: {e}")
