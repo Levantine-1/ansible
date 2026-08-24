@@ -125,23 +125,44 @@ def _link_related(incident):
     return linked
 
 
+def _poll_until_healthy(check_fn, interval_seconds=15, max_wait_seconds=120):
+    """Poll `check_fn()` (returning (ok, detail)) periodically rather than a
+    single blind sleep-then-check, stopping as soon as it reports healthy or
+    max_wait_seconds elapses (2026-08-24).
+
+    Confirmed live as a real, costly bug (ticket #16103, $0.60): theia was
+    fully powered off, so its restart_host rule fell through to `qm start`
+    -- a cold boot (cloud-init, several services, then pm2 resurrecting the
+    app processes) that Claude's own follow-up investigation measured at
+    60-90 seconds end to end. A single 15s settle-then-check caught it mid-
+    boot, read "Connection refused" as a genuine failure, and escalated for
+    something that would have come up on its own within another ~30s.
+    Polling means a fast recovery (a container bounce) still resolves in one
+    or two checks, and a slow one (a VM cold boot) gets the time it
+    legitimately needs, without having to guess and hardcode a single "long
+    enough" wait per rule.
+    """
+    deadline = time.time() + max_wait_seconds
+    while True:
+        time.sleep(interval_seconds)
+        ok, detail = check_fn()
+        if ok or time.time() >= deadline:
+            return ok, detail
+
+
 def _verify(rule, incident):
     """Check whether an action actually fixed the problem."""
     verify = rule.get("verify") or {}
     kind = verify.get("type")
-    # Services rarely come back instantly; without a settle the check races the
-    # restart and reports a false failure, which would escalate a fix that
-    # actually worked.
-    time.sleep(int(verify.get("settle_seconds", 15)))
+    interval = int(verify.get("settle_seconds", 15))
+    max_wait = int(verify.get("max_wait_seconds", 120))
 
     if kind == "http":
-        ok, detail = observability.http_probe(verify.get("url", ""))
-        return ok, detail
+        return _poll_until_healthy(lambda: observability.http_probe(verify.get("url", "")), interval, max_wait)
     if kind == "probe_target":
         instance = incident.get("instance", "")
         if instance.startswith("http"):
-            ok, detail = observability.http_probe(instance)
-            return ok, detail
+            return _poll_until_healthy(lambda: observability.http_probe(instance), interval, max_wait)
         return None, "(probe_target verification requested but instance is not a URL)"
     return None, "(no verification configured for this rule)"
 
@@ -311,19 +332,20 @@ def _try_llm_action(incident, bundle, steps, extra_context=None, rule_for_verify
     if rule_for_verify:
         verified, verify_detail = _verify(rule_for_verify, incident)
     else:
-        # No rule to borrow a verify: block from -- settle, then ask
-        # Alertmanager directly, the same signal the grace period already
-        # trusts for "is this actually still a problem."
-        time.sleep(15)
-        firing_after = observability.alert_is_firing(
-            incident.get("fingerprint"), alertname, incident.get("instance")
-        )
-        verified = firing_after is False
-        verify_detail = (
-            "alert cleared" if verified
-            else "still firing" if firing_after
-            else "could not confirm (Alertmanager unreachable)"
-        )
+        # No rule to borrow a verify: block from -- poll Alertmanager
+        # directly (same reasoning as _verify()'s own polling: a host-level
+        # start/restart can be a cold boot, not settled in one 15s check).
+        def _check():
+            firing_after = observability.alert_is_firing(
+                incident.get("fingerprint"), alertname, incident.get("instance")
+            )
+            return firing_after is False, (
+                "alert cleared" if firing_after is False
+                else "still firing" if firing_after
+                else "could not confirm (Alertmanager unreachable)"
+            )
+
+        verified, verify_detail = _poll_until_healthy(_check)
 
     action_note_text = (
         f"Local model recommended: {action} {kind} `{target or host}` -- {analysis['notes']}\n"
@@ -353,9 +375,53 @@ def _try_llm_action(incident, bundle, steps, extra_context=None, rule_for_verify
     return True, analysis, action_note_text
 
 
-def _escalate(incident, bundle_text, reason, extra_note=None):
-    """Hand off to Sonnet and record whatever comes back."""
+def _escalate(incident, bundle_text, reason, extra_note=None, analysis=None):
+    """Hand off to Sonnet and record whatever comes back.
+
+    As of 2026-08-24, per explicit request, EVERY escalation passes through
+    here first for the local model's classification -- with real veto power,
+    not just commentary. `analysis`, if the caller already obtained one this
+    same incident (the no-rule/rule-failed/verify-failed fallbacks,
+    storm-parent's scope check), is reused rather than asking again for no
+    new information. Callers with none of those in scope -- critical/
+    unknown-host, flap-guard-tripped, policy-refused, unmapped-host, today's
+    zero-consultation paths -- get a fresh call here, unconditionally, so
+    every escalation path is covered uniformly rather than special-cased.
+
+    Veto: if the model classifies this as transient with real confidence AND
+    a fresh Alertmanager recheck independently confirms the alert has
+    actually cleared, the escalation is skipped entirely and the incident
+    resolves as transient instead -- the same dual-signal bar (model opinion
+    + deterministic confirmation) the no-rule branch's own transient-recheck
+    already requires, generalized here rather than trusting the model's
+    classification alone (confirmed unreliable alone, more than once this
+    session, for other judgment calls). A `None` analysis (model unavailable
+    or disabled) has nothing to veto with -- escalation proceeds, same
+    fail-open direction used everywhere else this session for that case.
+    """
     ticket_id = incident.get("ticket_id")
+
+    if analysis is None:
+        analysis = llm.analyse(bundle_text, action_note=(
+            "This incident is about to be escalated to Claude (a paid tier) unless the evidence "
+            "gives a specific reason it doesn't need to be. Classify it and explain your reasoning "
+            "as you normally would."
+        ))
+    if analysis:
+        _post_llm_finding(ticket_id, "Local model: escalation review", None, analysis)
+
+        if (
+            analysis["classification"] == "transient"
+            and analysis["confidence"] in ("medium", "high")
+            and observability.alert_is_firing(
+                incident.get("fingerprint"), incident.get("alertname"), incident.get("instance")
+            ) is False
+        ):
+            _tag(ticket_id, "auto-transient")
+            store.finish(incident["id"], "transient", analysis["summary"][:2000])
+            log(f"incident {incident['id']}: local model vetoed escalation -- transient, Alertmanager confirms cleared")
+            return
+
     log(f"escalating incident {incident['id']}: {reason}")
     _tag(ticket_id, "auto-escalated")
 
@@ -405,7 +471,7 @@ def _escalate(incident, bundle_text, reason, extra_note=None):
         store.finish(incident["id"], "escalated_unresolved", result.get("rca", "")[:2000], escalated=True)
 
 
-def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
+def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None, analysis=None):
     """The routine-vs-disaster gate (2026-08-24), used wherever an
     unconditional _escalate() call used to sit for the critical-host,
     no-rule, and rule-failed paths.
@@ -446,12 +512,15 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None):
     is checked once, earlier in handle(), before this function is ever
     reached -- by the time control gets here, connectivity is already known
     to be fine.
+
+    `analysis`, if the caller already has one, is forwarded to _escalate()
+    for its local-model-review/veto step -- see _escalate()'s own docstring.
     """
     host = incident.get("host")
     ticket_id = incident.get("ticket_id")
 
     if not _hypervisor_unreachable(steps):
-        _escalate(incident, bundle, reason, extra_note=extra_note)
+        _escalate(incident, bundle, reason, extra_note=extra_note, analysis=analysis)
         return
 
     retry_cfg = config.unreachable_retry_config()
@@ -652,18 +721,9 @@ def handle(incident):
             return
 
         # scope == "isolated" (or the model was unreachable/disabled and
-        # storm_analysis is None): still worth posting the local model's own
-        # reasoning as its own note before escalating, rather than letting it
-        # vanish -- matches the always-leave-a-comment rule everywhere else.
-        # Posted standalone rather than folded into the escalation note (which
-        # would just repeat the same content Claude's own note doesn't need).
-        if storm_analysis:
-            _post_llm_finding(
-                ticket_id, "Local model: storm scope assessment",
-                "Classified as isolated rather than a shared cause -- escalating per-incident.",
-                storm_analysis,
-            )
-
+        # storm_analysis is None): _escalate()'s own mandatory local-model
+        # gate posts storm_analysis as its own note (and can veto if it's
+        # actually transient) -- no need to post it again here separately.
         _escalate(
             incident,
             bundle + f"\n\n--- Other alerts in this event ---\n{summary}\n",
@@ -672,6 +732,7 @@ def handle(incident):
                 f"Investigate the shared cause (hypervisor, network, DNS) rather than the individual "
                 f"guests. Check both hypervisors first."
             ),
+            analysis=storm_analysis,
         )
         return
 
@@ -752,12 +813,13 @@ def handle(incident):
         # `note`/`analysis` are already posted as their own standalone,
         # locally-attributed note by _try_llm_action() above -- not repeated
         # here as extra_note, which would just duplicate the same content
-        # under Claude's own note.
+        # under Claude's own note. analysis is passed through so _escalate()
+        # reuses it rather than asking the model again for no new evidence.
         _escalate_or_retry(incident, bundle, steps, reason=(
             f"No restart_allowlist.yml rule covers {alertname} on {host}"
             + (f" (service {service})" if service else "")
             + ", and the local model did not recommend an action it could safely take."
-        ))
+        ), analysis=analysis)
         return
 
     # --- Flap guard -----------------------------------------------------
@@ -834,6 +896,8 @@ def handle(incident):
         # locally-attributed note by _try_llm_action() above -- action_failure_note
         # (what the deterministic RULE tried and how it failed) is the one
         # thing not covered there, so that's all extra_note needs to carry.
+        # analysis is passed through so _escalate() reuses it rather than
+        # asking the model again for no new evidence.
         _escalate_or_retry(
             incident, bundle, steps,
             reason=(
@@ -842,6 +906,7 @@ def handle(incident):
                    ", and the local model had no better recommendation.")
             ),
             extra_note=action_failure_note,
+            analysis=analysis,
         )
         return
 
@@ -854,13 +919,38 @@ def handle(incident):
     )
 
     if verified is False:
-        _escalate(
-            incident, bundle,
+        # The rule's action executed and reported success, but polled
+        # verification (see _poll_until_healthy) still came back unhealthy
+        # after waiting for it. Give the local model the same second-opinion
+        # chance the `not ok` branch above already gets, rather than
+        # escalating unconditionally -- this exact asymmetry (execution
+        # failure gets a local-model fallback, verification failure doesn't)
+        # is what let ticket #16103 through to Claude for $0.60 with zero
+        # local-model involvement or explanation.
+        verify_failure_context = (
+            f"An automated action was already attempted and reported success, but the follow-up "
+            f"health check still came back unhealthy after waiting for it.\n"
+            f"Attempted: {action} on target '{target or host}' (host {host}).\n"
+            f"Verification result: {verify_detail}\n\n"
+            f"Consider whether a different or repeated action is warranted, or whether this genuinely "
+            f"needs escalation."
+        )
+        resolved, analysis, note = _try_llm_action(
+            incident, bundle, steps, extra_context=verify_failure_context, rule_for_verify=rule
+        )
+        if resolved:
+            return
+
+        _escalate_or_retry(
+            incident, bundle, steps,
             reason=(
                 f"Automated {action} of '{target or host}' on {host} completed, but the service is "
-                f"still not healthy afterwards ({verify_detail}). The restart was not the fix."
+                f"still not healthy afterwards ({verify_detail})"
+                + (", and the local model's alternative also failed." if note else
+                   ", and the local model had no better recommendation.")
             ),
             extra_note=action_note,
+            analysis=analysis,
         )
         return
 

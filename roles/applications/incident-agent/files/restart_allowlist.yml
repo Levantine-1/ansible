@@ -15,6 +15,18 @@
 # (See config.py's may_restart() -- the criticality check runs first.)
 
 # Ordered: the first entry whose alert + host + (optional) service match wins.
+#
+# Each rule's `verify` block is polled, not checked once (2026-08-24) --
+# `settle_seconds` (default 15) is the interval between checks, and the new
+# `max_wait_seconds` (default 120) is how long to keep polling before giving
+# up, both optional per-rule overrides. Confirmed live as a real, costly bug
+# (ticket #16103, $0.60): a `restart_host` on a fully-powered-off VM is a
+# cold boot -- cloud-init, several services, then pm2 resurrecting the app
+# processes -- measured at 60-90s end to end, which a single 15s
+# settle-then-check declared "still broken" mid-boot. Polling means a fast
+# recovery (a container bounce, still typically resolving within one or two
+# checks) isn't slowed down, and a slow one (a VM cold boot) gets the time
+# it legitimately needs without every rule needing its own hand-tuned wait.
 rules:
   # --- Frigate NVR ------------------------------------------------------
   # The clearest restart-fixes-it case in the fleet: Frigate wedging its

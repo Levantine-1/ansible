@@ -510,19 +510,24 @@ claude.escalate = lambda incident, bundle, reason: (
 )
 _scope_calls = []
 _real_analyse_for_scope = llm.analyse
-
-
-def _tracking_analyse(bundle, action_note=""):
-    _scope_calls.append(action_note)
-    return _real_analyse_for_scope(bundle, action_note=action_note)
-
-
-llm.analyse = _tracking_analyse
+# A fake, not a delegate to the real llm.analyse() -- 2026-08-24: _escalate()
+# now unconditionally consults the model before every Claude call (see its
+# own docstring), so a test that used to assert "no model call made" for the
+# reachable-hypervisor case would otherwise make a real Ollama network call
+# here. "real"/"low confidence" so none of these trip the transient veto.
+llm.analyse = lambda bundle, action_note="": (
+    _scope_calls.append(action_note) or {
+        "classification": "real", "confidence": "low", "summary": "test", "evidence": [],
+        "scope": "isolated", "action": "none", "target_kind": "none", "target": "", "notes": "test",
+        "model": "test",
+    }
+)
 try:
     fake_incident_reachable = {"id": 9001, "ticket_id": None, "alertname": "ProbeFailed", "host": "theia"}
     triage._escalate_or_retry(fake_incident_reachable, "bundle text", mixed_hv_steps, reason="test reason")
     check("reachable hypervisor: escalate() called normally", len(_escalate_calls) == 1)
-    check("reachable hypervisor: no model call made", len(_scope_calls) == 0)
+    check("reachable hypervisor: _escalate()'s mandatory local-model review consulted the model",
+          len(_scope_calls) == 1, str(_scope_calls))
 
     id_unreachable, _ = store.enqueue(make_alert("ffff6666", instance="theia.internal.levantine.io:9100"), 106, "106", "theia", None, past)
     unreachable_incident = store.claim_next(limit_running=5)
@@ -558,7 +563,15 @@ exhausted_incident["retry_count"] = config.unreachable_retry_config()["max_retri
 _escalate_calls.clear()
 _scope_calls.clear()
 claude.escalate = lambda incident, bundle, reason: _escalate_calls.append(reason) or {"status": "completed", "resolved": False, "rca": "test", "state": {}}
-llm.analyse = _tracking_analyse
+# Re-armed (not left unmocked) so a regression that started calling the model
+# here would be caught rather than silently making a real network call.
+llm.analyse = lambda bundle, action_note="": (
+    _scope_calls.append(action_note) or {
+        "classification": "real", "confidence": "low", "summary": "test", "evidence": [],
+        "scope": "isolated", "action": "none", "target_kind": "none", "target": "", "notes": "test",
+        "model": "test",
+    }
+)
 try:
     triage._escalate_or_retry(exhausted_incident, "bundle text", all_failed_hv_steps, reason="test reason")
     check("retry cap exhausted: never escalates to Claude", len(_escalate_calls) == 0)
@@ -610,6 +623,15 @@ try:
     # content it actually wrote. Unavailable (status != completed) -> a
     # specific script label naming WHY escalation didn't run, not the bare
     # word "script" (2026-08-24).
+    #
+    # llm.analyse mocked to None ("model unavailable") for this whole block --
+    # these four tests are specifically about author-label correctness, not
+    # the mandatory local-model review/veto _escalate() now also does (that
+    # gets its own dedicated tests below); None keeps _escalate()'s review
+    # step a no-op so the article-call sequence these tests assert on is
+    # unchanged, and avoids a real Ollama call on every one of these four.
+    _real_analyse_banner = llm.analyse
+    llm.analyse = lambda bundle, action_note="": None
     _article_calls.clear()
     _real_claude_escalate2 = claude.escalate
     claude.escalate = lambda incident, bundle, reason: {
@@ -660,6 +682,50 @@ try:
 finally:
     zammad.add_article = _real_add_article
     zammad.close_ticket = _real_close_ticket
+    llm.analyse = _real_analyse_banner
+
+
+print("\n== polling verification (2026-08-24) ==")
+# Regression coverage for the ticket #16103 bug: a single blind
+# sleep-then-check declared a cold VM boot "still broken" because it checked
+# far too early (15s settle against a 60-90s boot chain). _poll_until_healthy()
+# checks periodically instead. Tiny interval/max_wait values here so this
+# runs in well under a second, not for real-world timescales.
+_poll_calls = []
+
+
+def _poll_immediately_healthy():
+    _poll_calls.append(1)
+    return True, "healthy now"
+
+
+ok, detail = triage._poll_until_healthy(_poll_immediately_healthy, interval_seconds=0.01, max_wait_seconds=0.05)
+check("_poll_until_healthy returns as soon as healthy, not waiting for max_wait",
+      ok is True and len(_poll_calls) == 1, str(_poll_calls))
+
+_poll_calls.clear()
+
+
+def _poll_never_healthy():
+    _poll_calls.append(1)
+    return False, "still broken"
+
+
+ok, detail = triage._poll_until_healthy(_poll_never_healthy, interval_seconds=0.02, max_wait_seconds=0.07)
+check("_poll_until_healthy gives up at max_wait_seconds rather than polling forever", ok is False, str(_poll_calls))
+check("_poll_until_healthy actually polled more than once before giving up", len(_poll_calls) >= 2, str(_poll_calls))
+
+_poll_calls.clear()
+
+
+def _poll_healthy_on_third_try():
+    _poll_calls.append(1)
+    return len(_poll_calls) >= 3, f"attempt {len(_poll_calls)}"
+
+
+ok, detail = triage._poll_until_healthy(_poll_healthy_on_third_try, interval_seconds=0.01, max_wait_seconds=5)
+check("_poll_until_healthy recovers mid-poll -- the exact #16103 scenario (healthy shortly after the first check)",
+      ok is True and len(_poll_calls) == 3, str(_poll_calls))
 
 
 print("\n== split rule-success documentation (2026-08-24) ==")
@@ -852,8 +918,16 @@ try:
         "action": "restart", "target_kind": "container", "target": "livecam", "notes": "restart it",
         "model": "test",
     }
-    _real_sleep = time.sleep
-    triage.time.sleep = lambda s: None  # skip the real 15s settle wait
+    # _poll_until_healthy (2026-08-24) keeps checking until max_wait_seconds
+    # (default 120s) actually elapses in wall-clock time -- faking time.sleep
+    # to a no-op does NOT skip that wait, since the deadline check uses
+    # time.time(), not a count of sleep calls; it would just spin at 100% CPU
+    # for the full 120 real seconds instead of sleeping through them. Mock
+    # _poll_until_healthy itself instead: this test is about _try_llm_action's
+    # handling of a failed verification, not about polling behavior, which
+    # has its own dedicated tests.
+    _real_poll = triage._poll_until_healthy
+    triage._poll_until_healthy = lambda check_fn, interval_seconds=15, max_wait_seconds=120: check_fn()
     _real_alert_is_firing = observability.alert_is_firing
     observability.alert_is_firing = lambda fingerprint, alertname, instance: True  # still firing
     _fake_incident_unfixed = {"id": 996, "ticket_id": 500, "alertname": "ProbeFailed", "host": "dockerhost1", "fingerprint": "x"}
@@ -867,7 +941,7 @@ try:
     finally:
         remote.restart_container = _real_restart_container
         llm.analyse = _real_analyse
-        triage.time.sleep = _real_sleep
+        triage._poll_until_healthy = _real_poll
         observability.alert_is_firing = _real_alert_is_firing
 
     # No consultation (model unavailable) -> no note posted at all.
@@ -950,6 +1024,113 @@ check("currently_processing() respects the staleness cutoff",
       store.currently_processing(stale_after_seconds=0) is None)
 store.finish(id_proc, "test")
 check("currently_processing() is None again once finished", store.currently_processing() is None)
+
+
+print("\n== mandatory local-model review before every escalation (2026-08-24) ==")
+# Ticket #16103: theia's restart_host rule ran and succeeded, but a
+# premature verification check misread a mid-boot VM as broken and escalated
+# straight to Claude ($0.60) with zero local-model involvement or
+# explanation. Per explicit steer, _escalate() -- the one function every
+# escalation path funnels through -- now ALWAYS gets the local model's
+# classification first, with real veto power, not just commentary.
+_review_article_calls = []
+_real_add_article_rev = zammad.add_article
+zammad.add_article = lambda ticket_id, subject, body, internal=True, author="script": (
+    _review_article_calls.append((subject, author)) or {}
+)
+_real_claude_escalate_rev = claude.escalate
+_real_alert_is_firing_rev = observability.alert_is_firing
+_real_analyse_rev = llm.analyse
+try:
+    # Fresh consultation, transient + confident + Alertmanager independently
+    # confirms cleared -> vetoed, no Claude call at all.
+    _review_article_calls.clear()
+    _claude_call_count = []
+    claude.escalate = lambda incident, bundle, reason: (_claude_call_count.append(1) or {"status": "completed", "resolved": False, "rca": "x", "state": {}})
+    observability.alert_is_firing = lambda fingerprint, alertname, instance: False
+    llm.analyse = lambda bundle, action_note="": {
+        "classification": "transient", "confidence": "high", "summary": "cleared on its own", "evidence": [],
+        "scope": "isolated", "action": "none", "target_kind": "none", "target": "", "notes": "n/a", "model": "test",
+    }
+    id_veto1, _ = store.enqueue(make_alert("veto0001", instance="dockerhost1.internal.levantine.io:9100"), 300, "300", "dockerhost1", None, past)
+    veto1_incident = store.claim_next(limit_running=5)
+    triage._escalate(veto1_incident, "bundle", reason="test")
+    check("transient + Alertmanager confirms cleared: escalation vetoed, no Claude call", _claude_call_count == [])
+    conn = store.connect()
+    row_veto1 = conn.execute("SELECT state, outcome, escalated FROM incidents WHERE id=?", (id_veto1,)).fetchone()
+    conn.close()
+    check("vetoed escalation resolves as transient", row_veto1["outcome"] == "transient", str(dict(row_veto1)))
+    check("vetoed escalation is never marked escalated", row_veto1["escalated"] == 0)
+    check("local model's review is still posted as its own note even when it vetoes",
+          any(a == config.OLLAMA_MODEL for _, a in _review_article_calls), str(_review_article_calls))
+
+    # Transient per the model, but Alertmanager says it's STILL firing --
+    # veto requires both signals, not the model's opinion alone.
+    _review_article_calls.clear()
+    _claude_call_count.clear()
+    observability.alert_is_firing = lambda fingerprint, alertname, instance: True
+    id_veto2, _ = store.enqueue(make_alert("veto0002", instance="dockerhost1.internal.levantine.io:9100"), 301, "301", "dockerhost1", None, past)
+    veto2_incident = store.claim_next(limit_running=5)
+    triage._escalate(veto2_incident, "bundle", reason="test")
+    check("transient per model but Alertmanager still shows firing: escalates anyway (dual-signal bar, not model alone)",
+          _claude_call_count == [1])
+    store.finish(id_veto2, "test")
+
+    # Model unavailable (fresh call returns None) -- nothing to veto with,
+    # fails open toward escalating, same direction used everywhere else this
+    # session for "model unavailable".
+    _review_article_calls.clear()
+    _claude_call_count.clear()
+    llm.analyse = lambda bundle, action_note="": None
+    id_veto3, _ = store.enqueue(make_alert("veto0003", instance="dockerhost1.internal.levantine.io:9100"), 302, "302", "dockerhost1", None, past)
+    veto3_incident = store.claim_next(limit_running=5)
+    triage._escalate(veto3_incident, "bundle", reason="test")
+    check("model unavailable: escalates (fail open), nothing to veto with", _claude_call_count == [1])
+    # Claude's own "AI investigation" note still posts (the mocked
+    # claude.escalate() "ran" successfully) -- what must NOT appear is a note
+    # attributed to the local model specifically, since it was never reached.
+    check("model unavailable: no note attributed to the local model (it was never consulted)",
+          not any(a == config.OLLAMA_MODEL for _, a in _review_article_calls), str(_review_article_calls))
+    store.finish(id_veto3, "test")
+
+    # A pre-supplied analysis (the caller already consulted the model this
+    # incident) is reused, not re-fetched -- no redundant second Ollama call.
+    _review_article_calls.clear()
+    _claude_call_count.clear()
+    _analyse_call_count = []
+    llm.analyse = lambda bundle, action_note="": (_analyse_call_count.append(1) or None)
+    presupplied_analysis = {
+        "classification": "real", "confidence": "high", "summary": "genuinely broken", "evidence": [],
+        "scope": "isolated", "action": "none", "target_kind": "none", "target": "", "notes": "n/a", "model": "test",
+    }
+    id_veto4, _ = store.enqueue(make_alert("veto0004", instance="dockerhost1.internal.levantine.io:9100"), 303, "303", "dockerhost1", None, past)
+    veto4_incident = store.claim_next(limit_running=5)
+    triage._escalate(veto4_incident, "bundle", reason="test", analysis=presupplied_analysis)
+    check("pre-supplied analysis is reused -- llm.analyse never called again", _analyse_call_count == [])
+    check("pre-supplied real-classification analysis still escalates normally", _claude_call_count == [1])
+    check("pre-supplied analysis is still posted as its own note",
+          any(a == config.OLLAMA_MODEL for _, a in _review_article_calls), str(_review_article_calls))
+    store.finish(id_veto4, "test")
+
+    # A pre-supplied analysis that DOES qualify for veto still vetoes even
+    # though the caller obtained it earlier rather than _escalate() itself.
+    _review_article_calls.clear()
+    _claude_call_count.clear()
+    observability.alert_is_firing = lambda fingerprint, alertname, instance: False
+    transient_analysis = {
+        "classification": "transient", "confidence": "medium", "summary": "looked transient", "evidence": [],
+        "scope": "isolated", "action": "none", "target_kind": "none", "target": "", "notes": "n/a", "model": "test",
+    }
+    id_veto5, _ = store.enqueue(make_alert("veto0005", instance="dockerhost1.internal.levantine.io:9100"), 304, "304", "dockerhost1", None, past)
+    veto5_incident = store.claim_next(limit_running=5)
+    triage._escalate(veto5_incident, "bundle", reason="test", analysis=transient_analysis)
+    check("pre-supplied transient analysis still vetoes when Alertmanager also confirms cleared",
+          _claude_call_count == [])
+finally:
+    zammad.add_article = _real_add_article_rev
+    claude.escalate = _real_claude_escalate_rev
+    observability.alert_is_firing = _real_alert_is_firing_rev
+    llm.analyse = _real_analyse_rev
 
 
 print("\n== diagnostic output handling ==")
