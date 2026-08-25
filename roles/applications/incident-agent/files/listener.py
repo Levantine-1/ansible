@@ -26,6 +26,13 @@ GET /toggles and POST /toggles (the Claude/local-LLM tier switches). These
 read/write store.py directly rather than going through triage.py, which has
 no HTTP surface of its own -- this stays the one process on this host reached
 cross-host, same as it always was for alert intake.
+
+As of 2026-08-25, POST /resume is the target of a Zammad Trigger (condition:
+ticket owner changed to the incident-agent account) -- re-queues the ticket's
+most recent incident for a fresh look, for the "hand an unfixable incident to
+a human, they fix the physical problem and hand it back" flow (see
+triage.py's ZAMMAD_HUMAN_ADMIN_USER_ID assignment at the 3 unfixable_remotely
+sites, and store.requeue_by_ticket_id()).
 """
 import fcntl
 import json
@@ -36,7 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from incident_agent import config, store  # noqa: E402
+from incident_agent import config, store, zammad  # noqa: E402
 import triage  # noqa: E402 -- for _WORKER_LOCK_PATH only, to derive worker liveness
 
 
@@ -71,6 +78,41 @@ def _status_payload():
         "worker_online": _worker_online(),
         "processing": processing,
     }
+
+
+def resume(payload):
+    """Re-queue a ticket handed back to incident-agent by a human, for a
+    fresh look from scratch (2026-08-25). Called by a Zammad Trigger
+    (condition: ticket owner changed to the incident-agent account) --
+    see the /resume route's own comment for the Trigger/Webhook setup.
+
+    Returns a short status string for the log, same convention as accept().
+    """
+    ticket_id = payload.get("ticket_id")
+    if not ticket_id:
+        return "resume request had no ticket_id -- ignored"
+
+    incident_id = store.requeue_by_ticket_id(ticket_id)
+    if incident_id is None:
+        return f"resume: no incident on record for ticket {ticket_id} -- ignored"
+
+    for tag in ("needs-human", "physical-intervention"):
+        try:
+            zammad.remove_tag(ticket_id, tag)
+        except zammad.ZammadError as e:
+            log(f"resume: could not remove tag '{tag}' from ticket {ticket_id}: {e}")
+    try:
+        zammad.add_article(
+            ticket_id, "Reassigned back to incident-agent -- resuming",
+            "This ticket was handed back to incident-agent, so it's being re-queued for a fresh "
+            "look: new diagnostics, a new hypervisor/connectivity check, a new model call -- not a "
+            "continuation of whatever was tried before.",
+            author="script: resume handler",
+        )
+    except zammad.ZammadError as e:
+        log(f"resume: could not post confirmation note to ticket {ticket_id}: {e}")
+
+    return f"resumed incident {incident_id} (ticket {ticket_id})"
 
 
 def accept(payload):
@@ -119,6 +161,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(400)
             self.end_headers()
             self.wfile.write(f"bad request: {e}".encode())
+            return
+
+        if self.path == "/resume":
+            # Zammad Trigger target (2026-08-25): fires when a ticket's
+            # owner changes to the incident-agent account, meaning a human
+            # handed a previously-unfixable incident back. Same
+            # no-auth-but-harmless-if-forged reasoning as alert intake
+            # below -- a forged resume just re-queues a real incident for
+            # another (free) look, it can't fabricate one or take any
+            # action beyond what a real incident's own triage already can.
+            try:
+                status = resume(payload)
+                log(status)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(status.encode())
+            except Exception as e:  # noqa: BLE001
+                log(f"ERROR resuming: {type(e).__name__}: {e}")
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"resume-error")
             return
 
         if self.path == "/toggles":

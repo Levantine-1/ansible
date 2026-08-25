@@ -309,6 +309,38 @@ def requeue_stale(older_than_seconds=3600):
         conn.close()
 
 
+def requeue_by_ticket_id(ticket_id):
+    """Re-queue the most recent incident for a given Zammad ticket, for a
+    fresh look from scratch (2026-08-25) -- used when a human hands a
+    genuinely-unfixable incident back to the incident-agent account (see
+    listener.py's /resume route). retry_count resets to 0: a human-triggered
+    resume is a fresh look, not a continuation of the old retry budget the
+    hypervisor-retry loop was tracking. Picks the most recent row rather than
+    requiring a specific id, since a caller (a Zammad webhook) only knows the
+    ticket, not incident-agent's own internal row id.
+
+    Returns the re-queued incident's id, or None if no incident exists for
+    this ticket at all.
+    """
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT id FROM incidents WHERE ticket_id=? ORDER BY id DESC LIMIT 1",
+            (ticket_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            """UPDATE incidents SET state='queued', not_before=?, claimed_at=NULL, retry_count=0
+               WHERE id=?""",
+            (time.time(), row["id"]),
+        )
+        conn.commit()
+        return row["id"]
+    finally:
+        conn.close()
+
+
 def currently_processing(stale_after_seconds=3600):
     """The incident currently claimed and being worked, if any -- backs the
     dashboard's "actively processing" status (2026-08-24). Reuses

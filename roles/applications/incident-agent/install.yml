@@ -17,6 +17,9 @@
   hosts: IncidentAgent
   become: yes
 
+  vars_files:
+    - ../../../vault.yml
+
   vars:
     incident_agent_ollama_model: phi4-mini
     incident_agent_claude_model: claude-sonnet-5
@@ -55,6 +58,20 @@
     - name: Resolve Anthropic API key
       set_fact:
         anthropic_api_key: "{{ (anthropic_secrets | default({})).api_key | default('') }}"
+
+    # Same tolerant pattern as the Anthropic key above -- genuinely-unfixable
+    # incidents (physical/infrastructure problems) still get flagged and
+    # tagged without this, they just don't get assigned to a specific
+    # person; see _assign_to_human()'s own no-op-if-unconfigured guard.
+    - name: Retrieve the human-admin Zammad account id from HashiCorp Vault (optional)
+      block:
+        - name: Look up the human-admin secret
+          set_fact:
+            human_admin_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/zammad/human-admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      rescue:
+        - name: Continue without a human-admin account configured
+          set_fact:
+            human_admin_secrets: {}
 
     - name: Report escalation tier status
       debug:

@@ -32,6 +32,7 @@ sys.path.insert(0, FILES)
 
 from incident_agent import claude, collect, config, llm, observability, remote, store, zammad  # noqa: E402
 import triage  # noqa: E402
+import listener  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -1131,6 +1132,143 @@ finally:
     claude.escalate = _real_claude_escalate_rev
     observability.alert_is_firing = _real_alert_is_firing_rev
     llm.analyse = _real_analyse_rev
+
+
+print("\n== same-host multi-alert clustering (2026-08-25) ==")
+# theia powering off raises ProbeFailed + InstanceDown x2 within seconds --
+# generalizes the storm-child pattern to a single host instead of the whole
+# fleet. Deliberately does NOT call handle() itself (storm detection reads
+# timestamps across the whole shared test DB -- see this file's own
+# established caution about that); _try_host_cluster_child() was pulled out
+# specifically to make this testable in isolation.
+_hc_window = config.storm_config().get("window_seconds", 600)
+
+id_hc_parent, _ = store.enqueue(make_alert("hc0001", alertname="InstanceDown", instance="pi-hole.internal.levantine.io:9100"), 400, "400", "pi-hole", None, past)
+parent_hc_incident = store.claim_next(limit_running=5)
+id_hc_child, _ = store.enqueue(make_alert("hc0002", alertname="ProbeFailed", instance="pi-hole.internal.levantine.io:9100"), 401, "401", "pi-hole", None, past)
+child_hc_incident = store.claim_next(limit_running=5)
+
+_link_calls = []
+_real_link_tickets = zammad.link_tickets
+zammad.link_tickets = lambda source_number, target_id, link_type="normal": (_link_calls.append((source_number, target_id)) or {})
+_article_calls = []
+_real_add_article_hc = zammad.add_article
+zammad.add_article = lambda ticket_id, subject, body, internal=True, author="script": (
+    _article_calls.append((subject, author, body)) or {}
+)
+try:
+    was_child = triage._try_host_cluster_child(child_hc_incident, "pi-hole", "ProbeFailed", _hc_window)
+    check("second same-host incident within the window is treated as a child", was_child is True)
+    check("child links to the parent ticket", _link_calls == [("401", 400)], str(_link_calls))
+    check("child gets the redirect note, attributed to the host-cluster detector",
+          any(s == "Part of the same incident" and a == "script: host-cluster detector" for s, a, b in _article_calls),
+          str(_article_calls))
+    redirect_body = next(b for s, a, b in _article_calls if s == "Part of the same incident")
+    check("redirect note cites the parent ticket number", "#400" in redirect_body, redirect_body)
+    check("redirect note says it won't be updated further", "will not be updated further" in redirect_body, redirect_body)
+
+    conn = store.connect()
+    row_hc_child = conn.execute("SELECT state, outcome, parent_ticket_id FROM incidents WHERE id=?", (id_hc_child,)).fetchone()
+    conn.close()
+    check("child incident finishes as host_cluster_child", row_hc_child["outcome"] == "host_cluster_child", str(dict(row_hc_child)))
+    check("child incident records the parent's ticket id", row_hc_child["parent_ticket_id"] == 400, str(dict(row_hc_child)))
+finally:
+    zammad.link_tickets = _real_link_tickets
+    zammad.add_article = _real_add_article_hc
+    store.finish(id_hc_parent, "test")
+
+# A peer OUTSIDE the window is not clustered -- back-date the parent's
+# received_at so it falls outside the same-host window. Distinct host from
+# the scenario above ("hc-window-host" not "pi-hole"): store.finish() only
+# changes state/outcome, not received_at, so id_hc_parent above is still
+# "recent" on pi-hole and would otherwise leak in as an eligible parent here.
+id_hc_old, _ = store.enqueue(make_alert("hc0003", alertname="InstanceDown", instance="hc-window-host.internal.levantine.io:9100"), 402, "402", "hc-window-host", None, past)
+old_hc_incident = store.claim_next(limit_running=5)
+conn = store.connect()
+conn.execute("UPDATE incidents SET received_at=? WHERE id=?", (time.time() - _hc_window - 60, id_hc_old))
+conn.commit()
+conn.close()
+id_hc_new, _ = store.enqueue(make_alert("hc0004", alertname="ProbeFailed", instance="hc-window-host.internal.levantine.io:9100"), 403, "403", "hc-window-host", None, past)
+new_hc_incident = store.claim_next(limit_running=5)
+was_child2 = triage._try_host_cluster_child(new_hc_incident, "hc-window-host", "ProbeFailed", _hc_window)
+check("a peer outside the window is not treated as a cluster parent", was_child2 is False)
+store.finish(id_hc_old, "test")
+store.finish(id_hc_new, "test")
+
+# No eligible peer at all -- not a child.
+id_hc_lonely, _ = store.enqueue(make_alert("hc0005", alertname="InstanceDown", instance="proxysql.internal.levantine.io:9100"), 404, "404", "proxysql", None, past)
+lonely_hc_incident = store.claim_next(limit_running=5)
+was_child3 = triage._try_host_cluster_child(lonely_hc_incident, "proxysql", "InstanceDown", _hc_window)
+check("a host with no other recent incidents is never a cluster child", was_child3 is False)
+store.finish(id_hc_lonely, "test")
+
+
+print("\n== assign unfixable incidents to a human (2026-08-25) ==")
+_assign_calls = []
+_real_assign_ticket = zammad.assign_ticket
+zammad.assign_ticket = lambda ticket_id, owner_id: (_assign_calls.append((ticket_id, owner_id)) or {})
+_real_human_admin_id = config.ZAMMAD_HUMAN_ADMIN_USER_ID
+try:
+    config.ZAMMAD_HUMAN_ADMIN_USER_ID = 7
+    triage._assign_to_human(999)
+    check("_assign_to_human assigns to the configured user id", _assign_calls == [(999, 7)], str(_assign_calls))
+
+    _assign_calls.clear()
+    config.ZAMMAD_HUMAN_ADMIN_USER_ID = 0
+    triage._assign_to_human(999)
+    check("_assign_to_human no-ops when unconfigured (0)", _assign_calls == [])
+
+    _assign_calls.clear()
+    config.ZAMMAD_HUMAN_ADMIN_USER_ID = 7
+    triage._assign_to_human(None)
+    check("_assign_to_human no-ops when there's no ticket", _assign_calls == [])
+finally:
+    zammad.assign_ticket = _real_assign_ticket
+    config.ZAMMAD_HUMAN_ADMIN_USER_ID = _real_human_admin_id
+
+
+print("\n== resume on reassignment (2026-08-25) ==")
+id_resume, _ = store.enqueue(make_alert("resume001", instance="pi-hole.internal.levantine.io:9100"), 500, "500", "pi-hole", None, past)
+store.finish(id_resume, "unfixable_remotely", "no external connectivity")
+resumed_id = store.requeue_by_ticket_id(500)
+check("requeue_by_ticket_id finds and re-queues the right incident", resumed_id == id_resume, str(resumed_id))
+conn = store.connect()
+row_resumed = conn.execute("SELECT state, not_before, claimed_at, retry_count FROM incidents WHERE id=?", (id_resume,)).fetchone()
+conn.close()
+check("resumed incident is back in state=queued", row_resumed["state"] == "queued", str(dict(row_resumed)))
+check("resumed incident has claimed_at cleared", row_resumed["claimed_at"] is None)
+check("resumed incident's retry_count resets to 0", row_resumed["retry_count"] == 0)
+check("requeue_by_ticket_id returns None for a ticket with no incident on record",
+      store.requeue_by_ticket_id(999999) is None)
+store.finish(id_resume, "test")
+
+# listener.resume() end to end: re-queues, clears the needs-human/
+# physical-intervention tags, posts a confirmation note.
+id_resume2, _ = store.enqueue(make_alert("resume002", instance="pi-hole.internal.levantine.io:9100"), 501, "501", "pi-hole", None, past)
+store.finish(id_resume2, "unfixable_remotely", "no external connectivity")
+_remove_tag_calls = []
+_real_remove_tag = zammad.remove_tag
+zammad.remove_tag = lambda ticket_id, tag: (_remove_tag_calls.append((ticket_id, tag)) or {})
+_article_calls = []
+_real_add_article_resume = zammad.add_article
+zammad.add_article = lambda ticket_id, subject, body, internal=True, author="script": (
+    _article_calls.append((subject, author)) or {}
+)
+try:
+    status = listener.resume({"ticket_id": 501})
+    check("listener.resume() reports success", "resumed incident" in status, status)
+    check("listener.resume() clears both needs-human and physical-intervention tags",
+          set(_remove_tag_calls) == {(501, "needs-human"), (501, "physical-intervention")}, str(_remove_tag_calls))
+    check("listener.resume() posts a confirmation note attributed to the resume handler",
+          any(a == "script: resume handler" for s, a in _article_calls), str(_article_calls))
+    check("listener.resume() with no matching ticket is a harmless no-op",
+          "no incident on record" in listener.resume({"ticket_id": 999999}))
+    check("listener.resume() with no ticket_id at all is a harmless no-op",
+          "no ticket_id" in listener.resume({}))
+finally:
+    zammad.remove_tag = _real_remove_tag
+    zammad.add_article = _real_add_article_resume
+    store.finish(id_resume2, "test")
 
 
 print("\n== diagnostic output handling ==")

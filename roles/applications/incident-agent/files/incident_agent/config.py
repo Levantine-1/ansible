@@ -17,6 +17,11 @@ ZAMMAD_URL = os.environ.get("IA_ZAMMAD_URL", "http://service.internal.levantine.
 ZAMMAD_API_TOKEN = os.environ.get("IA_ZAMMAD_API_TOKEN", "")
 ZAMMAD_GROUP = os.environ.get("IA_ZAMMAD_GROUP", "Users")
 ZAMMAD_CUSTOMER_EMAIL = os.environ.get("IA_ZAMMAD_CUSTOMER_EMAIL", "zammad-admin@levantine.io")
+# The human-admin Zammad account (2026-08-25) -- genuinely unfixable
+# incidents (unfixable_remotely) are assigned here instead of just tagged,
+# so they show up as this person's own work rather than sitting unowned.
+# See zammad.assign_ticket() and listener.py's /resume route.
+ZAMMAD_HUMAN_ADMIN_USER_ID = int(os.environ.get("IA_ZAMMAD_HUMAN_ADMIN_USER_ID", "0"))
 
 LOKI_URL = os.environ.get("IA_LOKI_URL", "http://service.internal.levantine.io:3100").rstrip("/")
 PROMETHEUS_URL = os.environ.get("IA_PROMETHEUS_URL", "http://service.internal.levantine.io:9090/prometheus").rstrip("/")

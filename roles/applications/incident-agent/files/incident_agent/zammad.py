@@ -69,6 +69,15 @@ def add_article(ticket_id, subject, body, internal=True, author="script"):
     )
 
 
+def assign_ticket(ticket_id, owner_id):
+    """Set a ticket's owner (2026-08-25) -- used to hand a genuinely
+    unfixable incident to a human instead of just tagging it, and to detect
+    a human handing it back (see config.ZAMMAD_HUMAN_ADMIN_USER_ID and
+    listener.py's /resume route, which fires off a Zammad Trigger watching
+    for the ticket owner changing back to the incident-agent account)."""
+    return request("PUT", f"/api/v1/tickets/{ticket_id}", {"owner_id": owner_id})
+
+
 def close_ticket(ticket_id, subject, body, internal=False, author="script"):
     return request(
         "PUT",

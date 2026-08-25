@@ -81,6 +81,21 @@ def _tag(ticket_id, tag):
         log(f"could not tag ticket {ticket_id} with '{tag}': {e}")
 
 
+def _assign_to_human(ticket_id):
+    """Hand a genuinely-unfixable incident to a real person instead of just
+    tagging it (2026-08-25) -- used at the 3 unfixable_remotely sites
+    (hypervisor-retry exhausted, no external connectivity, storm classified
+    widespread). Silently a no-op if ZAMMAD_HUMAN_ADMIN_USER_ID isn't
+    configured, so this degrades gracefully rather than erroring on a fleet
+    that hasn't set up the human-admin account yet."""
+    if not ticket_id or not config.ZAMMAD_HUMAN_ADMIN_USER_ID:
+        return
+    try:
+        zammad.assign_ticket(ticket_id, config.ZAMMAD_HUMAN_ADMIN_USER_ID)
+    except zammad.ZammadError as e:
+        log(f"could not assign ticket {ticket_id} to the human-admin account: {e}")
+
+
 def _note(ticket_id, subject, body, internal=True, author="script"):
     if not ticket_id:
         log(f"no ticket to write to; would have posted: {subject}")
@@ -123,6 +138,55 @@ def _link_related(incident):
         except zammad.ZammadError as e:
             log(f"link failed for peer ticket {peer.get('ticket_id')}: {e}")
     return linked
+
+
+def _try_host_cluster_child(incident, host, alertname, window):
+    """If this incident is part of a same-host cluster with an earlier
+    ticketed peer within `window` seconds, handle it as a child (link,
+    redirect note, tag, finish) and return True -- caller should return
+    immediately. Returns False if this incident should proceed normally.
+
+    A single host outage commonly trips several distinct Prometheus targets
+    at once (confirmed repeatedly: theia powering off raises ProbeFailed,
+    InstanceDown/node_exporter, and InstanceDown/cadvisor within seconds of
+    each other) -- today each gets fully independent diagnostics, a model
+    call, and potentially its own action/escalation, even though they're one
+    event. Mirrors the storm-child pattern exactly (`triage.py`'s `is_storm`
+    branch), just scoped to one host instead of the whole fleet: same
+    stable, coordination-free parent-selection rule (lowest-id peer that
+    already has a ticket), same "link + redirect note + tag + finish, no
+    further processing" treatment for the child.
+
+    Pulled out of handle() as its own function purely for testability,
+    matching _document_rule_success()'s precedent -- calling handle() itself
+    in a test is deliberately avoided elsewhere in this codebase because
+    storm detection reads real timestamps across the whole shared test DB.
+    """
+    ticket_id = incident.get("ticket_id")
+    host_peers = store.recent_incidents_for_host(host, window, incident["id"])
+    cluster_parent = min((p for p in host_peers if p.get("ticket_id")), key=lambda p: p["id"], default=None)
+    if not (cluster_parent and cluster_parent["id"] < incident["id"]):
+        return False
+
+    if incident.get("ticket_number") and cluster_parent.get("ticket_id"):
+        try:
+            zammad.link_tickets(incident["ticket_number"], cluster_parent["ticket_id"])
+        except zammad.ZammadError as e:
+            log(f"host-cluster link failed: {e}")
+    _note(
+        ticket_id,
+        "Part of the same incident",
+        f"Multiple tickets were raised for what looks like the same incident on `{host}` "
+        f"({alertname} on this ticket, {cluster_parent.get('alertname')} on the linked one) "
+        f"within {window}s of each other.\n\n"
+        f"Check ticket #{cluster_parent.get('ticket_number')} for further updates -- this "
+        f"ticket will not be updated further until the incident is resolved.",
+        author="script: host-cluster detector",
+    )
+    _tag(ticket_id, "host-cluster-child")
+    store.finish(incident["id"], "host_cluster_child", parent_ticket_id=cluster_parent.get("ticket_id"))
+    log(f"incident {incident['id']} handled as host-cluster child of {cluster_parent['id']}")
+    return True
 
 
 def _poll_until_healthy(check_fn, interval_seconds=15, max_wait_seconds=120):
@@ -560,6 +624,7 @@ def _escalate_or_retry(incident, bundle, steps, reason, extra_note=None, analysi
     ), author="script: hypervisor-retry loop")
     _tag(ticket_id, "needs-human")
     _tag(ticket_id, "physical-intervention")
+    _assign_to_human(ticket_id)
     store.finish(incident["id"], "unfixable_remotely", f"hypervisor unreachable after {retry_cfg['max_retries']} retries")
     log(f"incident {incident['id']}: hypervisor for {host} still unreachable after {retry_cfg['max_retries']} retries, flagging for human, not escalating")
 
@@ -642,6 +707,15 @@ def handle(incident):
             log(f"incident {incident['id']} handled as storm child of {parent['id']}")
             return
 
+    # --- Same-host multi-alert clustering ------------------------------
+    # Generalizes the storm-child pattern above to a single host instead of
+    # the whole fleet (2026-08-25) -- checked only when NOT already a storm
+    # so a genuine fleet-wide event keeps priority over this narrower
+    # grouping (a storm's own parent still investigates normally, even if it
+    # happens to also be this host's only ticket in the window).
+    if host and not is_storm and _try_host_cluster_child(incident, host, alertname, window):
+        return
+
     # --- Diagnostics ---------------------------------------------------
     log(f"collecting diagnostics for incident {incident['id']} ({alertname} on {host})")
     steps = collect.collect(alertname, host, service, incident.get("instance"))
@@ -689,6 +763,7 @@ def handle(incident):
         ), author="script: connectivity check")
         _tag(ticket_id, "needs-human")
         _tag(ticket_id, "physical-intervention")
+        _assign_to_human(ticket_id)
         store.finish(incident["id"], "unfixable_remotely", "no external connectivity")
         log(f"incident {incident['id']}: no external connectivity -- treating as a disaster, not escalating")
         return
@@ -716,6 +791,7 @@ def handle(incident):
             ), author=config.OLLAMA_MODEL)
             _tag(ticket_id, "needs-human")
             _tag(ticket_id, "physical-intervention")
+            _assign_to_human(ticket_id)
             store.finish(incident["id"], "unfixable_remotely", "storm classified as widespread")
             log(f"incident {incident['id']}: storm classified widespread, not escalating")
             return
