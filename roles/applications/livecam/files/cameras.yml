@@ -30,4 +30,9 @@
 #     onvif_port: 80   # common default for this camera family's web UI;
 #                       # NOT verified against any specific model -- confirm
 #                       # against the real camera once purchased.
-cameras: {}
+cameras:
+  baby-ptz:
+    ip: 10.69.69.144
+    onvif_port: 80   # common default for this camera family's web UI;
+                      # NOT verified against this specific model -- confirm
+                      # against the real camera.

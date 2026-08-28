@@ -22,3 +22,7 @@ cameras:
       friendly_name: "The Gurlz"
       ip: 10.69.69.143
       channel: 1
+    - name: baby-ptz
+      friendly_name: "Baby PTZ"
+      ip: 10.69.69.144
+      channel: 1

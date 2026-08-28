@@ -59,7 +59,9 @@ admin:
   cameras:
     - the-boiz
     - the-gurlz
+    - baby-ptz
   audio: true
+  ptz: [baby-ptz]
   recordings: true
 
 # Shared account for the rest of the household. livecam only -- there is no
