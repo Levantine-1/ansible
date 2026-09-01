@@ -258,7 +258,7 @@ def analyse(bundle_text, action_note=""):
         # get MORE conservative-sounding behavior than a plain bug deserves.
         scope = "isolated"
 
-    action, target_kind, target = _normalize_action(parsed)
+    action, target_kind, target = _normalize_action(parsed, bundle_text)
     if scope == "widespread":
         # Enforced here, not just requested in the prompt -- a model that
         # says "widespread" but still fills in an action anyway (the same
@@ -282,13 +282,38 @@ def analyse(bundle_text, action_note=""):
     }
 
 
-def _normalize_action(parsed):
+def _diagnostic_body(bundle_text):
+    """The bundle with its identity header stripped -- i.e. only what the
+    diagnostic commands actually returned.
+
+    The header (Alert/Instance/Host/Service/Severity/Summary) is metadata
+    ABOUT the incident, not evidence FROM the machine. Searching the whole
+    bundle for a target name would happily match the alert's own instance
+    label, which is precisely the failure this exists to catch.
+    """
+    idx = bundle_text.find("\n--- [")
+    return bundle_text[idx:] if idx != -1 else ""
+
+
+def _normalize_action(parsed, bundle_text=""):
     """Validate and normalize the action/target_kind/target fields from a
     parsed model response. Pulled out of analyse() as its own pure function
     so it's directly testable without mocking Ollama.
 
     Returns (action, target_kind, target), where an invalid or structurally
     incomplete recommendation collapses to ("none", "none", "").
+
+    `bundle_text` is optional so this stays independently testable, but when
+    supplied a container/service target must actually appear in the
+    diagnostic OUTPUT, not merely be a non-empty string. Without that check
+    the validation was purely structural: on a DiskSpaceLow alert for the
+    fx8200 hypervisor the model returned
+    ("start", "container", "10.69.69.116:9100") -- the Prometheus scrape
+    target, which is not a container and never was -- and it passed straight
+    through, reaching the ticket as a recommendation to a human. It was
+    ultimately refused, but only because that host is separately protected;
+    on any non-protected host it would have run `docker start` against a
+    hostname:port string.
     """
     action = str(parsed.get("action", "none")).lower().strip()
     if action not in ("start", "stop", "restart", "none"):
@@ -311,6 +336,14 @@ def _normalize_action(parsed):
         return "none", "none", ""
     if target_kind in ("container", "service") and not target:
         return "none", "none", ""
+
+    # A named target has to be corroborated by the evidence. Checked against
+    # the diagnostic output only, with the identity header stripped, so that
+    # echoing back the alert's own instance or host label does not count as
+    # corroboration.
+    if target_kind in ("container", "service") and bundle_text:
+        if target not in _diagnostic_body(bundle_text):
+            return "none", "none", ""
 
     return action, target_kind, target
 

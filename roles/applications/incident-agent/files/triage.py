@@ -374,6 +374,18 @@ def _try_llm_action(incident, bundle, steps, extra_context=None, rule_for_verify
         f"incident {incident['id']}: local model recommends {action} {kind} "
         f"{target or host} on {host} -- {analysis['notes']}"
     )
+    # Stated before the attempt: a model-recommended action is the one most
+    # worth being able to audit afterwards, and until now the ticket only
+    # ever learned about it from the outcome.
+    _note(ticket_id, f"About to run {action} {kind} on {host}",
+          f"Action:    {action} {kind}" + (f" `{target}`" if target else "") + f"\n"
+          f"Host:      {host}\n"
+          f"Authority: recommended by the local model ({config.OLLAMA_MODEL}), "
+          f"permitted by policy for this host\n"
+          f"Model's reasoning: {analysis['notes'] or '(none given)'}\n\n"
+          f"This is a model recommendation, not a pre-approved rule -- it passed the "
+          f"policy and evidence checks rather than matching restart_allowlist.yml.",
+          author="script: pre-action record")
     action_label = f"{action}_{kind}"
     try:
         ok, output = fn(host, target)
@@ -439,6 +451,59 @@ def _try_llm_action(incident, bundle, steps, extra_context=None, rule_for_verify
     return True, analysis, action_note_text
 
 
+def _escalation_rationale(incident, reason, analysis):
+    """Explain, on the ticket, why this incident is being handed to Claude.
+
+    Deliberately reports only inputs already computed by the caller -- this
+    runs on the path to a paid API call and must not add work or new failure
+    modes to justify itself.
+    """
+    host = incident.get("host")
+    lines = [f"Trigger: {reason.strip()}", ""]
+
+    if host:
+        pol = config.host_policy(host)
+        lines.append(
+            f"Host policy for '{host}': critical={pol.get('critical')} known={pol.get('known')}"
+            + (f" -- {pol['reason']}" if pol.get("reason") else "")
+        )
+    else:
+        lines.append(
+            f"Host policy: instance '{incident.get('instance')}' did not map to a known host, "
+            "so no policy could be applied."
+        )
+
+    if analysis:
+        lines.append(
+            f"Local model ({config.OLLAMA_MODEL}): classification={analysis['classification']} "
+            f"confidence={analysis['confidence']} scope={analysis.get('scope')}"
+        )
+        # The one veto that could have stopped this, and why it did not.
+        if analysis["classification"] != "transient":
+            lines.append(
+                "  Transient veto not applicable: the model did not classify this as transient."
+            )
+        elif analysis["confidence"] not in ("medium", "high"):
+            lines.append(
+                "  Transient veto not applied: classified transient but only at low confidence, "
+                "which is not enough on its own."
+            )
+        else:
+            lines.append(
+                "  Transient veto not applied: classified transient with confidence, but "
+                "Alertmanager still reports the alert firing, so the second signal disagreed."
+            )
+    else:
+        lines.append(
+            "Local model: unavailable or disabled, so there was nothing to veto with. "
+            "Escalation proceeds rather than silently dropping the incident."
+        )
+
+    lines += ["", "Escalation is the default when no automated remediation is permitted or "
+              "available; it is not a judgement that this is severe."]
+    return "\n".join(lines)
+
+
 def _escalate(incident, bundle_text, reason, extra_note=None, analysis=None):
     """Hand off to Sonnet and record whatever comes back.
 
@@ -488,6 +553,18 @@ def _escalate(incident, bundle_text, reason, extra_note=None, analysis=None):
 
     log(f"escalating incident {incident['id']}: {reason}")
     _tag(ticket_id, "auto-escalated")
+
+    # Say WHY, on the ticket. `reason` is required at every call site but used
+    # to go only to the log and into Claude's prompt -- so the ticket recorded
+    # that an escalation happened without ever recording what triggered it.
+    # On the fx8200 DiskSpaceLow incident that meant the actual trigger (a
+    # protected hypervisor, no automated action permitted) appeared nowhere,
+    # while the local model's hallucinated container recommendation did. The
+    # reader was left to infer the decision from the one artifact that wasn't
+    # the decision.
+    _note(ticket_id, "Escalating to Claude -- why",
+          _escalation_rationale(incident, reason, analysis),
+          author="script: escalation decision")
 
     result = claude.escalate(incident, bundle_text, reason)
 
@@ -913,6 +990,18 @@ def handle(incident):
     action = rule.get("action")
     target = rule.get("target") or ""
     log(f"incident {incident['id']}: applying {action} {target} on {host}")
+    # Stated BEFORE the attempt, not after. Every outcome path here already
+    # writes a note, but a failure that leaves no record of what was tried,
+    # on which host, or what authorised it is the case where the ticket is
+    # read most carefully and says least.
+    _note(incident.get("ticket_id"), f"About to run {action} on {host}",
+          f"Action:    {action}" + (f" {target}" if target else "") + f"\n"
+          f"Host:      {host}\n"
+          f"Authority: matching rule in restart_allowlist.yml for "
+          f"{alertname} on {host}\n\n"
+          f"This is a deterministic allow-list rule, not a model decision -- it runs "
+          f"because this exact alert/host pair was pre-approved for this exact action.",
+          author="script: restart_allowlist.yml")
     try:
         if action == "restart_container":
             ok, output = remote.restart_container(host, target)

@@ -419,6 +419,62 @@ check("explicit none passes through cleanly",
 check("missing action field defaults to none",
       llm._normalize_action({}) == ("none", "none", ""))
 
+# A named target has to be corroborated by the diagnostic OUTPUT, not merely
+# be a non-empty string. This is ticket 16131: on a DiskSpaceLow alert for the
+# fx8200 hypervisor the model answered ("start", "container",
+# "10.69.69.116:9100") -- the Prometheus scrape target, which is not a
+# container and never was -- and the purely structural validation passed it
+# straight through onto the ticket as advice to a human. It was refused only
+# because that host happens to be separately protected; on any ordinary host
+# it would have run `docker start` against a hostname:port string.
+_BUNDLE = """Alert:     DiskSpaceLow
+Instance:  10.69.69.116:9100
+Host:      fx8200
+Service:   (n/a)
+Severity:  warning
+Summary:   10.69.69.116:9100 filesystem /mnt/nvr-hdd below 10% free space
+
+--- [1] Filesystem usage (ssh, ok, 0.72s) ---
+/dev/sdc1             1.8T  1.6T  181G  90% /mnt/nvr-hdd
+
+--- [2] Docker image/volume/build-cache usage, if applicable (ssh, ok, 0.19s) ---
+(no output)
+"""
+
+check("a container target echoing the alert's own instance label is refused",
+      llm._normalize_action(
+          {"action": "start", "target_kind": "container", "target": "10.69.69.116:9100"},
+          _BUNDLE) == ("none", "none", ""))
+check("a container target echoing the host name is refused too",
+      llm._normalize_action(
+          {"action": "restart", "target_kind": "container", "target": "fx8200"},
+          _BUNDLE) == ("none", "none", ""))
+check("a container target absent from the diagnostics is refused",
+      llm._normalize_action(
+          {"action": "restart", "target_kind": "container", "target": "nginx"},
+          _BUNDLE) == ("none", "none", ""))
+
+_BUNDLE_WITH_CONTAINER = _BUNDLE + """
+--- [3] Running containers (ssh, ok, 0.3s) ---
+CONTAINER ID   IMAGE     STATUS      NAMES
+abc123         frigate   Exited(0)   frigate
+"""
+check("a container target that really appears in the output is allowed",
+      llm._normalize_action(
+          {"action": "start", "target_kind": "container", "target": "frigate"},
+          _BUNDLE_WITH_CONTAINER) == ("start", "container", "frigate"))
+check("host actions are unaffected by the corroboration check",
+      llm._normalize_action(
+          {"action": "restart", "target_kind": "host", "target": ""},
+          _BUNDLE) == ("restart", "host", ""))
+check("with no bundle supplied the check is skipped, keeping the function pure",
+      llm._normalize_action(
+          {"action": "restart", "target_kind": "container", "target": "frigate"})
+      == ("restart", "container", "frigate"))
+check("_diagnostic_body drops the identity header",
+      "10.69.69.116:9100" not in llm._diagnostic_body(_BUNDLE)
+      and "/mnt/nvr-hdd" in llm._diagnostic_body(_BUNDLE))
+
 check("has_action true for a real recommendation",
       llm.has_action({"action": "start"}) is True)
 check("has_action false for none",
@@ -642,7 +698,8 @@ try:
         fake_incident_banner = {"id": 9002, "ticket_id": 999, "alertname": "ProbeFailed", "host": "theia"}
         triage._escalate(fake_incident_banner, "bundle", reason="test")
         check("escalation unavailable: banner names the specific reason, not bare 'script'",
-              _article_calls == [("article", "script: escalation gate (Claude tier unavailable)")], str(_article_calls))
+              _article_calls == [("article", "script: escalation decision"),
+                                 ("article", "script: escalation gate (Claude tier unavailable)")], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
 
@@ -652,7 +709,8 @@ try:
     try:
         triage._escalate(fake_incident_banner, "bundle", reason="test")
         check("escalation skipped for budget: banner names that specifically",
-              _article_calls == [("article", "script: escalation gate (monthly budget exhausted)")], str(_article_calls))
+              _article_calls == [("article", "script: escalation decision"),
+                                 ("article", "script: escalation gate (monthly budget exhausted)")], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
 
@@ -664,7 +722,8 @@ try:
     try:
         triage._escalate(fake_incident_banner, "bundle", reason="test")
         check("escalation resolved: close_ticket gets author=the configured Claude model name",
-              _article_calls == [("close", config.ANTHROPIC_MODEL)], str(_article_calls))
+              _article_calls == [("article", "script: escalation decision"),
+                                 ("close", config.ANTHROPIC_MODEL)], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
 
@@ -677,9 +736,39 @@ try:
     try:
         triage._escalate(fake_incident_banner, "bundle", reason="test")
         check("escalation completed-unresolved: article gets author=the configured Claude model name",
-              _article_calls == [("article", config.ANTHROPIC_MODEL)], str(_article_calls))
+              _article_calls == [("article", "script: escalation decision"),
+                                 ("article", config.ANTHROPIC_MODEL)], str(_article_calls))
     finally:
         claude.escalate = _real_claude_escalate2
+
+    # The escalation REASON must reach the ticket, not just the log and
+    # Claude's prompt. On ticket 16131 the actual trigger (fx8200 is a
+    # protected hypervisor) appeared nowhere on the ticket, while the local
+    # model's hallucinated container recommendation did -- so the only
+    # decision-shaped thing a reader could find was the one that wasn't the
+    # decision.
+    _bodies = []
+    zammad.add_article = lambda tid, subject, body, internal=True, author="script": (
+        _bodies.append((subject, body, author)))
+    claude.escalate = lambda incident, bundle, reason: {
+        "status": "completed", "resolved": False, "rca": "x", "state": {},
+    }
+    try:
+        triage._escalate(
+            {"id": 9003, "ticket_id": 999, "alertname": "DiskSpaceLow",
+             "host": "fx8200", "instance": "10.69.69.116:9100"},
+            "bundle", reason="'fx8200' is protected from automated action.")
+        rationale = next((b for sub, b, _ in _bodies if sub == "Escalating to Claude -- why"), None)
+        check("the escalation reason is posted to the ticket", rationale is not None)
+        check("the rationale quotes the actual trigger",
+              rationale and "protected from automated action" in rationale, rationale)
+        check("the rationale records the host policy that forced it",
+              rationale and "critical=True" in rationale, rationale)
+        check("the rationale explains why the transient veto did not stop it",
+              rationale and "nothing to veto with" in rationale, rationale)
+    finally:
+        claude.escalate = _real_claude_escalate2
+        llm.analyse = _real_analyse_banner
 finally:
     zammad.add_article = _real_add_article
     zammad.close_ticket = _real_close_ticket

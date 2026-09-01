@@ -325,6 +325,28 @@ def _execute_tool(name, args, incident, state):
             host = args.get("host", "")
             kind = args.get("kind", "")
             target = args.get("target", "")
+            # Recorded before the attempt. Claude's actions were previously
+            # visible only in the final article's "Actions taken" section,
+            # which is written after the whole investigation finishes -- so a
+            # run that died mid-way left no ticket record of what it had
+            # already done to the fleet. Best-effort: a Zammad failure must
+            # never stop remediation, matching _note()'s behaviour in triage.
+            try:
+                zammad.add_article(
+                    incident.get("ticket_id"),
+                    f"About to run restart {kind} on {host}",
+                    f"Action:    restart {kind}" + (f" `{target}`" if target else "") + "\n"
+                    f"Host:      {host}\n"
+                    f"Authority: decided by {config.ANTHROPIC_MODEL} during its investigation, "
+                    f"subject to the same host policy as every other actor\n\n"
+                    f"Posted before the attempt so the ticket records it even if the "
+                    f"investigation does not run to completion.",
+                    internal=True,
+                    author=f"script: pre-action record ({config.ANTHROPIC_MODEL})",
+                )
+            except Exception as e:  # noqa: BLE001 -- never block an action on Zammad
+                print(f"[claude] could not post pre-action note for {kind} "
+                      f"{target} on {host}: {e}", flush=True)
             try:
                 if kind == "container":
                     ok, out = remote.restart_container(host, target)
