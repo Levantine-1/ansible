@@ -70,6 +70,24 @@ go2rtc:
     {{ cam.name }}_sub_noaudio: "ffmpeg:{{ cam.name }}_sub#video=copy"
 {% endfor %}
 
+# NOTE on talking TO a camera's speaker (livecam's soundboard): no extra
+# stream is needed here, and adding one is actively harmful.
+#
+# go2rtc negotiates the ONVIF audio backchannel on an RTSP source by DEFAULT
+# (that's why a #backchannel=0 opt-out exists rather than an opt-in). Verified
+# live: the plain `baby-ptz` producer above already reports
+#   ['video, recvonly, H264', 'audio, recvonly, MPEG4-GENERIC/16000',
+#    'audio, sendonly, PCMA/8000']
+# -- that last sendonly PCMA track IS the speaker path.
+#
+# So livecam pushes a clip with
+#   POST :1984/api/streams?dst=<camera>&src=ffmpeg:<clip-url>#audio=pcma
+# targeting the MAIN stream. An earlier attempt added a dedicated
+# `<camera>_talk` stream with an explicit #backchannel=1; it was removed
+# because these cameras expose exactly ONE talk channel, already held by the
+# main connection, so the second stream could only ever contend for it
+# (the camera answers a competing DESCRIBE with 404 "OffLine:TalkBusyLine").
+
 # Applied to every camera below.
 #
 # detect.enabled: false is a measured decision, not caution. Frigate derives

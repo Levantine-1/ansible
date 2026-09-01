@@ -22,17 +22,29 @@
 # confirm it against the real camera before relying on it, and add a
 # per-camera username/password below if it turns out to need its own.
 #
-# Empty today: no PTZ hardware exists yet. Example shape for when one does:
+# Capability flags, both optional:
+#
+#   ptz:  defaults TRUE, because this file predates any flags -- every entry
+#         in it was by definition a PTZ camera, so presence alone meant PTZ
+#         and the existing entry below has no `ptz:` key to read.
+#   talk: defaults FALSE. Having an ONVIF entry says nothing about whether a
+#         camera has a speaker, so pushing audio at one has to be opted into
+#         explicitly rather than inherited from merely being listed here.
+#
+# Example shape:
 #
 # cameras:
 #   city-view-1:
 #     ip: 10.69.69.150
-#     onvif_port: 80   # common default for this camera family's web UI;
-#                       # NOT verified against any specific model -- confirm
-#                       # against the real camera once purchased.
+#     onvif_port: 80
+#     talk: false
 cameras:
   baby-ptz:
     ip: 10.69.69.144
     onvif_port: 80   # common default for this camera family's web UI;
                       # NOT verified against this specific model -- confirm
                       # against the real camera.
+    # Verified over ONVIF: GetAudioOutputs returns a real output
+    # (AudioOutputConfig_Channel1, token 00000), and the RTSP endpoint
+    # advertises a `a=sendonly` PCMA backchannel section.
+    talk: true

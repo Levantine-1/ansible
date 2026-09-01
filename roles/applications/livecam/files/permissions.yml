@@ -29,15 +29,19 @@
 # livecam enforces three things per user: which cameras, where audio is
 # permitted, and a time-of-day window.
 #
-# `audio` takes either form:
+# `audio`, `ptz` and `talk` all take the same form:
 #
 #   audio: true                  every camera this user may see
 #   audio: false                 none
 #   audio: [the-boiz, baby-cam]  only those
 #
-# The list is intersected with `cameras`, so naming a camera under `audio`
-# that the user cannot see grants nothing -- audio can never become a way
-# to reach a camera the allow-list withheld.
+# The list is intersected with `cameras`, so naming a camera under any of
+# them that the user cannot see grants nothing -- none can become a way to
+# reach a camera the allow-list withheld.
+#
+# `ptz` and `talk` additionally require the camera to declare the capability
+# in cameras.yml. Both gates are required: a grant here on a camera with no
+# speaker (or no PTZ) does nothing.
 #
 # Camera names here are the machine slugs from group_vars/Frigate, not the
 # display names. They must match exactly: a name that no longer matches a
@@ -62,6 +66,10 @@ admin:
     - baby-ptz
   audio: true
   ptz: [baby-ptz]
+  # Push audio to the camera's speaker (soundboard clips and recorded voice
+  # clips). Same true/false/list shape as `audio` and `ptz`, and like them it
+  # also needs the camera itself declared capable in cameras.yml.
+  talk: [baby-ptz]
   recordings: true
 
 # Shared account for the rest of the household. livecam only -- there is no
