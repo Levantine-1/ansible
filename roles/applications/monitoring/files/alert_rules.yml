@@ -63,6 +63,57 @@ groups:
         annotations:
           summary: "{{ $labels.instance }} NVR disk below 2% free -- Frigate retention is not keeping up"
 
+      # The two rules above both watch the GUEST. Neither can see the
+      # constraint that actually bites first: the hypervisor filesystem
+      # holding the VM's disk image.
+      #
+      # 2026-09-01: the NVR filled for ten days straight and the only thing
+      # that fired was a generic warning-level DiskSpaceLow on fx8200. The
+      # guest had 222GiB free while fx8200's /mnt/nvr-hdd had 156GiB -- and
+      # the guest's virtual disk (1900GiB) is larger than the filesystem
+      # backing it (1832GiB), so the guest can allocate space the host cannot
+      # supply. When the host fills, QEMU cannot extend the sparse image and
+      # the guest takes I/O errors mid-write -- far worse than deleting old
+      # footage. Frigate's own emergency cleanup cannot prevent it: it fires
+      # below one hour of free space, and it measures the guest.
+      #
+      # This is the rule that would have caught it, days early. A percentage
+      # threshold could not: the host sits at ~8% free in normal operation
+      # (the raw image is sparse and never shrinks without discard, so the
+      # committed space is not recoverable in place), which means any
+      # threshold high enough to give useful warning would fire permanently.
+      # The trend is what distinguishes "full by design" from "filling".
+      - alert: NVRHostDiskFilling
+        expr: predict_linear(node_filesystem_avail_bytes{mountpoint="/mnt/nvr-hdd"}[6h], 24 * 3600) < 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} /mnt/nvr-hdd is on track to run out within 24h"
+          description: >-
+            The hypervisor filesystem backing the Frigate VM is trending toward
+            exhaustion. In steady state this should be flat, because Frigate
+            deletes as much as it writes. A sustained decline means retention is
+            not keeping up: check retain_days x measured GB/day against THIS
+            filesystem, not the guest's. Adding a camera without re-deriving
+            that number is what caused the 2026-09-01 incident.
+
+      # Absolute floor, deliberately set BELOW the ~8% steady state so it
+      # means "actually out of room" rather than "normal". Kept as a backstop
+      # in case the disk fills faster than the 6h trend window can react to.
+      - alert: NVRHostDiskCritical
+        expr: (node_filesystem_avail_bytes{mountpoint="/mnt/nvr-hdd"} / node_filesystem_size_bytes{mountpoint="/mnt/nvr-hdd"}) * 100 < 4
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} /mnt/nvr-hdd below 4% free -- Frigate writes are about to fail"
+          description: >-
+            At this point QEMU may be unable to extend the VM's sparse disk
+            image, which surfaces inside the guest as I/O errors rather than as
+            a disk-full condition Frigate can handle. Reduce frigate_retain_days
+            immediately.
+
       # See InstanceDown's comment above -- same revert, same reason.
       - alert: ProbeFailed
         expr: probe_success == 0
