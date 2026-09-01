@@ -28,8 +28,30 @@
     # tag was verified to boot and record on this host before rollout, so
     # an unattended pull must not be able to move it.
     frigate_image: "ghcr.io/blakeblackshear/frigate:0.17.2"
-    # ~134GB/day measured for both cameras; 1.7TB usable is ~12-13 days.
-    frigate_retain_days: 11
+    # Retention must fit the HOST filesystem, not the guest one. That is the
+    # rule this setting broke once already, so it is worth stating plainly:
+    #
+    #   retain_days x daily_rate  <  /mnt/nvr-hdd on fx8200 (1832 GiB)
+    #
+    # NOT the guest's /media/frigate (1869 GiB). The VM's virtual disk is
+    # 1900 GiB on a 1832 GiB physical volume (terraform/proxmox/frigate.tf),
+    # so the guest can believe it has space the host cannot actually back --
+    # and when the host fills, QEMU cannot extend the sparse image and the
+    # guest takes I/O errors mid-write. Frigate's own emergency cleanup
+    # cannot save that: it only fires below ~1 hour of free space and it
+    # measures the guest.
+    #
+    # The original value of 11 was sized at ~134GB/day for TWO cameras. A
+    # third (baby-ptz) was added 2026-08-28 and took the real rate to
+    # ~178GB/day, so 11 days needed ~1958GB against a ~1869GiB filesystem.
+    # Retention therefore never ran at all -- the disk filled first, and
+    # /media/frigate/recordings held 10 day-directories with nothing ever
+    # deleted while both host and guest fell a flat -7.95 GB/hour.
+    #
+    # 8 days at ~178GB/day is ~1424GB, which leaves real headroom. Re-derive
+    # this from measured GB/day whenever a camera is added or its bitrate
+    # changes; do not assume the old figure still holds.
+    frigate_retain_days: 8
     frigate_media_path: /media/frigate
     frigate_config_path: /opt/frigate/config
 
@@ -203,7 +225,13 @@
         # against the SSD for data that lives for seconds.
         tmpfs:
           - "/tmp/cache:size=1000000000"
-        shm_size: "128M"
+        # Frigate sizes its own requirement from camera count and detect
+        # resolution and warns when it is short ("SHM size 128.0MB is too
+        # small, recommend increasing it to at least 156MB" with three
+        # cameras). tmpfs only consumes RAM as actually used -- ~21MB here --
+        # so this is a ceiling, not an allocation, and 256M costs nothing
+        # today while leaving room for a fourth camera.
+        shm_size: "256M"
         restart_policy: unless-stopped
         detach: yes
         container_default_behavior: no_defaults

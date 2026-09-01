@@ -151,11 +151,22 @@ cameras:
       enabled: false
     record:
       enabled: true
-      retain:
-        # ~134GB/day for both cameras measured against 1.7TB usable gives
-        # roughly 12-13 days. Set just inside that so Frigate ages footage
-        # out on a schedule rather than relying on its emergency cleanup
-        # (which only kicks in with under an hour of space left).
+      # Frigate 0.16 replaced `record.retain: {days, mode}` with the explicit
+      # continuous/motion split, and 0.17 MIGRATES the old form by rewriting
+      # /opt/frigate/config/config.yml in place. That silently de-synced this
+      # template from the deployed file: ansible wrote the old schema, Frigate
+      # rewrote it on boot, and the file on disk no longer matched what is in
+      # git. Emit what Frigate actually wants so ansible stays authoritative.
+      #
+      # `motion: 0` because detection is disabled on this hardware (see the
+      # detect.enabled note above) -- there are no motion events to retain
+      # separately, so continuous is the only retention that means anything.
+      #
+      # See frigate_retain_days in install.yml for how this number is derived
+      # and why it MUST be checked against the hypervisor's filesystem rather
+      # than the guest's.
+      continuous:
         days: {{ frigate_retain_days }}
-        mode: all
+      motion:
+        days: 0
 {% endfor %}
