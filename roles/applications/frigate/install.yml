@@ -144,6 +144,53 @@
       changed_when: false
       failed_when: footage_disk.stdout | trim not in frigate_media_source.stdout
 
+    # --- reclaiming deleted footage on the hypervisor ------------------
+    # The footage disk is a sparse RAW image on fx8200. Deleting a recording
+    # inside this VM only frees the block here; the host image keeps it
+    # allocated until the guest issues a TRIM and QEMU honours it. That needs
+    # BOTH halves: discard=on on the VM disk (terraform/proxmox/frigate.tf)
+    # and something in here actually issuing the discards.
+    #
+    # Debian's stock fstrim.timer is WEEKLY, which is far too rare at this
+    # write rate: these cameras produce ~190GB/day, so up to ~1.3TB of
+    # already-deleted footage could stay allocated on a host that only has
+    # ~1.8TB total. Daily keeps the outstanding amount to about one day's
+    # recording, which fits the headroom comfortably.
+    #
+    # Batched fstrim rather than the `discard` mount option on purpose: this
+    # is a spinning disk under continuous write load, and inline discard
+    # would issue a hole-punch per delete instead of one pass a day.
+    - name: Create the fstrim timer override directory
+      file:
+        path: /etc/systemd/system/fstrim.timer.d
+        state: directory
+        mode: "0755"
+
+    - name: Trim the footage disk daily rather than weekly
+      copy:
+        dest: /etc/systemd/system/fstrim.timer.d/override.conf
+        mode: "0644"
+        # The empty OnCalendar= is required: it clears the vendor weekly
+        # schedule. Without it systemd ADDS daily to the existing weekly
+        # rather than replacing it.
+        content: |
+          # Managed by ansible (roles/applications/frigate). See install.yml.
+          [Timer]
+          OnCalendar=
+          OnCalendar=daily
+      register: frigate_fstrim_override
+
+    - name: Reload systemd so the fstrim schedule change is picked up
+      systemd:
+        daemon_reload: yes
+      when: frigate_fstrim_override.changed
+
+    - name: Enable the (now daily) fstrim timer
+      systemd:
+        name: fstrim.timer
+        enabled: yes
+        state: started
+
     # --- docker -------------------------------------------------------
     - name: Install Docker prerequisites
       apt:
