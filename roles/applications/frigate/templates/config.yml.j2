@@ -66,7 +66,17 @@ go2rtc:
 
     # Substream, 704x480 (~0.6 Mbps, ~11x cheaper). Used for livecam's grid
     # tiles, and as Frigate's own decode input below.
-    {{ cam.name }}_sub: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ cam.ip }}:554/cam/realmonitor?channel={{ cam.channel | default(1) }}&subtype=1"
+    #
+    # #backchannel=0 is load-bearing, not tidiness. go2rtc negotiates the ONVIF
+    # audio backchannel by DEFAULT on every RTSP source, and these cameras
+    # expose exactly ONE talk channel -- so main and sub race for it, and
+    # whichever connects first wins. That race is not stable across restarts:
+    # the speaker was reachable via `baby-ptz` on one boot and `baby-ptz_sub`
+    # on the next. Audio pushed at the substream's backchannel was accepted by
+    # go2rtc (HTTP 200, ffmpeg transcoded and sent it) but produced NO sound
+    # from the camera, whereas the main stream demonstrably worked. Opting the
+    # substream out leaves the channel to the main connection every time.
+    {{ cam.name }}_sub: "rtsp://{{ camera_secrets.username | urlencode }}:{{ camera_secrets.password | urlencode }}@{{ cam.ip }}:554/cam/realmonitor?channel={{ cam.channel | default(1) }}&subtype=1#backchannel=0"
     {{ cam.name }}_sub_noaudio: "ffmpeg:{{ cam.name }}_sub#video=copy"
 {% endfor %}
 
@@ -81,12 +91,18 @@ go2rtc:
 # -- that last sendonly PCMA track IS the speaker path.
 #
 # So livecam pushes a clip with
-#   POST :1984/api/streams?dst=<camera>&src=ffmpeg:<clip-url>#audio=pcma
-# targeting the MAIN stream. An earlier attempt added a dedicated
-# `<camera>_talk` stream with an explicit #backchannel=1; it was removed
-# because these cameras expose exactly ONE talk channel, already held by the
-# main connection, so the second stream could only ever contend for it
-# (the camera answers a competing DESCRIBE with 404 "OffLine:TalkBusyLine").
+#   POST :1984/api/streams?dst=<stream>&src=ffmpeg:<clip-url>#audio=pcma
+#
+# <stream> is DISCOVERED at play time (livecam's backchannel_stream()), by
+# looking for the producer media marked `sendonly` with the PCMA codec, rather
+# than assumed to be the camera-named stream. Belt and braces with the
+# #backchannel=0 above: that pins the channel to the main connection, and the
+# discovery means livecam still finds it if the pinning ever fails.
+#
+# An earlier attempt added a dedicated `<camera>_talk` stream with an explicit
+# #backchannel=1; it was removed because with only ONE talk channel a second
+# stream could only contend for it (the camera answers a competing DESCRIBE
+# with 404 "OffLine:TalkBusyLine").
 
 # Applied to every camera below.
 #
