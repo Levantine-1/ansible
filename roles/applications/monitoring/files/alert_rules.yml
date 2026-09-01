@@ -35,15 +35,26 @@ groups:
         annotations:
           summary: "{{ $labels.instance }} memory usage above 90% for 10+ minutes"
 
-      # /media/frigate is excluded deliberately: it is the NVR recording disk,
-      # and Frigate is configured to fill it and age footage out -- running
-      # near-full is the intended steady state, not a fault. At 11-day
-      # retention it projects to ~80% used, so this rule sits only ten points
-      # away from firing forever. An alert that is always on is an alert
-      # nobody reads; see the dedicated rule below for the case that actually
-      # means something.
+      # Two NVR mountpoints are excluded deliberately, both because they run
+      # near-full BY DESIGN and would otherwise pin this alert on forever.
+      #
+      # /media/frigate is the guest recording disk: Frigate is configured to
+      # fill it and age footage out, so near-full is the intended steady
+      # state, not a fault.
+      #
+      # /mnt/nvr-hdd is the hypervisor filesystem holding that VM's disk
+      # image. It sits at ~8% free in normal operation and cannot be expected
+      # to recover: the image is sparse and never shrinks while the VM disk
+      # is discard=ignore, so committed space is not reclaimable in place.
+      # Left in this rule it fired continuously (2026-09-01) at a severity
+      # that said "warning" for ten days while the real problem -- the disk
+      # trending to exhaustion -- was invisible.
+      #
+      # Both have dedicated rules below that express what actually means
+      # something for each. An alert that is always on is an alert nobody
+      # reads, which is precisely how this one was missed.
       - alert: DiskSpaceLow
-        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay", mountpoint!="/media/frigate"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay", mountpoint!="/media/frigate"}) * 100 < 10
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay", mountpoint!~"/media/frigate|/mnt/nvr-hdd"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay", mountpoint!~"/media/frigate|/mnt/nvr-hdd"}) * 100 < 10
         for: 15m
         labels:
           severity: warning
