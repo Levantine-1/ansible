@@ -217,26 +217,34 @@ groups:
       # different normal operating ranges.
       #
       # The (10, 200) bound on the vendor threshold itself is deliberate, not
-      # decorative -- confirmed live on real hardware to matter in BOTH
-      # directions:
+      # decorative -- confirmed live on real hardware to matter in more than
+      # one way:
       #   - NVMe's two auxiliary temp sensors (not the main Composite one)
       #     publish node_hwmon_temp_max_celsius = 65261.85 -- an obviously
       #     uninitialized sentinel value, not a real threshold.
       #   - The Super I/O chip enabled for fan monitoring (nct6775/it87,
       #     see hardware_monitoring.yml) publishes an auxiliary/unpopulated
-      #     temp header at 113C with max_celsius = 0 -- a floating sensor
-      #     input with no configured threshold at all, not a real 0C max.
-      # Neither is a real vendor limit, and dividing by either would either
-      # silently never fire (65261) or produce +Inf and fire constantly (0)
-      # -- both observed directly while building this rule. Bounding the
-      # threshold itself to a plausible range is generic across chips and
-      # needs no per-sensor allowlist (`temp1` means a different thing on
-      # different chips).
+      #     temp header at 113-114C with max_celsius = 0 -- a floating
+      #     sensor input with no configured threshold, not a real 0C max.
+      #   - fx8200's it8620 chip publishes max_celsius = 127 for two
+      #     sensors -- it87's well-known default/unconfigured value (the
+      #     BIOS never set a real limit), not a genuine 127C ceiling. This
+      #     one sits comfortably inside a plain (10, 200) bound, so it is
+      #     excluded by exact value instead.
+      # None of these are real vendor limits, and dividing by them would
+      # either silently never fire (65261), produce +Inf and fire
+      # constantly (0), or fire falsely the first time that sensor's zone
+      # runs warm (127, since 90% of a fake 127C is only ~114C) -- all
+      # three observed directly while building this rule. Bounding the
+      # threshold to a plausible range, plus excluding this one known
+      # sentinel, is generic across chips and needs no per-sensor allowlist
+      # (`temp1` means a different thing on different chips).
       - alert: HighChipTemperature
         expr: |
           (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_max_celsius > 0.9)
           and on (instance, chip, sensor) (node_hwmon_temp_max_celsius > 10)
           and on (instance, chip, sensor) (node_hwmon_temp_max_celsius < 200)
+          and on (instance, chip, sensor) (node_hwmon_temp_max_celsius != 127)
         for: 10m
         labels:
           severity: warning
@@ -248,6 +256,7 @@ groups:
           (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_crit_celsius > 0.95)
           and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius > 10)
           and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius < 200)
+          and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius != 127)
         for: 5m
         labels:
           severity: critical

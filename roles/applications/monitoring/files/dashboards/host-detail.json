@@ -30,6 +30,24 @@
         "includeAll": false,
         "multi": false,
         "sort": 1
+      },
+      {
+        "name": "instance_host",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(up{instance=\"$instance\"}, instance)",
+          "refId": "instance_host"
+        },
+        "regex": "/^(.*):.*$/",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "sort": 1,
+        "hide": 2
       }
     ]
   },
@@ -374,7 +392,7 @@
       },
       "targets": [
         {
-          "expr": "smartctl_device_smart_status{instance=\"$instance\"}",
+          "expr": "smartctl_device_smart_status{instance=~\"$instance_host:.*\"}",
           "legendFormat": "{{device}}",
           "refId": "A",
           "instant": true
@@ -439,17 +457,17 @@
       },
       "targets": [
         {
-          "expr": "node_hwmon_temp_celsius{instance=\"$instance\"}",
+          "expr": "node_hwmon_temp_celsius{instance=\"$instance\"} != -128",
           "legendFormat": "{{chip}} {{sensor}} (current)",
           "refId": "A"
         },
         {
-          "expr": "node_hwmon_temp_max_celsius{instance=\"$instance\"} > 10 < 200",
+          "expr": "node_hwmon_temp_max_celsius{instance=\"$instance\"} > 10 < 200 != 127",
           "legendFormat": "{{chip}} {{sensor}} (max)",
           "refId": "B"
         },
         {
-          "expr": "node_hwmon_temp_crit_celsius{instance=\"$instance\"} > 10 < 200",
+          "expr": "node_hwmon_temp_crit_celsius{instance=\"$instance\"} > 10 < 200 != 127",
           "legendFormat": "{{chip}} {{sensor}} (crit)",
           "refId": "C"
         }
@@ -477,7 +495,7 @@
       },
       "targets": [
         {
-          "expr": "smartctl_device_percentage_used{instance=\"$instance\"}",
+          "expr": "smartctl_device_percentage_used{instance=~\"$instance_host:.*\"}",
           "legendFormat": "{{device}}",
           "refId": "A"
         }

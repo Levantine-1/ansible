@@ -433,7 +433,7 @@
       },
       "targets": [
         {
-          "expr": "count(count by (instance) (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_crit_celsius > 0.95 and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius > 10) and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius < 200))) OR vector(0)",
+          "expr": "count(count by (instance) (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_crit_celsius > 0.95 and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius > 10) and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius < 200) and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius != 127))) OR vector(0)",
           "refId": "A",
           "instant": true
         }
