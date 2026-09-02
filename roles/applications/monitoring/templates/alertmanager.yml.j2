@@ -1,3 +1,23 @@
+# Maintenance windows: use Alertmanager's own silence mechanism, not a
+# config change here. Silences suppress an alert BEFORE it is ever routed to
+# a receiver, so a silenced alert never reaches zammad_relay.py at all --
+# no ticket, no incident-agent triage, no Claude escalation cost. That is
+# the right layer to solve this at: nothing downstream (zammad_relay.py,
+# the incident agent) needs to know a silence exists.
+#
+# amtool ships inside the alertmanager image already, reachable via:
+#   docker exec alertmanager amtool silence add \
+#     --alertmanager.url=http://localhost:9093/alertmanager \
+#     --duration=1h --comment="planned maintenance: <what, and by whom>" \
+#     alertname=~".+" instance="10.69.69.116:9100"
+# (narrow the matchers to the actual instance/alertname being touched --
+# `alertname=~".+"` alone with no instance matcher silences EVERYTHING).
+# List active silences with `amtool silence query`, expire one early with
+# `amtool silence expire <id>`. A silence that outlives its own maintenance
+# window is a real risk (it hides a genuine failure exactly as well as it
+# hides the planned one) -- always give --duration a real, short bound
+# rather than a long "to be safe" one, and expire it manually the moment
+# the work is done rather than waiting it out.
 route:
   receiver: zammad
   group_by: ["alertname"]

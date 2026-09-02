@@ -1,0 +1,194 @@
+---
+# Hardware-health agents for the bare-metal Proxmox hypervisors specifically
+# -- deliberately NOT folded into monitoring_agents.yml's fleet-wide plays,
+# which all share one consistent host group matching group_vars/all's
+# monitored_hosts (see that file's own header comment). Only bare-metal
+# hosts have real physical disks/sensors worth this: everything else in the
+# fleet is a VM with a virtual disk and no real thermal/fan sensors of its
+# own. A narrower host group here, in its own file, keeps that distinction
+# visible at a glance rather than being a silent exception inside a file
+# whose whole point is "one host list for everything".
+- name: Deploy smartctl_exporter (disk SMART health agent)
+  hosts: ProxmoxHosts
+  become: yes
+
+  vars:
+    smartctl_exporter_version: "0.14.0"
+
+  tasks:
+    - name: Check if smartctl_exporter binary is already installed
+      stat:
+        path: /usr/local/bin/smartctl_exporter
+      register: smartctl_exporter_bin
+
+    - name: Download smartctl_exporter tarball
+      # curl, not unarchive's remote_src HTTP fetch -- see node_exporter's
+      # download task in monitoring_agents.yml for why (ansible-core 2.14's
+      # bundled HTTP-fetch code breaks against Python 3.12+, which these
+      # Proxmox 9/Trixie hosts run).
+      command: curl -sL -o /tmp/smartctl_exporter.tar.gz "https://github.com/prometheus-community/smartctl_exporter/releases/download/v{{ smartctl_exporter_version }}/smartctl_exporter-{{ smartctl_exporter_version }}.linux-amd64.tar.gz"
+      when: not smartctl_exporter_bin.stat.exists
+
+    - name: Extract smartctl_exporter tarball
+      unarchive:
+        src: /tmp/smartctl_exporter.tar.gz
+        dest: /tmp
+        remote_src: yes
+      when: not smartctl_exporter_bin.stat.exists
+
+    - name: Install smartctl_exporter binary
+      copy:
+        src: "/tmp/smartctl_exporter-{{ smartctl_exporter_version }}.linux-amd64/smartctl_exporter"
+        dest: /usr/local/bin/smartctl_exporter
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: yes
+      when: not smartctl_exporter_bin.stat.exists
+
+    - name: Clean up extracted archive
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/smartctl_exporter-{{ smartctl_exporter_version }}.linux-amd64"
+        - /tmp/smartctl_exporter.tar.gz
+      when: not smartctl_exporter_bin.stat.exists
+
+    - name: Deploy smartctl_exporter systemd unit
+      # Runs as root, unlike node_exporter's dedicated system user --
+      # smartmontools itself refuses ATA_12/ATA_16 passthrough commands for
+      # non-root, with no setcap workaround (per the exporter's own docs).
+      # cAdvisor in monitoring_agents.yml already runs as root for its own
+      # reasons, so this isn't a new precedent in this repo.
+      #
+      # No --smartctl.device flags: it auto-discovers devices by scanning,
+      # so a disk added or removed from either host is picked up on its own
+      # next rescan (--smartctl.rescan defaults to every 10m) without an
+      # ansible change here. --smartctl.path's default already matches
+      # where Proxmox itself installs smartctl (/usr/sbin/smartctl).
+      copy:
+        dest: /etc/systemd/system/smartctl_exporter.service
+        content: |
+          [Unit]
+          Description=Prometheus smartctl Exporter
+          After=network.target
+
+          [Service]
+          User=root
+          ExecStart=/usr/local/bin/smartctl_exporter
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: smartctl_exporter_unit
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: smartctl_exporter_unit.changed
+
+    - name: Enable and start smartctl_exporter
+      systemd:
+        name: smartctl_exporter
+        enabled: yes
+        state: started
+
+    - name: Restart smartctl_exporter if unit changed
+      systemd:
+        name: smartctl_exporter
+        state: restarted
+      when: smartctl_exporter_unit.changed
+
+# Fan RPM is best-effort, not guaranteed, and this play is written to say so
+# honestly rather than assume success. Neither host exposes a fan*_input
+# under /sys/class/hwmon today. The kernel module trees on both DO contain
+# drivers for the common consumer Super I/O sensor chips (it87, the nct6775
+# family, w83627ehf, etc. -- confirmed by listing
+# /lib/modules/$(uname -r)/kernel/drivers/hwmon/ directly; an earlier
+# `modinfo it87`/`modinfo nct6775` check wrongly said these don't exist, but
+# that was modinfo missing from the unprivileged SSH user's $PATH, not the
+# modules being absent), so driver coverage exists in principle -- but which
+# chip either board actually has, whether Proxmox's ACPI/BIOS setup exposes
+# it to the OS at all, and whether populated fan headers even have
+# tachometer readback wired (some boards only expose PWM control, not RPM
+# sensing, on certain headers) are all genuinely unconfirmed until tried.
+- name: Detect and enable Super I/O fan sensors (best-effort)
+  hosts: ProxmoxHosts
+  become: yes
+
+  vars:
+    # Educated guesses from each board's vendor/generation, not confirmed
+    # against either board's actual datasheet -- that's exactly what this
+    # play's own verification task exists to confirm or refute.
+    #   fx8200  (10.69.69.116): Gigabyte GA-78LMT-USB3 6.0, an older AM3+
+    #     board -- commonly carries an ITE IT8720F/IT8721F Super I/O chip.
+    #   3800xt  (10.69.69.139): ASRock B550M-ITX/ac -- commonly carries a
+    #     Nuvoton chip in the nct6775 family.
+    hwmon_module_by_host:
+      "10.69.69.116": it87
+      "10.69.69.139": nct6775
+
+  tasks:
+    - name: Install lm-sensors
+      package:
+        name: lm-sensors
+        state: present
+
+    - name: Check whether the candidate Super I/O module is already loaded
+      command: lsmod
+      changed_when: false
+      register: loaded_modules
+
+    - name: Load the candidate Super I/O hwmon module
+      # A plain command, not community.general.modprobe -- that collection
+      # isn't a dependency anywhere in this repo today (no requirements.yml,
+      # not installed), and pulling it in for one call would add a new
+      # toolchain dependency this repo has otherwise deliberately avoided
+      # (see: curl instead of ansible's own HTTP fetch, throughout this
+      # file and monitoring_agents.yml).
+      #
+      # failed_when: false is deliberate -- a failed modprobe here means
+      # "this board's chip isn't what was guessed" or "the chip isn't
+      # exposed to the OS", which is a real, expected, informative possible
+      # outcome, not a bug in this playbook to fail loudly over.
+      command: "modprobe {{ hwmon_module_by_host[inventory_hostname] }}"
+      when: hwmon_module_by_host[inventory_hostname] not in loaded_modules.stdout
+      register: modprobe_result
+      failed_when: false
+      changed_when: modprobe_result.rc == 0
+
+    - name: Persist the module across reboots if it loaded successfully
+      copy:
+        dest: /etc/modules-load.d/hwmon-fan-sensor.conf
+        content: "{{ hwmon_module_by_host[inventory_hostname] }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      when: hwmon_module_by_host[inventory_hostname] in loaded_modules.stdout or modprobe_result.rc == 0
+
+    - name: Check for any fan tachometer input under hwmon
+      shell: "set -o pipefail; ls /sys/class/hwmon/*/fan*_input 2>/dev/null || true"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: fan_inputs
+
+    - name: Report fan sensor detection outcome
+      # Always shown, success or not -- this result has to be surfaced
+      # clearly rather than silently doing nothing, per how this was
+      # planned. A "no fan input found" result is a legitimate hardware
+      # answer, not a failure of this play, given the open unknowns above.
+      debug:
+        msg: >-
+          {{
+            'Fan tachometer input(s) found: ' + fan_inputs.stdout_lines | join(', ')
+            if fan_inputs.stdout | trim | length > 0
+            else 'NO fan tachometer input found on ' + inventory_hostname
+                 + ' after modprobe of ' + hwmon_module_by_host[inventory_hostname]
+                 + ' (module ' + ('loaded' if (hwmon_module_by_host[inventory_hostname] in loaded_modules.stdout or modprobe_result.rc == 0) else 'FAILED to load')
+                 + '). This board may not expose fan RPM via this chip -- see this file header comment for the open unknowns.'
+          }}

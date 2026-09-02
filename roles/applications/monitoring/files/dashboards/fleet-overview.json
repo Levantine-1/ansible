@@ -5,76 +5,182 @@
   "version": 1,
   "editable": true,
   "timezone": "browser",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "refresh": "30s",
-  "tags": ["fleet"],
+  "tags": [
+    "fleet"
+  ],
   "panels": [
     {
       "id": 1,
       "type": "stat",
       "title": "Hosts Up",
-      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
-        { "expr": "count(up{job=\"node_exporter\"} == 1) OR vector(0)", "refId": "A", "instant": true }
+        {
+          "expr": "count(up{job=\"node_exporter\"} == 1) OR vector(0)",
+          "refId": "A",
+          "instant": true
+        }
       ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          }
         },
         "overrides": []
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      }
     },
     {
       "id": 2,
       "type": "stat",
       "title": "Hosts Down",
-      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
-        { "expr": "count(up{job=\"node_exporter\"} == 0) OR vector(0)", "refId": "A", "instant": true }
+        {
+          "expr": "count(up{job=\"node_exporter\"} == 0) OR vector(0)",
+          "refId": "A",
+          "instant": true
+        }
       ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }]
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      }
     },
     {
       "id": 3,
       "type": "stat",
       "title": "Active Alerts",
-      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
-        { "expr": "count(ALERTS{alertstate=\"firing\"}) OR vector(0)", "refId": "A", "instant": true }
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) OR vector(0)",
+          "refId": "A",
+          "instant": true
+        }
       ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }, { "value": 3, "color": "red" }]
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 3,
+                "color": "red"
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      }
     },
     {
       "id": 4,
       "type": "bargauge",
       "title": "CPU Usage by Host",
-      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
@@ -90,19 +196,43 @@
           "max": 100,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "value": null, "color": "green" }, { "value": 70, "color": "orange" }, { "value": 90, "color": "red" }]
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "displayMode": "gradient", "orientation": "horizontal" }
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      }
     },
     {
       "id": 5,
       "type": "bargauge",
       "title": "Memory Usage by Host",
-      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
@@ -118,19 +248,43 @@
           "max": 100,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "value": null, "color": "green" }, { "value": 70, "color": "orange" }, { "value": 90, "color": "red" }]
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "displayMode": "gradient", "orientation": "horizontal" }
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      }
     },
     {
       "id": 6,
       "type": "bargauge",
       "title": "Disk Usage by Host (/)",
-      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "expr": "100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"/\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"/\"}) * 100)",
@@ -146,19 +300,43 @@
           "max": 100,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "value": null, "color": "green" }, { "value": 70, "color": "orange" }, { "value": 90, "color": "red" }]
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "displayMode": "gradient", "orientation": "horizontal" }
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      }
     },
     {
       "id": 7,
       "type": "timeseries",
       "title": "Network Throughput (all hosts)",
-      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|cni.*|flannel.*\"}[5m])) * 8",
@@ -172,10 +350,123 @@
         }
       ],
       "fieldConfig": {
-        "defaults": { "unit": "bps" },
+        "defaults": {
+          "unit": "bps"
+        },
         "overrides": []
       },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } }
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Disks Unhealthy",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "count(smartctl_device_smart_status == 0) OR vector(0)",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Hosts Over Temp",
+      "gridPos": {
+        "x": 8,
+        "y": 20,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "count(count by (instance) (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_crit_celsius > 0.95 and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius > 10) and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius < 200))) OR vector(0)",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "textMode": "value"
+      }
     }
   ]
 }

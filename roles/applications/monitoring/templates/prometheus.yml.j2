@@ -47,6 +47,19 @@ scrape_configs:
         labels:
           job: cadvisor
 
+  - job_name: smartctl_exporter
+    # ProxmoxHosts directly, not a third copy of the same two IPs in
+    # group_vars/all -- they're already there once as monitored_hosts and
+    # once as this inventory group. Only bare-metal hosts have a real disk
+    # for smartctl to read, unlike monitored_hosts' broader VM fleet.
+    static_configs:
+      - targets:
+{% for h in groups['ProxmoxHosts'] %}
+          - "{{ h }}:9633"
+{% endfor %}
+        labels:
+          job: smartctl_exporter
+
   - job_name: blackbox_http
     metrics_path: /probe
     params:

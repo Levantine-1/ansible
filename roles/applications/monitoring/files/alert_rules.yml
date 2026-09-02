@@ -133,3 +133,151 @@ groups:
           severity: critical
         annotations:
           summary: "Uptime probe failing for {{ $labels.instance }}"
+
+      # --- Proxmox hardware health (SMART, NVMe wear, chip temperature) ---
+      # Deployed via roles/os_configs/hardware_monitoring.yml, scraped as
+      # job=smartctl_exporter (SMART/NVMe) and job=node_exporter's already-
+      # default hwmon collector (temperature -- no new deployment needed
+      # for that half at all).
+
+      # smartctl_device_smart_status is smartctl's own overall PASS/FAIL
+      # self-assessment (1=PASSED, 0=FAILED; confirmed live -- the metric
+      # name is NOT "..._status_ok" as first guessed, corrected against a
+      # real scrape before this rule was trusted) -- the same verdict
+      # `smartctl -H` gives interactively, and the single highest-signal
+      # disk metric there is: a drive reporting FAILED has already decided
+      # it's unhealthy, no "wait and see" tier for it.
+      - alert: SMARTDiskFailing
+        expr: smartctl_device_smart_status == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} disk {{ $labels.device }} FAILED its SMART self-check"
+
+      # Reallocated/pending sectors are the classic early ATA warning signs.
+      # Non-zero doesn't mean imminent failure (a few over years of normal
+      # wear is unremarkable) -- this is a heads-up to watch the trend, well
+      # before the overall-health verdict above would ever trip.
+      # Deliberately `warning`, not `critical`.
+      #
+      # attribute_value_type="raw" is required, not optional: this metric
+      # also publishes the SAME attribute_name at value_type="value" and
+      # "worst" (the normalized 0-253 health score, where higher is
+      # generally better) and "thresh" (the failure threshold) -- confirmed
+      # live these commonly sit around 100-200 on a perfectly healthy
+      # drive. Without this filter the rule would match all four variants
+      # and fire on nearly every drive immediately, since the normalized
+      # score being "> 0" is the ordinary healthy case, not a fault.
+      - alert: SMARTReallocatedSectorsPresent
+        expr: smartctl_device_attribute{attribute_name=~"Reallocated_Sector_Ct|Reallocated_Event_Count|Current_Pending_Sector", attribute_value_type="raw"} > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} disk {{ $labels.device }} reports non-zero {{ $labels.attribute_name }}"
+
+      # NVMe wear is a monotonic 0-100 counter, not pass/fail, so it needs
+      # its own threshold. Anchor point: 3800xt's NVMe drive is confirmed at
+      # 49% used RIGHT NOW under ordinary operation (2026-09-02), so the
+      # warning tier needs real margin above that or it fires on day one
+      # against perfectly healthy hardware.
+      - alert: NVMeWearLevelHigh
+        expr: smartctl_device_percentage_used > 80
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} NVMe {{ $labels.device }} at {{ $value }}% rated wear"
+
+      - alert: NVMeWearLevelCritical
+        expr: smartctl_device_percentage_used > 95
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} NVMe {{ $labels.device }} at {{ $value }}% rated wear -- replace soon"
+
+      # media_errors counts actual uncorrectable data errors the controller
+      # has hit -- unlike wear level (an expected slow trend), this should
+      # stay zero for a drive's entire life. Any increase means data was
+      # already at risk, not merely that the drive is aging.
+      - alert: NVMeMediaErrors
+        expr: smartctl_device_media_errors > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} NVMe {{ $labels.device }} reports {{ $value }} media error(s)"
+
+      # Compares each sensor's live reading against ITS OWN vendor-specified
+      # ceiling (node_hwmon_temp_max_celsius, already published per-chip by
+      # node_exporter's default hwmon collector) rather than one hardcoded
+      # number across fx8200's FX-8320 and 3800xt's Ryzen, which have very
+      # different normal operating ranges.
+      #
+      # The (10, 200) bound on the vendor threshold itself is deliberate, not
+      # decorative -- confirmed live on real hardware to matter in BOTH
+      # directions:
+      #   - NVMe's two auxiliary temp sensors (not the main Composite one)
+      #     publish node_hwmon_temp_max_celsius = 65261.85 -- an obviously
+      #     uninitialized sentinel value, not a real threshold.
+      #   - The Super I/O chip enabled for fan monitoring (nct6775/it87,
+      #     see hardware_monitoring.yml) publishes an auxiliary/unpopulated
+      #     temp header at 113C with max_celsius = 0 -- a floating sensor
+      #     input with no configured threshold at all, not a real 0C max.
+      # Neither is a real vendor limit, and dividing by either would either
+      # silently never fire (65261) or produce +Inf and fire constantly (0)
+      # -- both observed directly while building this rule. Bounding the
+      # threshold itself to a plausible range is generic across chips and
+      # needs no per-sensor allowlist (`temp1` means a different thing on
+      # different chips).
+      - alert: HighChipTemperature
+        expr: |
+          (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_max_celsius > 0.9)
+          and on (instance, chip, sensor) (node_hwmon_temp_max_celsius > 10)
+          and on (instance, chip, sensor) (node_hwmon_temp_max_celsius < 200)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} sensor {{ $labels.sensor }} ({{ $labels.chip }}) above 90% of its rated max temperature"
+
+      - alert: CriticalChipTemperature
+        expr: |
+          (node_hwmon_temp_celsius / on (instance, chip, sensor) node_hwmon_temp_crit_celsius > 0.95)
+          and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius > 10)
+          and on (instance, chip, sensor) (node_hwmon_temp_crit_celsius < 200)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} sensor {{ $labels.sensor }} ({{ $labels.chip }}) above 95% of its rated critical temperature"
+          description: >-
+            This is the chip manufacturer's own critical threshold, not an
+            arbitrary number -- treat it as "about to throttle or shut down."
+
+      # Fan detection succeeded on both hosts (2026-09-02): 3800xt's
+      # platform_nct6775_656/nct6792 exposes fan1-5, fx8200's
+      # platform_it87_552/it8620 exposes fan1-3 -- node_hwmon_fan_rpm is a
+      # real, confirmed metric name, not a guess.
+      #
+      # NOT a plain `== 0` check, deliberately: fan4/fan5 on 3800xt and
+      # fan3 on fx8200 report a PERMANENT 0 RPM -- these are Super I/O
+      # headers with nothing physically connected, not stopped fans, and a
+      # blanket zero-check would fire immediately and forever on them
+      # (exactly the always-on-alert-nobody-reads failure this file's
+      # DiskSpaceLow/NVR rules above already learned the hard way). Instead
+      # this only fires on a real STOP TRANSITION: a fan reporting 0 now
+      # that was genuinely spinning (>0) an hour ago. An always-unpopulated
+      # header never satisfies the `offset 1h` half and so never matches,
+      # with no need to hardcode which fan numbers "don't count" per host
+      # -- which would silently stop working the day someone actually
+      # plugs a fan into one of those headers.
+      - alert: FanStopped
+        expr: node_hwmon_fan_rpm == 0 and (node_hwmon_fan_rpm offset 1h) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} fan {{ $labels.sensor }} ({{ $labels.chip }}) stopped -- was spinning an hour ago, now 0 RPM"
