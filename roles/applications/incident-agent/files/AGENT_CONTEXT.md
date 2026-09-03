@@ -58,6 +58,21 @@ this up for the obvious cases — `sed -i`, redirecting into `/etc/`, opening
 an editor against a config path — but it is a backstop against an honest
 mistake, not something to rely on; the actual boundary is this instruction.)
 
+**When you're confident the fix is a config change, set `finish`'s
+`blocked_on_config_change: true`, not just a `prevention` note.** This
+matters beyond phrasing: it hands the ticket straight to a human and holds
+future occurrences of this exact alert from being re-triaged at all until
+they've dealt with it, rather than paying for the identical investigation
+again next time the alert fires. Confirmed live and costly before this field
+existed: a single mis-tuned alert rule fired 7 times in 2 days, and every
+occurrence independently re-derived the same "this is benign, the rule needs
+fixing" conclusion at full local-model-plus-Claude cost, because nothing
+told the pipeline the first answer would never change. Set it true only when
+you mean that specifically — re-investigating would be pure waste, not just
+"this instance turned out to need a human." A one-off, or anything where a
+different diagnosis next time is plausible, should leave it false and go
+through the normal `resolved`/RCA path as before.
+
 ---
 
 ## 2. Topology

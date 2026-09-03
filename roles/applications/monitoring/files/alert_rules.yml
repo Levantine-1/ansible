@@ -169,13 +169,30 @@ groups:
       # drive. Without this filter the rule would match all four variants
       # and fire on nearly every drive immediately, since the normalized
       # score being "> 0" is the ordinary healthy case, not a fault.
+      # 2026-09-03: was a plain nonzero check (`> 0`), which fired on any
+      # static historical reallocation count, not just a new one -- confirmed
+      # live as a real, costly bug: fx8200's /dev/sda (a Crucial MX300 SSD)
+      # reallocated 12 blocks at some point in the past and has been static
+      # ever since (PASSED health, 92% lifetime remaining, ~1900 spare
+      # blocks), yet the old rule re-fired every 4-5 hours on the identical
+      # unchanged value -- 7 tickets in 2 days (#16132-#16139), each an
+      # independent local-model classification plus a full paid Claude
+      # investigation to re-derive the same "this is benign" conclusion
+      # Claude had already reached 6 times before. Its own RCA recommended
+      # this exact fix in all 7.
+      #
+      # increase() over a day catches a GENUINE new reallocation on any
+      # device type (a real degrading HDD or a real newly-failing SSD)
+      # while staying silent on an old, static count -- better than
+      # excluding SSDs by rotation_rate, which would blind the rule to a
+      # real SSD failure instead of just this false-positive pattern.
       - alert: SMARTReallocatedSectorsPresent
-        expr: smartctl_device_attribute{attribute_name=~"Reallocated_Sector_Ct|Reallocated_Event_Count|Current_Pending_Sector", attribute_value_type="raw"} > 0
-        for: 30m
+        expr: increase(smartctl_device_attribute{attribute_name=~"Reallocated_Sector_Ct|Reallocated_Event_Count|Current_Pending_Sector", attribute_value_type="raw"}[24h]) > 0
+        for: 15m
         labels:
           severity: warning
         annotations:
-          summary: "{{ $labels.instance }} disk {{ $labels.device }} reports non-zero {{ $labels.attribute_name }}"
+          summary: "{{ $labels.instance }} disk {{ $labels.device }} {{ $labels.attribute_name }} increased in the last 24h"
 
       # NVMe wear is a monotonic 0-100 counter, not pass/fail, so it needs
       # its own threshold. Anchor point: 3800xt's NVMe drive is confirmed at

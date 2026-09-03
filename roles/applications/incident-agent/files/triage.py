@@ -593,6 +593,37 @@ def _escalate(incident, bundle_text, reason, extra_note=None, analysis=None):
         store.finish(incident["id"], "escalation_unavailable", result.get("detail", ""), escalated=False)
         return
 
+    # Checked BEFORE the resolved/unresolved branches below, and wins over
+    # both: this is Claude's strongest possible claim -- not just "this one
+    # needed a human" but "re-investigating a repeat of this exact alert
+    # would not produce a different answer, because the only real fix is a
+    # config/rule change I have no tool to make." Confirmed live and costly
+    # without this (2026-09-03): SMARTReallocatedSectorsPresent on fx8200
+    # fired 7 times in 2 days, and every single occurrence independently
+    # re-ran local-model classification plus a full paid Claude
+    # investigation to re-derive the identical "this is benign, the alert
+    # rule needs fixing" conclusion -- because nothing told the pipeline the
+    # first answer would never change.
+    #
+    # _assign_to_human() (already used for the 3 genuinely-unfixable
+    # disaster paths above) hands this straight to a person. The ticket is
+    # deliberately left OPEN, not closed: zammad_relay.py's own dedup
+    # (find_open_ticket) already refuses to create a new ticket, or notify
+    # this agent at all, for a re-notification of an alert that still has an
+    # open ticket -- so every future firing of this exact alert is
+    # suppressed before it ever reaches this pipeline again, for free, using
+    # logic that already existed. zammad_relay.py's resolve-handler has a
+    # matching fix so it doesn't auto-close this out from under the human
+    # the next time Alertmanager reports the alert cleared.
+    if result.get("blocked_on_config_change"):
+        _note(ticket_id, "AI investigation (Claude) -- needs a config change", body,
+              internal=False, author=author)
+        _tag(ticket_id, "config-change-needed")
+        _assign_to_human(ticket_id)
+        store.finish(incident["id"], "escalated_config_change_needed",
+                     result.get("rca", "")[:2000], escalated=True)
+        return
+
     if result.get("resolved"):
         # Post the RCA and close in one call. If the fix did not actually hold,
         # the alert keeps firing and Alertmanager's next notification opens a

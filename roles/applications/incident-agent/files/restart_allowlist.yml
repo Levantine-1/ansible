@@ -69,11 +69,20 @@ rules:
     verify: {type: probe_target}
 
   # --- theia ------------------------------------------------------------
+  # target was `theia` until 2026-09-03 -- there is no systemd unit by that
+  # name (the app runs under pm2 as the automation user, not systemd), so
+  # this rule failed on EVERY occurrence, forcing a full Claude escalation
+  # every time. Confirmed via ticket history: restart_service theia failed
+  # at least 4 separate times (#16093-era, Sun 20:01, Tue 06:59, Tue 18:26)
+  # before Claude diagnosed the real, recurring cause -- apache2 (the actual
+  # systemd-managed front end on :80) stopped by earlier ad-hoc debugging
+  # and never restarted -- and fixed it with `sudo service apache2 start`
+  # every single time. `apache2` is the real, correct target.
   - alert: ProbeFailed
     host: theia
     service: theia
     action: restart_service
-    target: theia
+    target: apache2
     verify: {type: http, url: "http://theia.internal.levantine.io"}
 
   # InstanceDown here means the whole VM is off (confirmed twice now, same

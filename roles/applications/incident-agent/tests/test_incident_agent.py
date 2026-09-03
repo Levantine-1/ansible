@@ -741,6 +741,61 @@ try:
     finally:
         claude.escalate = _real_claude_escalate2
 
+    # blocked_on_config_change must win over resolved/unresolved entirely,
+    # hand the ticket to the human-admin account, tag it distinctly, and
+    # leave the ticket OPEN (no close_ticket call) -- so zammad_relay.py's
+    # own dedup keeps suppressing repeat triage of the same alert for as
+    # long as it stays that way. Real motivation: SMARTReallocatedSectorsPresent
+    # on fx8200 re-diagnosed the identical benign reading 7 times in 2 days
+    # before this existed.
+    _real_assign_ticket = zammad.assign_ticket
+    _assign_calls = []
+    zammad.assign_ticket = lambda ticket_id, owner_id: _assign_calls.append((ticket_id, owner_id))
+    _real_human_admin_id = config.ZAMMAD_HUMAN_ADMIN_USER_ID
+    config.ZAMMAD_HUMAN_ADMIN_USER_ID = 7
+    _tag_calls = []
+    _real_tag_fn = triage._tag
+    triage._tag = lambda ticket_id, tag: _tag_calls.append((ticket_id, tag))
+    _article_calls.clear()
+    claude.escalate = lambda incident, bundle, reason: {
+        "status": "completed", "resolved": True, "rca": "benign, alert rule needs fixing",
+        "blocked_on_config_change": True, "state": {},
+    }
+    try:
+        triage._escalate(fake_incident_banner, "bundle", reason="test")
+        check("blocked_on_config_change posts the RCA as an article, never a close",
+              _article_calls == [("article", "script: escalation decision"),
+                                 ("article", config.ANTHROPIC_MODEL)], str(_article_calls))
+        check("blocked_on_config_change assigns the ticket to the human-admin account",
+              _assign_calls == [(fake_incident_banner["ticket_id"], 7)], str(_assign_calls))
+        check("blocked_on_config_change tags the ticket distinctly from needs-human",
+              (fake_incident_banner["ticket_id"], "config-change-needed") in _tag_calls, str(_tag_calls))
+    finally:
+        claude.escalate = _real_claude_escalate2
+        zammad.assign_ticket = _real_assign_ticket
+        config.ZAMMAD_HUMAN_ADMIN_USER_ID = _real_human_admin_id
+        triage._tag = _real_tag_fn
+
+    # resolved=True together with blocked_on_config_change must NOT take the
+    # normal close-ticket path -- confirms the new branch is checked first,
+    # not merely reachable alongside the old one.
+    _real_assign_ticket = zammad.assign_ticket
+    zammad.assign_ticket = lambda ticket_id, owner_id: None
+    config.ZAMMAD_HUMAN_ADMIN_USER_ID = 7
+    _article_calls.clear()
+    claude.escalate = lambda incident, bundle, reason: {
+        "status": "completed", "resolved": True, "blocked_on_config_change": True,
+        "rca": "x", "state": {},
+    }
+    try:
+        triage._escalate(fake_incident_banner, "bundle", reason="test")
+        check("resolved=True does not override blocked_on_config_change into a close",
+              ("close", config.ANTHROPIC_MODEL) not in _article_calls, str(_article_calls))
+    finally:
+        claude.escalate = _real_claude_escalate2
+        zammad.assign_ticket = _real_assign_ticket
+        config.ZAMMAD_HUMAN_ADMIN_USER_ID = _real_human_admin_id
+
     # The escalation REASON must reach the ticket, not just the log and
     # Claude's prompt. On ticket 16131 the actual trigger (fx8200 is a
     # protected hypervisor) appeared nowhere on the ticket, while the local

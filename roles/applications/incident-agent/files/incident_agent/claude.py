@@ -199,6 +199,23 @@ TOOLS = [
                     "type": "string",
                     "description": "The permanent fix (config/resource/code change) that would stop this recurring, or 'none'.",
                 },
+                "blocked_on_config_change": {
+                    "type": "boolean",
+                    "description": (
+                        "True ONLY if the sole real fix is an infrastructure/config change you have no "
+                        "tool to make (an ansible-managed file, a Prometheus alert rule, "
+                        "restart_allowlist.yml, etc.) -- and re-investigating a repeat of this exact "
+                        "alert would not produce a different answer than this one. This is a stronger "
+                        "claim than 'resolved=False, needs a human': it means investigating again is "
+                        "PURE WASTE until a human has actually made that change, so the ticket is handed "
+                        "to a human immediately and future occurrences of this alert are held rather than "
+                        "re-triaged, until they deal with it. Do not set this for a one-off, or if a "
+                        "different diagnosis next time is plausible (e.g. an intermittent network issue) "
+                        "-- only for a config/rule that is simply wrong and will keep producing the exact "
+                        "same incident until someone edits it. False (the default) leaves this incident "
+                        "handled the normal way."
+                    ),
+                },
             },
             "required": ["resolved", "rca"],
         },
@@ -561,6 +578,7 @@ your RCA. Prefer identifying a permanent fix over applying another restart."""
         "resolved": bool(finish_payload.get("resolved")),
         "rca": finish_payload.get("rca", ""),
         "prevention": finish_payload.get("prevention", ""),
+        "blocked_on_config_change": bool(finish_payload.get("blocked_on_config_change")),
         "cost": total_cost,
         "state": state,
     }

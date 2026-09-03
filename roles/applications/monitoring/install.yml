@@ -20,6 +20,23 @@
       set_fact:
         zammad_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/zammad/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
 
+    # Same secret the incident-agent role reads (roles/applications/
+    # incident-agent/install.yml) -- one Vault value, so zammad_relay.py and
+    # the incident agent always agree on which account "a human has taken
+    # this ticket" means, rather than maintaining the id in two places that
+    # could drift. Optional/tolerant for the same reason as there: a fleet
+    # that hasn't set up the human-admin account yet still gets a working
+    # relay, just without the config-change hand-off skipping auto-close.
+    - name: Retrieve the human-admin Zammad account id from HashiCorp Vault (optional)
+      block:
+        - name: Look up the human-admin secret
+          set_fact:
+            human_admin_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/zammad/human-admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      rescue:
+        - name: Continue without a human-admin account configured
+          set_fact:
+            human_admin_secrets: {}
+
     - name: Create /opt/monitoring directory
       file:
         path: /opt/monitoring
