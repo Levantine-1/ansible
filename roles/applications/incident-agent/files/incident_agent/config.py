@@ -68,6 +68,15 @@ LISTEN_PORT = int(os.environ.get("IA_LISTEN_PORT", "9098"))
 MAX_CONCURRENT_TRIAGE = int(os.environ.get("IA_MAX_CONCURRENT_TRIAGE", "2"))
 WORKER_POLL_SECONDS = int(os.environ.get("IA_WORKER_POLL_SECONDS", "15"))
 
+# How often the worker checks whether external connectivity has come back for
+# tickets parked with outcome=escalation_unavailable because the Anthropic API
+# itself was unreachable (2026-09-13, see triage.py's _retry_connectivity_
+# parked_tickets()). Deliberately much coarser than WORKER_POLL_SECONDS: this
+# does a real outbound HTTP check plus a DB scan, and a WAN outage doesn't
+# clear on a 15s cadence -- polling that fast would just waste connectivity
+# checks for no earlier detection in practice.
+CONNECTIVITY_RECOVERY_CHECK_SECONDS = int(os.environ.get("IA_CONNECTIVITY_RECOVERY_CHECK_SECONDS", "300"))
+
 _cache = {}
 
 

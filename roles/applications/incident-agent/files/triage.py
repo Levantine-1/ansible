@@ -1215,6 +1215,48 @@ def _document_rule_success(incident, alertname, host, action, bundle, action_not
         )
 
 
+def _retry_connectivity_parked_tickets():
+    """Resume any tickets stuck on escalation_unavailable purely because the
+    Anthropic API was unreachable, now that the network is back (2026-09-13).
+
+    Real incident that motivated this: a ~25min WAN blip took out both the
+    deterministic tier's fixes (couldn't resolve DNS to verify them) AND the
+    Claude escalation tier (couldn't reach api.anthropic.com) at once. Every
+    affected ticket landed on escalation_unavailable, which hands it to a
+    human -- correct when the cause really is "no API key" or "disabled via
+    toggle", but a network blip clearing on its own shouldn't need someone to
+    notice 9 tickets and hit /resume by hand on each one. This does the same
+    thing listener.py's /resume route does, just triggered by connectivity
+    recovery instead of a human reassigning the ticket.
+
+    Level-checked, not edge-triggered: no "was it down last time" state to
+    lose across a worker restart. A ticket only matches
+    store.connectivity_parked_ticket_ids() while it is still sitting in
+    state='done' -- the moment it's requeued here it moves to 'queued' and
+    won't match again until a fresh attempt finishes, so this is safe to call
+    on every recovery-check tick without double-firing the same ticket.
+    """
+    if not observability.external_connectivity_ok():
+        return
+    for ticket_id in store.connectivity_parked_ticket_ids():
+        incident_id = store.requeue_by_ticket_id(ticket_id)
+        if incident_id is None:
+            continue
+        log(f"connectivity restored -- resuming ticket {ticket_id} (incident {incident_id})")
+        try:
+            zammad.remove_tag(ticket_id, "needs-human")
+        except zammad.ZammadError as e:
+            log(f"connectivity retry: could not remove 'needs-human' from ticket {ticket_id}: {e}")
+        _note(
+            ticket_id, "Connectivity restored -- resuming automatically",
+            "This ticket was parked because the escalation tier couldn't reach the Anthropic API "
+            "during what looks like a WAN outage. External connectivity just checked out healthy "
+            "again, so it's being re-queued for a fresh look: new diagnostics, a new escalation "
+            "attempt -- not a continuation of the failed one.",
+            author="script: connectivity recovery",
+        )
+
+
 def main():
     _lock_fh = _acquire_singleton_lock()  # noqa: F841 -- held for the process lifetime, never explicitly released
     store.init()
@@ -1223,6 +1265,7 @@ def main():
     if recovered:
         log(f"requeued {recovered} incident(s) abandoned by a previous worker")
 
+    last_connectivity_check = 0.0
     while True:
         try:
             # Re-read config each cycle so an edited allow-list takes effect
@@ -1230,6 +1273,16 @@ def main():
             # wants to add a rule, and that is the worst moment to require a
             # service restart to apply it.
             config.reset_cache()
+
+            # Coarse-grained on purpose (see config.CONNECTIVITY_RECOVERY_
+            # CHECK_SECONDS) -- an outbound HTTP check plus a DB scan every
+            # WORKER_POLL_SECONDS would be wasted work between real network
+            # state changes.
+            now = time.time()
+            if now - last_connectivity_check >= config.CONNECTIVITY_RECOVERY_CHECK_SECONDS:
+                last_connectivity_check = now
+                _retry_connectivity_parked_tickets()
+
             incident = store.claim_next(config.MAX_CONCURRENT_TRIAGE)
             if incident is None:
                 time.sleep(config.WORKER_POLL_SECONDS)

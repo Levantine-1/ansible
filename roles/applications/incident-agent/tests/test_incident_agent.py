@@ -1415,6 +1415,72 @@ finally:
     store.finish(id_resume2, "test")
 
 
+print("\n== connectivity-recovery auto-resume (2026-09-13) ==")
+# A real connectivity-caused escalation failure: claude.escalate()'s "error"
+# branch detail string, verbatim, is what connectivity_parked_ticket_ids()
+# matches on.
+id_conn_err, _ = store.enqueue(make_alert("connerr01"), 600, "600", "dockerhost1", "booking-movie-ticket", past)
+store.finish(id_conn_err, "escalation_unavailable", "Anthropic API call failed on turn 1: APIConnectionError: Connection error.")
+
+# Same outcome, different cause -- must NOT be swept up just because it also
+# says escalation_unavailable. These are deliberate/config states, not a
+# network blip, and a network recovery says nothing about them.
+id_conn_disabled, _ = store.enqueue(make_alert("connerr02"), 601, "601", "dockerhost1", "dental-care", past)
+store.finish(id_conn_disabled, "escalation_unavailable", "The Claude escalation tier is currently disabled via the dashboard toggle.")
+
+id_conn_nokey, _ = store.enqueue(make_alert("connerr03"), 602, "602", "dockerhost1", "pet-care", past)
+store.finish(id_conn_nokey, "escalation_unavailable", "No Anthropic API key configured, so the escalation tier is inert.")
+
+check("connectivity_parked_ticket_ids finds only the real connectivity failure",
+      store.connectivity_parked_ticket_ids() == [600], str(store.connectivity_parked_ticket_ids()))
+
+_real_connectivity_ok = observability.external_connectivity_ok
+_remove_tag_calls_conn = []
+_real_remove_tag_conn = zammad.remove_tag
+zammad.remove_tag = lambda ticket_id, tag: (_remove_tag_calls_conn.append((ticket_id, tag)) or {})
+_article_calls_conn = []
+_real_add_article_conn = zammad.add_article
+zammad.add_article = lambda ticket_id, subject, body, internal=True, author="script": (
+    _article_calls_conn.append((ticket_id, author)) or {}
+)
+try:
+    observability.external_connectivity_ok = lambda: False
+    triage._retry_connectivity_parked_tickets()
+    check("no requeue attempted while connectivity is still down",
+          store.connectivity_parked_ticket_ids() == [600])
+
+    observability.external_connectivity_ok = lambda: True
+    triage._retry_connectivity_parked_tickets()
+    conn = store.connect()
+    row_conn = conn.execute("SELECT state, retry_count FROM incidents WHERE id=?", (id_conn_err,)).fetchone()
+    conn.close()
+    check("connectivity recovery re-queues the connectivity-failure ticket",
+          row_conn["state"] == "queued", str(dict(row_conn)))
+    check("connectivity recovery resets retry_count",
+          row_conn["retry_count"] == 0)
+    check("connectivity recovery clears the needs-human tag",
+          (600, "needs-human") in _remove_tag_calls_conn, str(_remove_tag_calls_conn))
+    check("connectivity recovery posts a confirmation note attributed to itself",
+          any(tid == 600 and a == "script: connectivity recovery" for tid, a in _article_calls_conn),
+          str(_article_calls_conn))
+    check("the toggle-disabled ticket is left alone",
+          not any(tid == 601 for tid, _ in _article_calls_conn), str(_article_calls_conn))
+
+    # Level-checked, not edge-triggered: once requeued the ticket is no
+    # longer in state='done', so a second call in the same "connectivity is
+    # up" window must not touch it again.
+    _article_calls_conn.clear()
+    triage._retry_connectivity_parked_tickets()
+    check("an already-requeued ticket is not matched again while still queued",
+          not any(tid == 600 for tid, _ in _article_calls_conn), str(_article_calls_conn))
+finally:
+    observability.external_connectivity_ok = _real_connectivity_ok
+    zammad.remove_tag = _real_remove_tag_conn
+    zammad.add_article = _real_add_article_conn
+    for i in (id_conn_err, id_conn_disabled, id_conn_nokey):
+        store.finish(i, "test")
+
+
 print("\n== diagnostic output handling ==")
 truncated = collect._truncate("x" * 9000, 4000)
 check("long output is truncated", len(truncated) < 9000)

@@ -341,6 +341,33 @@ def requeue_by_ticket_id(ticket_id):
         conn.close()
 
 
+def connectivity_parked_ticket_ids():
+    """Tickets parked with outcome=escalation_unavailable specifically
+    because the Anthropic API call itself failed (2026-09-13) -- e.g. a WAN
+    outage that took out both the deterministic restart AND the escalation
+    tier at once, per claude.py's `escalate()` "error" branch. That detail
+    string ("Anthropic API call failed on turn...") is what distinguishes a
+    real connectivity casualty from the other three escalation_unavailable
+    causes (disabled via the dashboard toggle, no API key configured, budget
+    exhausted) -- those are deliberate/config states, not connectivity, and
+    must NOT be auto-requeued just because the network happens to recover.
+
+    Used by triage.py's periodic connectivity-recovery check to resume these
+    on its own once the network is back, instead of leaving them for a human
+    to notice and hit /resume by hand.
+    """
+    conn = connect()
+    try:
+        rows = conn.execute(
+            """SELECT ticket_id FROM incidents
+               WHERE state='done' AND outcome='escalation_unavailable'
+                 AND detail LIKE 'Anthropic API call failed on turn%'"""
+        ).fetchall()
+        return [r["ticket_id"] for r in rows if r["ticket_id"]]
+    finally:
+        conn.close()
+
+
 def currently_processing(stale_after_seconds=3600):
     """The incident currently claimed and being worked, if any -- backs the
     dashboard's "actively processing" status (2026-08-24). Reuses

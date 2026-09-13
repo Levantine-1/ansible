@@ -205,6 +205,40 @@ hosts via `fleet.yml`'s `probe_targets`.
   ages footage out. `/media/frigate` at 80-90% is normal and is deliberately
   excluded from `DiskSpaceLow`. Only `NVRRetentionFailing` (<2% free) means
   something is actually wrong.
+- **A real WAN outage takes down the escalation tier too** (2026-09-09, a
+  ~25min ISP-side blip): every alert that fired during it got escalated
+  because the deterministic tier's restart couldn't be verified (DNS was
+  down), and every one of those escalations then failed with
+  `APIConnectionError` reaching `api.anthropic.com` — landing on
+  `escalation_unavailable` and a `needs-human` tag, 8 tickets in a row. The
+  underlying services were fine again within the outage window; only the
+  tickets were stuck, because nothing previously retried an
+  escalation-tier failure once the network came back. `triage.py`'s worker
+  now does this itself (`_retry_connectivity_parked_tickets()`, gated by
+  `config.CONNECTIVITY_RECOVERY_CHECK_SECONDS`) — it re-queues any ticket
+  parked on `escalation_unavailable` specifically for this reason (not the
+  dashboard-toggle or no-API-key cases, which are deliberate) as soon as
+  `observability.external_connectivity_ok()` is true again. If you see a
+  fresh batch of `escalation_unavailable` tickets during/after an outage and
+  they haven't cleared on their own within
+  `CONNECTIVITY_RECOVERY_CHECK_SECONDS` (default 5 min) of connectivity
+  actually returning, check the worker is still running before assuming
+  something is wrong with a specific ticket.
+- **A dead WireGuard tunnel looks like "the whole public site is down" with
+  no obvious internal symptom** (same 2026-09-09 outage, discovered later on
+  2026-09-13): `vmwarebastion`'s tunnel to the AWS bastion silently stayed
+  dead for 3+ days after the blip, because its self-healing watchdog
+  (`wireguard-watcher.service`) depended on `nslookup`, which isn't
+  installed on that host — every restart attempt died on
+  "command not found" before ever reaching `service wg-quick@wg0 restart`.
+  Every internal LAN probe was healthy the whole time; only the public
+  `https://levantine.io` blackbox probe (ticket, `host=vmwarebastion,
+  service=nginx`) caught it, and even that ticket just sat on
+  `escalation_unavailable` like the others above. Fixed at the ansible role
+  level (`getent` instead of `nslookup`), but if a `ProbeFailed` ticket on
+  `vmwarebastion`/`nginx` won't clear despite everything else looking fine,
+  check `wg show wg0 latest-handshakes` on `vmwarebastion` and `service`
+  before assuming it's an application problem.
 
 ---
 
