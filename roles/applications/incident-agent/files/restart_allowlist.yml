@@ -47,6 +47,29 @@ rules:
     action: restart_host
     verify: {type: http, url: "http://frigate.internal.levantine.io:5000/api/version"}
 
+  # Real incident (2026-09-13, ticket 16151): the baby-ptz camera was
+  # unplugged for ~3.5 days, and Frigate's own reconnect-retry loop (~24,500
+  # ffmpeg crash/restart cycles trying to reach it) leaked memory in the main
+  # process the whole time -- 41.7% of total system RAM in one process by the
+  # time it was noticed, versus 3-6% for every other Frigate component.
+  # HighMemoryUsage had no rule before this, so it always escalated to a
+  # human (which is how the leak was found at all) -- a bounded
+  # restart_container is the same safe, proven fix as the ProbeFailed rule
+  # above, just triggered by memory instead of a failed probe.
+  #
+  # verify is `http`, not a memory check -- there is no metric-based verify
+  # type yet (see triage.py's _verify()), so this only confirms the container
+  # came back up and answers, not that memory actually dropped. Good enough
+  # for now: a restart that fails to start would still fail this check, and
+  # the flap_guard below stops a second bounce from masking a real ongoing
+  # leak (e.g. a camera that keeps disconnecting) as anything other than
+  # exactly that.
+  - alert: HighMemoryUsage
+    host: frigate
+    action: restart_container
+    target: frigate
+    verify: {type: http, url: "http://frigate.internal.levantine.io:5000/api/version"}
+
   # --- dockerhost1 app containers ---------------------------------------
   # Portfolio/demo apps. Nothing here has a real user or any persistent state
   # that a container restart endangers -- the databases live elsewhere
