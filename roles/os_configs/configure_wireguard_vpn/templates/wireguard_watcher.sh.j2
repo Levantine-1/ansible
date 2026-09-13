@@ -8,7 +8,6 @@
 
 ENDPOINT="{{ wg_server['endpoint'] }}"
 ENDPOINT_ADDR=$(echo "${ENDPOINT}" | cut -d ':' -f 1)
-ENDPOINT_PORT=$(echo "${ENDPOINT}" | cut -d ':' -f 2)
 WG_VPN_IP=$(echo "{{ wg_server['interface']['address'] }}" | cut -d '/' -f 1)
 TIMEOUT=5
 CHECK_INTERVAL=10
@@ -35,18 +34,18 @@ while true; do
         if [[ ${WG_PING_CHECK_FAILED} -ge ${MAX_FAILED_PINGS} ]]; then
             echo "Ping check failed ${MAX_FAILED_PINGS} times, restarting wireguard client service..."
             echo "checking DNS resolution for ${ENDPOINT_ADDR}..."
-            if nslookup "${ENDPOINT_ADDR}" &> /dev/null; then
-                echo "DNS resolution successful, checking if port is open..."
-                nc_output=$(nc -zv -w "${TIMEOUT}" "${ENDPOINT_ADDR}" "${ENDPOINT_PORT}" 2>&1)
-                if [[ ${nc_output} == *"Connection refused"*  ]]; then
-                    # Connection shows refused due to requiring authentication but if you get this, it means the port is open
-                    echo "${ENDPOINT} is open, restarting wireguard client service..."
-                    service wg-quick@wg0 restart
-                    WG_SERVICE_RESTARTED=true
-                    WG_PING_CHECK_FAILED=1
-                else
-                    echo "Unexpected error: $nc_output"
-                fi
+            # Use getent instead of nslookup: nslookup requires a separate package
+            # (dnsutils/bind-tools) that isn't installed on every client, which silently
+            # disabled this whole restart path. getent is glibc-provided and always present.
+            if getent hosts "${ENDPOINT_ADDR}" &> /dev/null; then
+                # WireGuard is UDP-only, so a TCP nc scan against ${ENDPOINT_PORT} can't
+                # reliably confirm the port is reachable either way (no "Connection refused"
+                # signal exists for a UDP port). DNS resolving is enough evidence the network
+                # is basically up; just restart -- it's a no-op if the tunnel is already healthy.
+                echo "DNS resolution successful, restarting wireguard client service..."
+                service wg-quick@wg0 restart
+                WG_SERVICE_RESTARTED=true
+                WG_PING_CHECK_FAILED=1
             else
                 echo "DNS resolution failed, host may be down"
             fi
