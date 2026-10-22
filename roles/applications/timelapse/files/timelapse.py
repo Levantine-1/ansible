@@ -160,8 +160,14 @@ def valid_jpeg(data):
     """True only for a complete, decodable JPEG of plausible size."""
     if not data or len(data) < MIN_FRAME_BYTES or not data.startswith(b"\xff\xd8\xff"):
         return False
+    # A transfer cut off mid-body is the realistic failure, and Pillow's
+    # verify() does NOT catch it for JPEG (it only checks headers) -- found
+    # by this role's own tests. So: require the end-of-image marker (some
+    # cameras pad after it), then fully decode, which raises on truncation.
+    if not data.rstrip(b"\x00\r\n ").endswith(b"\xff\xd9"):
+        return False
     try:
-        Image.open(io.BytesIO(data)).verify()
+        Image.open(io.BytesIO(data)).load()
     except Exception:
         return False
     return True
