@@ -186,6 +186,13 @@
       no_log: true
 
     # --- image ------------------------------------------------------------
+    - name: Create the build and test directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ timelapse_build_dir }}", /opt/timelapse/tests]
+
     - name: Copy the image sources
       copy:
         src: "files/{{ item }}"
