@@ -71,6 +71,10 @@ admin:
   # also needs the camera itself declared capable in cameras.yml.
   talk: [baby-ptz]
   recordings: true
+  # The viewing audit log at /audit: who watched, from which device and IP,
+  # for how long, and how much data it used. A separate grant from
+  # `recordings` because it shows every account's viewing.
+  audit: true
 
 # Shared account for the rest of the household. livecam only -- there is no
 # recordings grant (see below), which is the intended boundary: live

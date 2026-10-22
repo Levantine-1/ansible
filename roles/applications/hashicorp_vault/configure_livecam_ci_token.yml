@@ -15,12 +15,22 @@
 #
 # Idempotent: writing a policy is a PUT, and the token is only minted when
 # kv/data/github/ci_vault_token is absent, so re-running won't silently
-# rotate a token that CI is already using.
+# rotate a token that CI is already using. Pass rotate_ci_token=true to
+# replace an existing one (e.g. after it expired).
+#
+# The 8760h TTL below was originally capped, silently, by Vault's system
+# default max TTL of 768h: the first token asked for a year, got 32 days, and
+# CI started failing with "invalid token" a month later. The token auth
+# mount's max TTL is now raised to match, and the minted lease is checked so
+# a cap can never go unnoticed again.
 #
 # Usage:
 #   ansible-playbook -i inventories/production/production.ini \
 #     roles/applications/hashicorp_vault/configure_livecam_ci_token.yml \
-#     --extra-vars "vault_root_token=<root token>"
+#     --extra-vars "vault_root_token=<root token> [rotate_ci_token=true]"
+#
+# Then push the new value to GitHub with
+# roles/applications/github_runner/set_repo_secrets.yml.
 - name: Mint the livecam CI Vault token
   hosts: service
   become: yes
@@ -41,6 +51,17 @@
             path "kv/data/aws/iam_access_keys/subdomain_delegation" {
               capabilities = ["read"]
             }
+        status_code: 204
+
+    - name: Let the token auth mount issue tokens that live as long as requested
+      uri:
+        url: "{{ hashicorp.vault.address }}/v1/sys/auth/token/tune"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_root_token }}"
+        body_format: json
+        body:
+          max_lease_ttl: "8760h"
         status_code: 204
 
     - name: Check whether the CI token already exists
@@ -74,8 +95,16 @@
           display_name: "livecam-github-actions-ci"
         status_code: 200
       register: minted_token
-      when: existing_ci_token.status == 404
+      when: existing_ci_token.status == 404 or (rotate_ci_token | default(false) | bool)
       no_log: true
+
+    - name: Fail if Vault capped the token's lifetime
+      assert:
+        that: minted_token.json.auth.lease_duration >= 8760 * 3600 * 0.99
+        fail_msg: >-
+          Vault issued the CI token for {{ (minted_token.json.auth.lease_duration / 3600) | round(1) }}h,
+          not 8760h -- a max TTL is still capping it, and CI will break when it lapses.
+      when: minted_token is not skipped
 
     # Stored in Vault so the token has a source of truth, and so
     # github_runner/set_repo_secrets.yml can push it to GitHub the same way
@@ -91,12 +120,14 @@
           data:
             token: "{{ minted_token.json.auth.client_token }}"
         status_code: 200
-      when: existing_ci_token.status == 404
+      when: minted_token is not skipped
       no_log: true
 
     - name: Report (never prints the token itself)
       debug:
         msg: >-
           {{ 'Minted a new livecam-ci token and stored it at kv/data/github/ci_vault_token'
-             if existing_ci_token.status == 404
-             else 'kv/data/github/ci_vault_token already exists -- left untouched' }}
+             ~ ' -- now run github_runner/set_repo_secrets.yml'
+             if minted_token is not skipped
+             else 'kv/data/github/ci_vault_token already exists -- left untouched'
+                  ~ ' (pass rotate_ci_token=true to replace it)' }}
