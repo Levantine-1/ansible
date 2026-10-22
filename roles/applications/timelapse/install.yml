@@ -1,0 +1,296 @@
+---
+# Long-term timelapse capture on `service`: one full-resolution frame per
+# enabled camera every 15 minutes, kept indefinitely on its own SSD-backed
+# disk and copied nightly to S3 Deep Archive.
+#
+# Nothing here runs between captures. Two systemd timers start a
+# short-lived container (timelapse:local, built from files/ on this host --
+# no registry or CI involved) that does one job and exits:
+#
+#   timelapse-capture.timer  every :00/:15/:30/:45  -> `timelapse.py capture`
+#   timelapse-backup.timer   daily 02:30 UTC        -> `timelapse.py backup`
+#
+# Which cameras are captured is chosen on the ops dashboard
+# (https://service.levantine.io/timelapse/settings), which writes
+# /srv/timelapse/.config/config.json. This play only writes that file when
+# it does not exist yet (baby-ptz on, everything else off), so re-running it
+# never undoes a choice made there. The camera list itself comes from
+# group_vars/Frigate's `cameras` -- the same place a camera is added for
+# Frigate -- so a new camera appears on the settings page, unticked, after
+# this play next runs.
+#
+# Storage: the 500G scsi1 disk terraform/proxmox/service.tf attaches from
+# 3800xt's SSD1TB pool, deliberately not the root disk (the control plane
+# must never be filled by a years-long archive) and not Frigate's HDD.
+#
+# Monitoring: the dashboard app exposes /timelapse/metrics, scraped by
+# Prometheus here; alert rules are in roles/applications/monitoring.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/timelapse/install.yml
+- name: Install timelapse capture
+  hosts: service
+  become: yes
+
+  vars_files:
+    - ../../../vault.yml
+
+  vars:
+    timelapse_data: /srv/timelapse
+    timelapse_build_dir: /opt/timelapse/build
+    timelapse_s3_bucket: prod-levantine-timelapse-archive
+    timelapse_aws_region: us-west-2
+    # Same go2rtc livecam uses; only the fallback source -- frames normally
+    # come straight from each camera's own snapshot endpoint.
+    timelapse_go2rtc_url: http://frigate.internal.levantine.io:1984
+    timelapse_default_enabled: ["baby-ptz"]
+    # Read from the Frigate group's vars so there is exactly one camera list.
+    timelapse_cameras: "{{ hostvars[groups['Frigate'][0]]['cameras'] }}"
+
+  tasks:
+    - name: Retrieve camera credentials from Vault
+      set_fact:
+        camera_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/cameras/amcrest token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    - name: Retrieve the backup user's AWS keys from Vault
+      # Written by terraform (iam/users/users.tf) when it created the
+      # write-only timelapse_backup user.
+      set_fact:
+        backup_keys: "{{ lookup('hashi_vault', 'secret=kv/data/aws/iam_access_keys/timelapse_backup token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    # --- data disk ------------------------------------------------------
+    # Same by-id + root-disk guard as roles/applications/frigate: never
+    # trust kernel ordering when the next step is mkfs.
+    - name: Resolve the timelapse disk to its current kernel device
+      command: readlink -f /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
+      register: timelapse_disk
+      changed_when: false
+      failed_when: timelapse_disk.rc != 0 or not timelapse_disk.stdout
+
+    - name: Identify the root disk, so it can never be the format target
+      shell: |
+        set -o pipefail
+        lsblk -no PKNAME "$(findmnt -no SOURCE /)"
+      args:
+        executable: /bin/bash
+      register: root_disk
+      changed_when: false
+
+    - name: Refuse to touch the disk holding the root filesystem
+      assert:
+        that: timelapse_disk.stdout | trim | basename != root_disk.stdout | trim
+        fail_msg: >-
+          The resolved timelapse disk ({{ timelapse_disk.stdout | trim }}) is the root
+          disk (/dev/{{ root_disk.stdout | trim }}). Refusing to format.
+
+    - name: Check if the timelapse disk is already formatted
+      command: "blkid -o value -s TYPE {{ timelapse_disk.stdout | trim }}"
+      register: timelapse_blkid
+      changed_when: false
+      failed_when: false
+
+    - name: Format the timelapse disk (scsi1, ext4)
+      filesystem:
+        fstype: ext4
+        dev: "{{ timelapse_disk.stdout | trim }}"
+      when: timelapse_blkid.stdout == ""
+
+    - name: Create the mount point
+      file:
+        path: "{{ timelapse_data }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount the timelapse disk
+      mount:
+        path: "{{ timelapse_data }}"
+        src: /dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1
+        fstype: ext4
+        # nofail: a missing archive disk must not stop the control plane
+        # from booting. Capture then fails loudly (see the guard below and
+        # TimelapseCaptureStale) rather than quietly filling the root disk.
+        opts: defaults,nofail
+        state: mounted
+
+    - name: Fail if the data path is not actually on the timelapse disk
+      shell: |
+        set -o pipefail
+        findmnt -no SOURCE --target {{ timelapse_data }}
+      args:
+        executable: /bin/bash
+      register: timelapse_mount_source
+      changed_when: false
+      failed_when: timelapse_mount_source.stdout | trim != timelapse_disk.stdout | trim
+
+    - name: Create the state and config directories
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
+        mode: "0755"
+      loop:
+        - { path: "{{ timelapse_data }}/.state", owner: root }
+        # Owned by www-data: the dashboard app (which runs as www-data)
+        # writes the camera selection here.
+        - { path: "{{ timelapse_data }}/.config", owner: www-data }
+
+    - name: Seed the camera selection (only if none exists yet)
+      copy:
+        dest: "{{ timelapse_data }}/.config/config.json"
+        # enabled_since is left empty here; the dashboard treats a missing
+        # entry as "since this file was created" and records real times
+        # from then on.
+        content: "{{ {'enabled': timelapse_default_enabled, 'enabled_since': {}} | to_nice_json }}\n"
+        owner: www-data
+        group: www-data
+        mode: "0644"
+        force: no
+
+    # --- camera list + secrets -----------------------------------------
+    - name: Create /etc/timelapse
+      file:
+        path: /etc/timelapse
+        state: directory
+        mode: "0755"
+
+    - name: Write the camera list
+      # Names and addresses only -- readable by the dashboard app too.
+      copy:
+        dest: /etc/timelapse/cameras.json
+        content: |
+          [
+          {% for c in timelapse_cameras %}
+            {{ {'name': c.name, 'friendly_name': c.friendly_name | default(c.name), 'ip': c.ip, 'channel': c.channel | default(1)} | to_json }}{{ '' if loop.last else ',' }}
+          {% endfor %}
+          ]
+        mode: "0644"
+
+    - name: Write the capture environment (credentials)
+      copy:
+        dest: /etc/timelapse.env
+        content: |
+          CAMERA_USERNAME={{ camera_secrets.username }}
+          CAMERA_PASSWORD={{ camera_secrets.password }}
+          GO2RTC_URL={{ timelapse_go2rtc_url }}
+          S3_BUCKET={{ timelapse_s3_bucket }}
+          AWS_ACCESS_KEY_ID={{ backup_keys.access_key }}
+          AWS_SECRET_ACCESS_KEY={{ backup_keys.secret_key }}
+          AWS_DEFAULT_REGION={{ timelapse_aws_region }}
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    # --- image ------------------------------------------------------------
+    - name: Copy the image sources
+      copy:
+        src: "files/{{ item }}"
+        dest: "{{ timelapse_build_dir }}/{{ item }}"
+        mode: "0644"
+      loop: [Dockerfile, timelapse.py]
+      register: timelapse_sources
+
+    - name: Check whether the image exists
+      command: docker image inspect timelapse:local
+      register: timelapse_image
+      changed_when: false
+      failed_when: false
+
+    - name: Build timelapse:local
+      command: docker build -t timelapse:local {{ timelapse_build_dir }}
+      when: timelapse_sources.changed or timelapse_image.rc != 0
+
+    - name: Copy the tests
+      copy:
+        src: tests/test_timelapse.py
+        dest: /opt/timelapse/tests/test_timelapse.py
+        mode: "0644"
+
+    - name: Run the tests inside the built image
+      # Against the exact Pillow/requests that will capture for years, not
+      # whatever the controller happens to have installed.
+      command: >-
+        docker run --rm --network none --entrypoint python3
+        -v /opt/timelapse/tests:/tests:ro timelapse:local /tests/test_timelapse.py
+      register: timelapse_tests
+      changed_when: false
+      failed_when: "timelapse_tests.rc != 0 or 'ALL PASS' not in timelapse_tests.stdout"
+
+    # --- timers -------------------------------------------------------------
+    - name: Install the capture and backup units
+      copy:
+        dest: "/etc/systemd/system/{{ item.name }}"
+        content: "{{ item.content }}"
+        mode: "0644"
+      loop:
+        - name: timelapse-capture.service
+          content: |
+            [Unit]
+            Description=Timelapse: capture one frame per enabled camera
+            # The archive disk must be mounted, or frames would land on the
+            # root filesystem underneath the mount point.
+            RequiresMountsFor={{ timelapse_data }}
+            After=docker.service
+            Requires=docker.service
+
+            [Service]
+            Type=oneshot
+            # --name doubles as an overlap guard: if a slow run is still
+            # going, the next one fails to start instead of racing it.
+            ExecStart=/usr/bin/docker run --rm --name timelapse-capture --network host --env-file /etc/timelapse.env -v {{ timelapse_data }}:/data -v /etc/timelapse/cameras.json:/etc/timelapse/cameras.json:ro timelapse:local capture
+            TimeoutStartSec=600
+        - name: timelapse-capture.timer
+          content: |
+            [Unit]
+            Description=Timelapse capture every 15 minutes
+
+            [Timer]
+            OnCalendar=*-*-* *:00/15:00
+            AccuracySec=1s
+            # A missed slot stays missed: catching up late would produce a
+            # frame at the wrong time, which is worse than a gap.
+            Persistent=false
+
+            [Install]
+            WantedBy=timers.target
+        - name: timelapse-backup.service
+          content: |
+            [Unit]
+            Description=Timelapse: upload completed days to S3 Deep Archive
+            RequiresMountsFor={{ timelapse_data }}
+            After=docker.service network-online.target
+            Requires=docker.service
+
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/bin/docker run --rm --name timelapse-backup --network host --env-file /etc/timelapse.env -v {{ timelapse_data }}:/data timelapse:local backup
+            TimeoutStartSec=6h
+        - name: timelapse-backup.timer
+          content: |
+            [Unit]
+            Description=Timelapse nightly backup
+
+            [Timer]
+            OnCalendar=*-*-* 02:30:00 UTC
+            # Unlike capture, a missed backup should run as soon as possible.
+            Persistent=true
+
+            [Install]
+            WantedBy=timers.target
+      register: timelapse_units
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+      when: timelapse_units.changed
+
+    - name: Enable and start the timers
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      loop: [timelapse-capture.timer, timelapse-backup.timer]

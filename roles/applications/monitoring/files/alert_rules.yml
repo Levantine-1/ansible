@@ -307,3 +307,109 @@ groups:
           severity: critical
         annotations:
           summary: "{{ $labels.instance }} fan {{ $labels.sensor }} ({{ $labels.chip }}) stopped -- was spinning an hour ago, now 0 RPM"
+
+  # Timelapse capture (roles/applications/timelapse), 2026-10-22. Metrics come
+  # from the ops dashboard's timelapse app (job="timelapse"); if that app is
+  # down, the fleet-wide InstanceDown rule above already fires for it.
+  #
+  # The point of this group: the archive is meant to run untouched for
+  # years, so a gap must never be silent. Per-camera rules only consider
+  # cameras ticked on the settings page (timelapse_camera_enabled == 1) --
+  # unticking a camera is a choice, not an outage.
+  - name: timelapse
+    rules:
+      # 45m = three missed 15-minute slots. One miss can be a camera reboot;
+      # three in a row is a dead timer, Docker, disk mount or camera.
+      - alert: TimelapseCaptureStale
+        expr: (time() - timelapse_last_capture_timestamp) > 2700 and on(camera) timelapse_camera_enabled == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Timelapse: no frame from {{ $labels.camera }} for {{ $value | humanizeDuration }}"
+          description: >-
+            Check `systemctl status timelapse-capture.service` and
+            `journalctl -u timelapse-capture` on service, and that
+            /srv/timelapse is mounted. Frames missed now cannot be recovered.
+
+      # Errors while frames are still arriving: retries or the go2rtc
+      # fallback are papering over a problem with the camera's own snapshot
+      # endpoint. Not urgent, but it's the early warning before CaptureStale.
+      - alert: TimelapseCaptureErrors
+        expr: >-
+          (time() - timelapse_last_error_timestamp) < 1800
+          and on(camera) (time() - timelapse_last_capture_timestamp) < 1800
+          and on(camera) timelapse_camera_enabled == 1
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse: {{ $labels.camera }} capturing, but with errors for the last hour"
+          description: >-
+            Frames are still being saved, likely via the go2rtc fallback. The
+            last error is shown on https://service.levantine.io/timelapse/.
+
+      # Byte-identical frames: the camera (or go2rtc) is serving a frozen
+      # picture. Captures "succeed", so nothing else would notice.
+      - alert: TimelapseFrameFrozen
+        expr: timelapse_frozen == 1 and on(camera) timelapse_camera_enabled == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse: {{ $labels.camera }} has returned the same frame 4+ times in a row"
+
+      # Yesterday came up short -- catches intermittent failures that never
+      # last long enough for CaptureStale. Expected is computed per camera
+      # from when it was enabled, so a camera ticked mid-day doesn't fire.
+      - alert: TimelapseIncompleteDay
+        expr: timelapse_frames_yesterday < (timelapse_frames_yesterday_expected - 6)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse: {{ $labels.camera }} captured {{ $value }} frames yesterday (UTC), well short of expected"
+
+      - alert: TimelapseNothingEnabled
+        expr: sum(timelapse_camera_enabled) == 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse: no cameras are enabled, so nothing is being captured"
+          description: Tick at least one camera at https://service.levantine.io/timelapse/settings, or ignore if intentional.
+
+      # The backup runs daily at 02:30 UTC; 36h allows one missed night.
+      - alert: TimelapseBackupStale
+        expr: (time() - timelapse_last_backup_success_timestamp) > 129600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse: no successful S3 backup for {{ $value | humanizeDuration }}"
+          description: >-
+            Check `journalctl -u timelapse-backup` on service. Until this is
+            fixed the only copy of recent frames is the single SSD.
+
+      - alert: TimelapseBackupBacklog
+        expr: timelapse_backup_pending_days > 2
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse: {{ $value }} camera-days are waiting to be uploaded to S3"
+
+      # Either already nearly full, or on course to be within 60 days at
+      # the last week's rate -- months of warning to grow the disk.
+      - alert: TimelapseDiskFilling
+        expr: >-
+          (timelapse_disk_free_bytes / timelapse_disk_size_bytes) < 0.10
+          or predict_linear(timelapse_disk_free_bytes[7d], 60 * 86400) < 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Timelapse disk on service will be full within 60 days (or is under 10% free)"
+          description: >-
+            Grow the scsi1 disk in terraform/proxmox/service.tf (SSD1TB has
+            spare space), then `resize2fs` it online.

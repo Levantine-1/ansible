@@ -29,6 +29,15 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9093"]
 
+  # Timelapse capture health, exported by the ops dashboard's timelapse app
+  # (the capture container itself only lives for seconds, so it can't be
+  # scraped). Prometheus runs with host networking, so localhost reaches it.
+  # Alert rules: the `timelapse` group in alert_rules.yml.
+  - job_name: timelapse
+    metrics_path: /timelapse/metrics
+    static_configs:
+      - targets: ["localhost:5057"]
+
   - job_name: node_exporter
     static_configs:
       - targets:

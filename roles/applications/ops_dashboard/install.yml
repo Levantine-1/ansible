@@ -22,6 +22,7 @@
     ops_dashboard_ollama_model: "phi4-mini"
     ops_dashboard_incidents_port: 5056
     ops_dashboard_incident_agent_url: "http://incident-agent.internal.levantine.io:9098"
+    ops_dashboard_timelapse_port: 5057
 
   tasks:
     - name: Install nginx
@@ -215,6 +216,62 @@
         name: ops-dashboard-incidents
         state: restarted
       when: incidents_app_script.changed or incidents_app_env.changed or incidents_app_unit.changed
+
+    # Timelapse settings + review + /metrics (2026-10-22). The capture side
+    # is roles/applications/timelapse; this is only its UI. Runs as
+    # www-data like the others: it reads the archive (world-readable) and
+    # writes nothing but /srv/timelapse/.config, which that role creates
+    # owned by www-data.
+    - name: Deploy timelapse app
+      copy:
+        src: files/timelapse_app.py
+        dest: /usr/local/bin/ops_dashboard_timelapse.py
+        owner: root
+        group: root
+        mode: "0755"
+      register: timelapse_app_script
+
+    - name: Deploy timelapse app systemd unit
+      copy:
+        dest: /etc/systemd/system/ops-dashboard-timelapse.service
+        content: |
+          [Unit]
+          Description=Ops dashboard timelapse settings, review and metrics
+          After=network.target
+
+          [Service]
+          Environment=PYTHONUNBUFFERED=1
+          Environment=PORT={{ ops_dashboard_timelapse_port }}
+          Environment=TIMELAPSE_DATA=/srv/timelapse
+          Environment=CAMERAS_FILE=/etc/timelapse/cameras.json
+          ExecStart=/usr/bin/python3 /usr/local/bin/ops_dashboard_timelapse.py
+          Restart=on-failure
+          RestartSec=5
+          User=www-data
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      register: timelapse_app_unit
+
+    - name: Reload systemd daemon (timelapse app)
+      systemd:
+        daemon_reload: yes
+      when: timelapse_app_unit.changed
+
+    - name: Enable and start the timelapse app
+      systemd:
+        name: ops-dashboard-timelapse
+        enabled: yes
+        state: started
+
+    - name: Restart timelapse app if its script or unit changed
+      systemd:
+        name: ops-dashboard-timelapse
+        state: restarted
+      when: timelapse_app_script.changed or timelapse_app_unit.changed
 
   handlers:
     - name: reload nginx
