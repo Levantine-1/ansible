@@ -438,7 +438,8 @@ SETTINGS = """<!doctype html>
   {% else %}
   <p class="muted">No cameras defined (group_vars/Frigate <code>cameras</code>).</p>
   {% endfor %}
-  <p class="muted">One full-resolution frame every 15 minutes per ticked camera (about 28&nbsp;GB a year each).
+  <p class="muted">One full-resolution frame every 15 minutes per ticked camera &mdash; roughly 7&ndash;30&nbsp;GB a
+    year each, depending on the camera (baby-ptz's frames are about 200&nbsp;KB, so about 7&nbsp;GB a year).
     Unticking stops new frames only &mdash; frames already captured stay and are still backed up.
     New cameras appear here unticked.</p>
   <button type="submit">Save</button>
