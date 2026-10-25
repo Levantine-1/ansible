@@ -55,3 +55,55 @@
         name: nginx
         state: restarted
       when: levantine_certs.changed
+
+# dockerhost1's nginx-proxy (jwilder) terminates TLS for every app container
+# there -- including the PUBLIC livecam.levantine.io, which the bastions pass
+# through rather than terminate. Its cert lives in /opt/nginx-certs, which only
+# nginx-proxyContainers/configure-jwilder-nginx-proxy-container.yml wrote, and
+# only when run by hand. So the weekly renewal refreshed every other host and
+# never this one: the Aug 22 copy expired on 2026-10-24 and took HTTPS for
+# every dockerhost1 app down with it -- and, via a failing blackbox probe, set
+# the incident agent restarting livecam every hour, which is what kept kicking
+# viewers out of full screen. This play puts it on the same weekly renewal.
+- name: Deploy the wildcard cert to nginx-proxy on the Docker hosts
+  hosts: VMWareDockerHosts
+  become: yes
+
+  vars_files:
+    - ../../vault.yml
+
+  tasks:
+    - name: Retrieve the levantine.io certificate from Vault
+      set_fact:
+        proxy_ssl_certs: "{{ lookup('hashi_vault', 'secret=kv/data/ssl_certs/levantine_io token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+      no_log: true
+
+    - name: Deploy the wildcard certificate for nginx-proxy
+      # Same files and names as configure-jwilder-nginx-proxy-container.yml.
+      copy:
+        content: "{{ proxy_ssl_certs[item.key] }}"
+        dest: "/opt/nginx-certs/levantine.io.{{ item.ext }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        - { key: fullchain, ext: crt }
+        - { key: privkey, ext: key }
+      loop_control:
+        label: "levantine.io.{{ item.ext }}"
+      no_log: true
+      register: proxy_certs
+
+    # nginx's own reload, run inside the container -- NOT `docker kill -s HUP`.
+    # PID 1 in the jwilder image is a supervisor, not nginx, and HUP makes it
+    # shut nginx down: tried 2026-10-25 and every dockerhost1 site went down
+    # until the container was restarted. `nginx -s reload` swaps the cert in
+    # without dropping live connections (verified the same day).
+    - name: Check the nginx-proxy config before reloading
+      command: docker exec nginx-proxy nginx -t
+      changed_when: false
+      when: proxy_certs.changed
+
+    - name: Reload nginx-proxy to serve the new certificate
+      command: docker exec nginx-proxy nginx -s reload
+      when: proxy_certs.changed

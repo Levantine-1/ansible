@@ -214,6 +214,40 @@ def _poll_until_healthy(check_fn, interval_seconds=15, max_wait_seconds=120):
             return ok, detail
 
 
+# Substrings of observability.http_probe()'s failure detail that mean the
+# endpoint's TLS certificate is the problem, not the app behind it.
+TLS_FAILURE_MARKERS = (
+    "certificate_verify_failed",
+    "certificate verify failed",
+    "certificate has expired",
+    "sslcertverificationerror",
+)
+
+
+def _tls_failure(rule, incident):
+    """'url: detail' if the probed endpoint fails on its TLS certificate, else None.
+
+    Added 2026-10-25. dockerhost1's wildcard cert expired, the livecam probe
+    failed on TLS, and the allow-list rule restarted livecam -- which cannot
+    fix a certificate -- then the model tier restarted it again, every hour
+    until noticed. Each restart dropped every live viewer. A cert failure is
+    deterministic and says nothing about the app's health, so it short-
+    circuits straight to a human with the real cause instead.
+
+    Probes the rule's own verify URL when it has one, otherwise the alert's
+    instance if that is an https:// URL (blackbox ProbeFailed alerts).
+    """
+    url = ((rule or {}).get("verify") or {}).get("url") or ""
+    if not url and str(incident.get("instance", "")).startswith("https://"):
+        url = incident["instance"]
+    if not url.startswith("https://"):
+        return None
+    ok, detail = observability.http_probe(url)
+    if not ok and any(m in detail.lower() for m in TLS_FAILURE_MARKERS):
+        return f"{url}: {detail}"
+    return None
+
+
 def _verify(rule, incident):
     """Check whether an action actually fixed the problem."""
     verify = rule.get("verify") or {}
@@ -936,6 +970,20 @@ def handle(incident):
         return
 
     rule = config.match_restart_rule(alertname, host, service)
+
+    # --- Certificate failures are never fixed by a restart -----------------
+    # Checked before BOTH the allow-list and the model tier, so neither can
+    # bounce a healthy app over a cert problem (see _tls_failure()).
+    tls_problem = _tls_failure(rule, incident)
+    if tls_problem:
+        _escalate(incident, bundle, reason=(
+            f"The endpoint answers but its TLS certificate is invalid or expired ({tls_problem}). "
+            f"Restarting the app cannot fix this, so no automated action was taken. Check that "
+            f"the renewed certificate reached the host serving it -- roles/os_configs/"
+            f"deploySSLCerts.yml, run weekly by levantine-ssl-renew.timer on service."
+        ))
+        return
+
     if not rule:
         if hypervisor_down:
             # No point asking the model for an action -- nothing can reach

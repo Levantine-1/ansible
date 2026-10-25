@@ -134,6 +134,22 @@ groups:
         annotations:
           summary: "Uptime probe failing for {{ $labels.instance }}"
 
+      # 2026-10-25: dockerhost1's wildcard cert expired unnoticed -- the weekly
+      # renewal never deployed it there -- and the only signal was ProbeFailed
+      # after the fact. This fires two weeks ahead for any probed HTTPS
+      # endpoint. (Once a cert has actually expired the TLS handshake fails
+      # and this metric is absent; ProbeFailed covers that case.)
+      - alert: CertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
+          description: >-
+            Check that roles/os_configs/deploySSLCerts.yml (run weekly by
+            levantine-ssl-renew.timer on service) reached the host serving it.
+
       # --- Proxmox hardware health (SMART, NVMe wear, chip temperature) ---
       # Deployed via roles/os_configs/hardware_monitoring.yml, scraped as
       # job=smartctl_exporter (SMART/NVMe) and job=node_exporter's already-

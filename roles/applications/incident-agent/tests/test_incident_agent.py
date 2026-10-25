@@ -1549,6 +1549,47 @@ else:
     check("alert_rules.yml found for the for: duration check", False, alert_rules)
 
 
+# --- TLS failures short-circuit before any restart (2026-10-25) -------------
+# dockerhost1's expired cert made the livecam probe fail, and the allow-list
+# rule restarted livecam every hour for it. A cert failure must be reported,
+# never "fixed" by bouncing the app.
+_real_http_probe = observability.http_probe
+_livecam_rule = {"action": "restart_container", "target": "livecam",
+                 "verify": {"type": "http", "url": "https://livecam-lan.levantine.io/login"}}
+_probed = []
+try:
+    def _expired(url, timeout=10):
+        _probed.append(url)
+        return False, ("URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify "
+                       "failed: certificate has expired (_ssl.c:1006)> after 0.01s")
+    observability.http_probe = _expired
+    detail = triage._tls_failure(_livecam_rule, {"instance": "https://livecam-lan.levantine.io/login"})
+    check("expired certificate is recognised as a TLS failure",
+          detail is not None and "certificate has expired" in detail, detail)
+    check("the rule's own verify URL is what gets probed",
+          _probed == ["https://livecam-lan.levantine.io/login"], _probed)
+
+    _probed.clear()
+    detail = triage._tls_failure(None, {"instance": "https://levantine.io"})
+    check("with no rule, an https:// instance is probed instead",
+          detail is not None and _probed == ["https://levantine.io"], (_probed, detail))
+
+    observability.http_probe = lambda url, timeout=10: (False, "URLError: <urlopen error [Errno 111] Connection refused> after 0.00s")
+    check("a refused connection is NOT a TLS failure (restart may well help)",
+          triage._tls_failure(_livecam_rule, {}) is None)
+    observability.http_probe = lambda url, timeout=10: (False, "HTTP 502 in 0.10s (endpoint is up but not 2xx)")
+    check("a 5xx is NOT a TLS failure", triage._tls_failure(_livecam_rule, {}) is None)
+
+    _probed.clear()
+    observability.http_probe = _expired
+    check("a non-https target is never probed for TLS",
+          triage._tls_failure({"verify": {"type": "http", "url": "http://x:9100/metrics"}},
+                              {"instance": "dockerhost1.internal.levantine.io:9100"}) is None
+          and _probed == [], _probed)
+finally:
+    observability.http_probe = _real_http_probe
+
+
 print(f"\n{'=' * 60}")
 print(f"{len(PASS)} passed, {len(FAIL)} failed")
 if FAIL:
