@@ -246,9 +246,17 @@
 
             [Service]
             Type=oneshot
+            # Self-heal: rebuild the image from the sources on disk if it is
+            # missing. On 2026-10-25 a container deploy's `docker system
+            # prune -af` deleted it and every capture failed for ~22 hours
+            # (the prune now skips it via its keep label, but nothing else
+            # should be able to stop the archive either).
+            ExecStartPre=/bin/sh -c 'docker image inspect timelapse:local >/dev/null 2>&1 || docker build -q -t timelapse:local {{ timelapse_build_dir }}'
             # --name doubles as an overlap guard: if a slow run is still
             # going, the next one fails to start instead of racing it.
-            ExecStart=/usr/bin/docker run --rm --name timelapse-capture --network host --env-file /etc/timelapse.env -v {{ timelapse_data }}:/data -v /etc/timelapse/cameras.json:/etc/timelapse/cameras.json:ro timelapse:local capture
+            # --pull never: timelapse:local only ever exists here; never go
+            # looking for it on Docker Hub.
+            ExecStart=/usr/bin/docker run --rm --pull never --name timelapse-capture --network host --env-file /etc/timelapse.env -v {{ timelapse_data }}:/data -v /etc/timelapse/cameras.json:/etc/timelapse/cameras.json:ro timelapse:local capture
             TimeoutStartSec=600
         - name: timelapse-capture.timer
           content: |
@@ -274,7 +282,8 @@
 
             [Service]
             Type=oneshot
-            ExecStart=/usr/bin/docker run --rm --name timelapse-backup --network host --env-file /etc/timelapse.env -v {{ timelapse_data }}:/data timelapse:local backup
+            ExecStartPre=/bin/sh -c 'docker image inspect timelapse:local >/dev/null 2>&1 || docker build -q -t timelapse:local {{ timelapse_build_dir }}'
+            ExecStart=/usr/bin/docker run --rm --pull never --name timelapse-backup --network host --env-file /etc/timelapse.env -v {{ timelapse_data }}:/data timelapse:local backup
             TimeoutStartSec=6h
         - name: timelapse-backup.timer
           content: |

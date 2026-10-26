@@ -64,9 +64,15 @@ def main():
     check("a run just after the boundary lands on that slot", slot.minute == 15, slot)
     slot = t.slot_for(datetime(2026, 10, 23, 14, 14, 59, tzinfo=timezone.utc))
     check("a run just before the boundary still lands on it", slot.minute == 15, slot)
-    slot = t.slot_for(datetime(2026, 10, 23, 14, 52, 40, tzinfo=timezone.utc))
-    check("a run late in the hour rounds into the next hour",
+    slot = t.slot_for(datetime(2026, 10, 23, 14, 59, 30, tzinfo=timezone.utc))
+    check("a run just before the hour lands on the next hour",
           (slot.hour, slot.minute) == (15, 0), slot)
+    slot = t.slot_for(datetime(2026, 10, 26, 6, 8, 53, tzinfo=timezone.utc))
+    check("a manual run mid-slot belongs to the slot already started, not the next one",
+          (slot.hour, slot.minute) == (6, 0), slot)
+    slot = t.slot_for(datetime(2026, 10, 23, 14, 52, 40, tzinfo=timezone.utc))
+    check("a run 7 minutes before a boundary stays in its own slot",
+          (slot.hour, slot.minute) == (14, 45), slot)
     check("frame names are camera then UTC timestamp",
           t.frame_name("baby-ptz", datetime(2026, 10, 23, 14, 15, tzinfo=timezone.utc))
           == "baby-ptz_20261023T1415Z.jpg")

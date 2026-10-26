@@ -49,6 +49,9 @@ GO2RTC_URL = os.environ.get("GO2RTC_URL", "").rstrip("/")
 S3_BUCKET = os.environ.get("S3_BUCKET", "")
 
 SLOT_MINUTES = 15
+# How early before a slot boundary a run may start and still count as that
+# slot. See slot_for().
+SLOT_EARLY_SECONDS = 120
 # A full-resolution frame from these cameras is ~0.5-1.5 MB. Anything this
 # small is an error page, a grey "no signal" frame or a truncated transfer.
 MIN_FRAME_BYTES = int(os.environ.get("MIN_FRAME_BYTES", "50000"))
@@ -107,14 +110,21 @@ def write_json(path, obj):
 def slot_for(now):
     """The 15-minute UTC slot this run belongs to.
 
-    Rounded to the nearest slot rather than floored: the timer fires on the
-    slot boundary, but container start-up takes a second or two, and a run
-    that somehow started a moment early must still land on its own slot.
+    Normally the slot that has already started (floor). The one exception is
+    a run starting within SLOT_EARLY_SECONDS *before* a boundary, which
+    belongs to that upcoming slot -- the timer can fire a hair early.
+
+    This used to round to the nearest slot, so a run started by hand at
+    06:08 was filed as 06:15, and the real 06:15 capture then skipped it as
+    "already captured" (2026-10-26).
     """
     now = now.astimezone(timezone.utc)
     base = now.replace(minute=0, second=0, microsecond=0)
-    minutes = round((now - base).total_seconds() / 60 / SLOT_MINUTES) * SLOT_MINUTES
-    return base + timedelta(minutes=minutes)
+    elapsed = (now - base).total_seconds()
+    slot = int(elapsed // (SLOT_MINUTES * 60)) * SLOT_MINUTES
+    if (slot + SLOT_MINUTES) * 60 - elapsed <= SLOT_EARLY_SECONDS:
+        slot += SLOT_MINUTES
+    return base + timedelta(minutes=slot)
 
 
 def frame_name(camera, slot):

@@ -3,6 +3,12 @@
 # capture/backup, nothing resident between runs.
 FROM python:3.12-slim
 
+# Exempts this image from the `docker system prune` that container deploys
+# run on `service` (nginx-proxyContainers/downloadDockerImage.yml). No
+# container holds it between captures, so without this it counts as unused
+# -- which is exactly how it was deleted on 2026-10-25.
+LABEL org.levantine.keep="true"
+
 # Versions pinned so a rebuild years from now produces the same program.
 RUN pip install --no-cache-dir requests==2.32.3 Pillow==11.0.0 boto3==1.35.54
 

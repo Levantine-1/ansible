@@ -86,5 +86,11 @@
     - name: Push the Docker image to the local registry
       command: "docker push localhost:5000/{{ container_name }}:{{ latest_image.stdout }}"
 
+    # This runs on `service`, which also hosts images that are only ever run
+    # as short-lived containers -- timelapse:local starts every 15 minutes and
+    # exits within seconds, so between runs nothing references it and a plain
+    # `prune -a` deletes it. That happened on 2026-10-25: a livecam deploy
+    # removed it and timelapse capture failed for ~22 hours. Images labelled
+    # org.levantine.keep=true are exempt.
     - name: Prune Docker
-      command: docker system prune -af
+      command: docker system prune -af --filter "label!=org.levantine.keep=true"
