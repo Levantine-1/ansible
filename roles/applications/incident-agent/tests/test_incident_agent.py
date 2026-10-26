@@ -1431,8 +1431,26 @@ store.finish(id_conn_disabled, "escalation_unavailable", "The Claude escalation 
 id_conn_nokey, _ = store.enqueue(make_alert("connerr03"), 602, "602", "dockerhost1", "pet-care", past)
 store.finish(id_conn_nokey, "escalation_unavailable", "No Anthropic API key configured, so the escalation tier is inert.")
 
+# 2026-10-26: an invalid API key fails through the same "API call failed"
+# branch, and was re-queued every 5 minutes for ~22 hours because the
+# connectivity check (rightly) kept passing. Verbatim production detail.
+id_conn_badkey, _ = store.enqueue(make_alert("connerr04"), 603, "603", "dockerhost1", "livecam", past)
+store.finish(id_conn_badkey, "escalation_unavailable",
+             "Anthropic API call failed on turn 1: AuthenticationError: Error code: 401 - "
+             "{'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}}")
+
 check("connectivity_parked_ticket_ids finds only the real connectivity failure",
       store.connectivity_parked_ticket_ids() == [600], str(store.connectivity_parked_ticket_ids()))
+check("an invalid API key is never treated as a connectivity casualty",
+      603 not in store.connectivity_parked_ticket_ids())
+
+# An overloaded API is transient, unlike a bad key -- still worth retrying.
+id_conn_overload, _ = store.enqueue(make_alert("connerr05"), 604, "604", "dockerhost1", "thisper", past)
+store.finish(id_conn_overload, "escalation_unavailable",
+             "Anthropic API call failed on turn 2: OverloadedError: Error code: 529 - overloaded")
+check("an overloaded API is still retried",
+      604 in store.connectivity_parked_ticket_ids(), str(store.connectivity_parked_ticket_ids()))
+store.finish(id_conn_overload, "test")  # keep the fixture below as it was: only 600 parked
 
 _real_connectivity_ok = observability.external_connectivity_ok
 _remove_tag_calls_conn = []

@@ -355,13 +355,27 @@ def connectivity_parked_ticket_ids():
     Used by triage.py's periodic connectivity-recovery check to resume these
     on its own once the network is back, instead of leaving them for a human
     to notice and hit /resume by hand.
+
+    Not every failed API call is connectivity, though (2026-10-26): an
+    invalid/revoked API key fails the same way -- "Anthropic API call failed
+    on turn 1: AuthenticationError: ... 401" -- and the connectivity check
+    always passes, so two tickets were re-queued every 5 minutes for ~22
+    hours, each pass re-running diagnostics and the local model (pinning
+    3.7GB on incident-agent) and adding a note to the ticket. Errors no
+    retry can fix -- bad key, no permission, malformed request, unknown
+    model -- are excluded; connection errors, timeouts and Anthropic
+    overload/5xx still resume automatically.
     """
     conn = connect()
     try:
         rows = conn.execute(
             """SELECT ticket_id FROM incidents
                WHERE state='done' AND outcome='escalation_unavailable'
-                 AND detail LIKE 'Anthropic API call failed on turn%'"""
+                 AND detail LIKE 'Anthropic API call failed on turn%'
+                 AND detail NOT LIKE '%AuthenticationError%'
+                 AND detail NOT LIKE '%PermissionDeniedError%'
+                 AND detail NOT LIKE '%BadRequestError%'
+                 AND detail NOT LIKE '%NotFoundError%'"""
         ).fetchall()
         return [r["ticket_id"] for r in rows if r["ticket_id"]]
     finally:
