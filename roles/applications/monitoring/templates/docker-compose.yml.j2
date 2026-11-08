@@ -52,6 +52,15 @@ services:
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: "{{ monitoring_secrets.grafana_admin_password }}"
+      # No login needed (2026-11-07), matching everything else on this
+      # LAN-only ops dashboard (Prometheus, Alertmanager, incidents,
+      # timelapse are all unauthenticated). Anonymous visitors are Editors:
+      # dashboards and Explore work without signing in. The admin account
+      # above is kept for the rare admin-only change (data sources, users)
+      # -- sign in at /grafana/login for those.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
       GF_INSTALL_PLUGINS: ""
     volumes:
       - grafana-data:/var/lib/grafana
