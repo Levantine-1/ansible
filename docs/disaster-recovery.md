@@ -1,6 +1,9 @@
 # Disaster Recovery
 
-Two scenarios, covering different amounts of loss. Both assume the reader
+Three scenarios, covering different amounts of loss: **A** (rebuild the
+non-critical tier), **B** (physical host gone), and **C** (power outage —
+nothing lost, just everything restarted at once; most common, and the one to
+reach for first if the hardware is fine). Both assume the reader
 starts from this repo and `terraform` (the sibling infra repo) checked out,
 and is comfortable running `ansible-playbook`/`terraform` by hand.
 
@@ -138,6 +141,13 @@ lines across, since nothing does it automatically.
    row each run, which broke every protected endpoint (`/analytics`
    included) with a `NonUniqueResultException` 500 — found live on a
    second DR pass. Safe to run repeatedly either way now.
+
+   **But the fix only stops *new* duplicates — it doesn't remove ones already
+   there.** The four duplicate rows from 2026-08-22's passes were still in
+   `datagateway.auth_token` on 2026-11-09, so `/analytics` had likely been
+   500ing ever since. If protected endpoints throw `NonUniqueResultException`,
+   check `SELECT token_hash, COUNT(*) FROM auth_token GROUP BY token_hash
+   HAVING COUNT(*)>1` and delete all but the lowest `id` per hash.
 
 5. **Re-register the GitHub self-hosted runners** on the fresh `dockerhost1`:
    ```
@@ -338,7 +348,154 @@ Same checklist as Scenario A, plus:
   paths (e.g. `kv/data/percona_cluster/pxc-cluster`) returns the same
   values they had before the disaster.
 
+## Scenario C: power outage / cold start — hardware and disks intact
+
+**When to use:** both Proxmox hosts lost power (or were hard-reset) at
+roughly the same time, and came back with their disks intact. Nothing needs
+rebuilding — **do not run Scenario A or B here**; both destroy data that is
+still perfectly good. This is a "bring it back up in the right order" job.
+
+First run for real 2026-11-09. Timeline from that incident, for reference:
+FX8200 came back ~02:56 UTC, 3800XT not until ~04:27 UTC, so for 1.5h the
+database tier was up with no router, DNS or Vault.
+
+Every VM has `on_boot=1`, so they all start by themselves; there is **no
+startup ordering** between them, and the two hosts are independent, so
+expect everything to race. What does and does not survive that:
+
+| Comes back by itself | Needs a human |
+|---|---|
+| OPNsense, pi-hole, dockerhost1 + all app containers, incident-agent, vmwarebastion, theia, frigate, proxysql, k8s control plane, `service`'s Docker stack (Semaphore, Prometheus, Grafana, Zammad, registry…) | **Vault** (sealed, by design) · **Percona/Galera** (all 3 nodes refuse to start) · DataGateway (crash-loops until Percona is up) · `service`'s home-LAN IP (see step 5) |
+
+### Steps
+
+All of this runs from `service` unless stated. Get there from a home-LAN
+machine by jumping through 3800XT, which has a leg on `vmbr1`
+(`192.168.1.253`): `ssh -J root@10.69.69.40 -i automation.pem automation@192.168.1.50`.
+
+0. **Confirm both hypervisors are up and every VM is `running`**
+   (`qm list` on each). If a host hasn't come back, power it on — nothing
+   below works without 3800XT (OPNsense, Vault, `service` all live there).
+
+1. **Unseal Vault.** `curl -s http://vault.internal.levantine.io:8200/v1/sys/seal-status`
+   should show `"initialized":true,"sealed":true`. Unseal with 3 of the 5
+   retained keys (`vault operator unseal` ×3, or `PUT /v1/sys/unseal` with
+   `{"key": "..."}` — pipe the body over stdin, don't put keys on a command
+   line). The Vault UI via the ops dashboard may be unreachable at this point
+   — see steps 2 and 5 — so don't depend on it.
+
+2. **Check nginx on `service`.** Before the 2026-11-09 fix, `nginx` lost a
+   boot race against OPNsense: `livecam-lan.conf` proxies to
+   `dockerhost1.internal.levantine.io`, nginx resolves that once at startup,
+   DNS wasn't answering yet, config test failed, and systemd never retried —
+   which takes the **ops dashboard and Vault UI down with it**. Now fixed by a
+   systemd drop-in (`roles/applications/livecam/lan_proxy.yml`: waits up to
+   5 min for internal DNS, then `Restart=on-failure`). If it's somehow failed
+   anyway: `sudo systemctl restart nginx`.
+
+3. **Recover Percona/Galera — find the most advanced node first.** After a
+   simultaneous hard stop, every node's `/var/lib/mysql/grastate.dat` shows
+   `seqno: -1` and `safe_to_bootstrap: 0`, and `mysql.service` is `failed` on
+   all three. **Do not blindly bootstrap `pxdbc1`** the way Scenario A does —
+   that's only safe there because the nodes are empty. Here they hold real
+   data, and bootstrapping from a node that's behind silently discards
+   whatever the others committed after it.
+
+   On each of `pxdbc1-3`:
+   ```
+   sudo mysqld --wsrep-recover --user=mysql --log-error=/tmp/wsrep_recover.log
+   sudo grep 'Recovered position' /tmp/wsrep_recover.log
+   ```
+   Pick the node with the **highest seqno** (same cluster UUID on all
+   three). On ties, any of them — prefer `pxdbc1`, since inventory already
+   marks it `bootstrap=yes`. On that node only:
+   ```
+   sudo sed -i 's/^safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /var/lib/mysql/grastate.dat
+   sudo systemctl start mysql@bootstrap.service
+   ```
+   Then plain `sudo systemctl start mysql` on the other two, one at a time.
+   Confirm `Synchronized with group` in each node's `/var/log/mysql/error.log`.
+
+   **Then move the bootstrap node back to the normal unit** — otherwise it's
+   still running as `mysql@bootstrap` and the *next* reboot repeats this:
+   ```
+   sudo systemctl stop mysql@bootstrap.service && sudo systemctl start mysql
+   ```
+   (Safe once the other two are `Synced`: they hold quorum while it rejoins.)
+
+   2026-11-09: all three recovered to `b3bd4c7c…:28`, bootstrapped from
+   `pxdbc1`, no data lost.
+
+4. **Nudge DataGateway.** ProxySQL un-shuns its backends on its own once
+   Galera is back — no re-run of `configure_proxysql.yml` needed (unlike
+   Scenario A, its config survived). But the DataGateway pods will be deep in
+   `CrashLoopBackOff` (up to 5 min between attempts); skip the wait with
+   `sudo kubectl delete pod -l app=datagateway` on `kube-c-00`.
+
+5. **Check home-LAN addresses held.** The home LAN (`10.69.69.0/24`) is
+   served by the **DD-WRT router at `10.69.69.1`** (not OPNsense — that
+   subnet is OPNsense's WAN side). Its dynamic pool is `.100`–`.149`;
+   everything the fleet depends on sits below it:
+
+   | Address | What | How it's pinned |
+   |---|---|---|
+   | `10.69.69.40` | 3800XT (`vmbr0`) | static in `/etc/network/interfaces` (+ DD-WRT lease, documentation only) |
+   | `10.69.69.41` | FX8200 (`vmbr0`) | static in `/etc/network/interfaces` (+ DD-WRT lease, documentation only) |
+   | `10.69.69.50` | `service` `eth0` | DD-WRT static lease, MAC `bc:24:11:52:91:25` |
+
+   This is new as of 2026-11-09. Before that, `service`'s `eth0` was a
+   floating lease, and the outage moved it `.133` → `.134`, which silently
+   broke every LAN entrance (ops dashboard, Vault UI, livecam-lan) while
+   nginx itself was fine. The hypervisors were static but *inside* the pool
+   (`.139`/`.116`), so the router could have handed either address to
+   something else. Check with `ip -br -4 a show eth0` on `service`. If it
+   drifted anyway, `sudo networkctl reconfigure eth0` re-requests the lease.
+
+   Things that must agree with `.50`: Route53 `service.levantine.io`
+   (`terraform/route53/hosted_zones/levantine.io.tf`) and
+   `livecam-lan.levantine.io` (`livecam/terraform/route53_records.tf`),
+   OPNsense's Unbound override for `service.levantine.io`, and
+   `livecam_lan_listen_address` in `roles/applications/livecam/lan_proxy.yml`.
+   Things that must agree with `.40`/`.41`: `[ProxmoxHosts]` in the
+   inventory, `monitored_hosts` in `group_vars/all`, the incident-agent's
+   `fleet.yml`, `hardware_monitoring.yml`'s sensor map, both
+   `proxmox_endpoint*` defaults in `terraform/proxmox/main.tf`, and the
+   `3800xt`/`fx8200` Unbound overrides
+   (`roles/applications/opnsense/files/add_dns_host_override.py`).
+
+   DD-WRT's static leases live in nvram (`static_leases`, space-separated
+   `mac=hostname=ip=time`, plus `static_leasenum`); edit them through the web
+   UI (Services → DHCP Server). The `.10`/`.20`/`.30`/`.31`/`.2` entries are
+   ESXi-era VMware MACs and are left as they were.
+
+   Cameras on the home LAN still use floating leases. `baby-ptz` dropping out
+   on 2026-11-09 was a tripped power strip (the AC overloading it), not
+   addressing, but its `10.69.69.144` in
+   `roles/applications/livecam/files/cameras.yml` is inside the pool and
+   could move the same way.
+
+### Verification
+
+Use Scenario A's checklist — in particular Percona 3/3 `Synced`, ProxySQL 3
+`ONLINE`, DataGateway pods `Ready`, and Prometheus clean:
+`probe_success==0` and `up==0` both empty, `ALERTS{alertstate="firing"}`
+explained. Also `POST https://thisper.levantine.io/analytics` with
+`{"request":"/dr-check","userAgent":"dr-check"}` — not an empty body, which
+500s regardless.
+
 ## Known gaps (not solved by either scenario)
+
+- **No VM startup ordering.** All VMs are `on_boot` with no `startup`
+  order/delay, and the two hosts are independent, so after an outage
+  everything races OPNsense/DNS and Vault. The nginx case is now handled
+  defensively, but anything else that resolves an internal name only once
+  at startup has the same failure mode. A Proxmox `startup` order
+  (opnsense → pi-hole → vault → service → everything else) in
+  `terraform/proxmox/` would narrow it, though it can't help across hosts.
+- **Galera never auto-recovers from a full-cluster crash**, by design
+  (`pc.recovery` aside, Galera won't elect a primary when every node died
+  uncleanly). Scenario C step 3 is the manual procedure; there's no
+  automation and there shouldn't casually be one.
 
 - **Percona and Kubernetes have no data backup/restore at all.** Both
   scenarios above wipe and recreate them from empty. If the actual data in

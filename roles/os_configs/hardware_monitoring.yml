@@ -124,13 +124,13 @@
     # Educated guesses from each board's vendor/generation, not confirmed
     # against either board's actual datasheet -- that's exactly what this
     # play's own verification task exists to confirm or refute.
-    #   fx8200  (10.69.69.116): Gigabyte GA-78LMT-USB3 6.0, an older AM3+
+    #   fx8200  (10.69.69.41): Gigabyte GA-78LMT-USB3 6.0, an older AM3+
     #     board -- commonly carries an ITE IT8720F/IT8721F Super I/O chip.
-    #   3800xt  (10.69.69.139): ASRock B550M-ITX/ac -- commonly carries a
+    #   3800xt  (10.69.69.40): ASRock B550M-ITX/ac -- commonly carries a
     #     Nuvoton chip in the nct6775 family.
     hwmon_module_by_host:
-      "10.69.69.116": it87
-      "10.69.69.139": nct6775
+      "10.69.69.41": it87
+      "10.69.69.40": nct6775
 
   tasks:
     - name: Install lm-sensors

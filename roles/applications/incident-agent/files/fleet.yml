@@ -17,9 +17,9 @@ hypervisors:
   # they are themselves critical -- listed here so the agent can reach them to
   # inspect/restart the guests on them, never to restart them.
   3800xt:
-    address: "10.69.69.139"
+    address: "10.69.69.40"
   fx8200:
-    address: "10.69.69.116"
+    address: "10.69.69.41"
 
 hosts:
   # ---------------------------------------------------------------------

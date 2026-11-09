@@ -308,7 +308,7 @@ def _normalize_action(parsed, bundle_text=""):
     diagnostic OUTPUT, not merely be a non-empty string. Without that check
     the validation was purely structural: on a DiskSpaceLow alert for the
     fx8200 hypervisor the model returned
-    ("start", "container", "10.69.69.116:9100") -- the Prometheus scrape
+    ("start", "container", "10.69.69.41:9100") -- the Prometheus scrape
     target, which is not a container and never was -- and it passed straight
     through, reaching the ticket as a recommendation to a human. It was
     ultimately refused, but only because that host is separately protected;

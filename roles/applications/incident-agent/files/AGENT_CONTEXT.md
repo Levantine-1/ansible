@@ -80,10 +80,10 @@ through the normal `resolved`/RCA path as before.
 Two bare-metal Proxmox hypervisors, all guests are CPU-only VMs (no GPU
 anywhere in the fleet):
 
-- **`3800xt`** (`10.69.69.139`) — 16 cores, 62GB. Hosts `opnsense` (101),
+- **`3800xt`** (`10.69.69.40`) — 16 cores, 62GB. Hosts `opnsense` (101),
   `pi-hole` (102), `service` (103), `vault` (104), `dockerhost1` (105),
   `incident-agent` (106), `vmwarebastion` (107).
-- **`fx8200`** (`10.69.69.116`) — 26GB, runs noticeably hotter. Hosts
+- **`fx8200`** (`10.69.69.41`) — 26GB, runs noticeably hotter. Hosts
   `pxdbc1-3` (108-110), `proxysql` (111), `kube-c-00` (112), `theia` (200),
   `frigate` (202).
 

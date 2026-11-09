@@ -58,8 +58,8 @@ monitored_hosts:
     # permanently -- exactly the noise that hides a real alert later.
     # Re-add these two lines alongside uncommenting the terraform entries if
     # the full 3-node demo cluster is ever restored.
-    - { name: 3800xt, host: "10.69.69.139" }
-    - { name: fx8200, host: "10.69.69.116" }
+    - { name: 3800xt, host: "10.69.69.40" }
+    - { name: fx8200, host: "10.69.69.41" }
     - { name: frigate, host: frigate.internal.levantine.io }
     # incident-agent is monitored like any other host, but note that it is
     # also the host that *responds* to alerts -- roles/applications/

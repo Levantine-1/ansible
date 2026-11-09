@@ -51,7 +51,7 @@ check("node_exporter instance resolves to short host name", host == "dockerhost1
 host, svc = config.resolve_target("ProbeFailed", {"instance": "https://livecam-lan.levantine.io/login"})
 check("probe URL resolves to host and service", (host, svc) == ("dockerhost1", "livecam"), f"got {host}/{svc}")
 
-host, svc = config.resolve_target("InstanceDown", {"instance": "10.69.69.139:9100"})
+host, svc = config.resolve_target("InstanceDown", {"instance": "10.69.69.40:9100"})
 check("hypervisor IP resolves to hypervisor name", host == "3800xt", f"got {host}")
 
 host, svc = config.resolve_target("InstanceDown", {"instance": "nonesuch.example.com:9100"})
@@ -166,7 +166,7 @@ _real_ssh = remote.ssh
 remote.ssh = _fake_ssh
 try:
     remote.qm("dockerhost1", "status")
-    check("qm targets the right hypervisor", _sent[-1][0] == "10.69.69.139", str(_sent[-1]))
+    check("qm targets the right hypervisor", _sent[-1][0] == "10.69.69.40", str(_sent[-1]))
     check("qm injects the vm_id exactly once", _sent[-1][1] == "sudo qm status 105", _sent[-1][1])
 
     remote.qm("dockerhost1", "config | head -30")
@@ -422,17 +422,17 @@ check("missing action field defaults to none",
 # A named target has to be corroborated by the diagnostic OUTPUT, not merely
 # be a non-empty string. This is ticket 16131: on a DiskSpaceLow alert for the
 # fx8200 hypervisor the model answered ("start", "container",
-# "10.69.69.116:9100") -- the Prometheus scrape target, which is not a
+# "10.69.69.41:9100") -- the Prometheus scrape target, which is not a
 # container and never was -- and the purely structural validation passed it
 # straight through onto the ticket as advice to a human. It was refused only
 # because that host happens to be separately protected; on any ordinary host
 # it would have run `docker start` against a hostname:port string.
 _BUNDLE = """Alert:     DiskSpaceLow
-Instance:  10.69.69.116:9100
+Instance:  10.69.69.41:9100
 Host:      fx8200
 Service:   (n/a)
 Severity:  warning
-Summary:   10.69.69.116:9100 filesystem /mnt/nvr-hdd below 10% free space
+Summary:   10.69.69.41:9100 filesystem /mnt/nvr-hdd below 10% free space
 
 --- [1] Filesystem usage (ssh, ok, 0.72s) ---
 /dev/sdc1             1.8T  1.6T  181G  90% /mnt/nvr-hdd
@@ -443,7 +443,7 @@ Summary:   10.69.69.116:9100 filesystem /mnt/nvr-hdd below 10% free space
 
 check("a container target echoing the alert's own instance label is refused",
       llm._normalize_action(
-          {"action": "start", "target_kind": "container", "target": "10.69.69.116:9100"},
+          {"action": "start", "target_kind": "container", "target": "10.69.69.41:9100"},
           _BUNDLE) == ("none", "none", ""))
 check("a container target echoing the host name is refused too",
       llm._normalize_action(
@@ -472,7 +472,7 @@ check("with no bundle supplied the check is skipped, keeping the function pure",
           {"action": "restart", "target_kind": "container", "target": "frigate"})
       == ("restart", "container", "frigate"))
 check("_diagnostic_body drops the identity header",
-      "10.69.69.116:9100" not in llm._diagnostic_body(_BUNDLE)
+      "10.69.69.41:9100" not in llm._diagnostic_body(_BUNDLE)
       and "/mnt/nvr-hdd" in llm._diagnostic_body(_BUNDLE))
 
 check("has_action true for a real recommendation",
@@ -811,7 +811,7 @@ try:
     try:
         triage._escalate(
             {"id": 9003, "ticket_id": 999, "alertname": "DiskSpaceLow",
-             "host": "fx8200", "instance": "10.69.69.116:9100"},
+             "host": "fx8200", "instance": "10.69.69.41:9100"},
             "bundle", reason="'fx8200' is protected from automated action.")
         rationale = next((b for sub, b, _ in _bodies if sub == "Escalating to Claude -- why"), None)
         check("the escalation reason is posted to the ticket", rationale is not None)

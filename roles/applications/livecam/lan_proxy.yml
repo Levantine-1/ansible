@@ -28,7 +28,9 @@
     # service's WAN-side address, and what the public Route53 record for
     # livecam-lan points at. Documented here rather than looked up because
     # the DNS record hardcodes it too -- if one moves, both must.
-    livecam_lan_listen_address: 10.69.69.133
+    livecam_lan_listen_address: 10.69.69.50
+    # Must match the proxy_pass host in templates/livecam-lan.conf.j2.
+    livecam_lan_upstream: dockerhost1.internal.levantine.io
 
   tasks:
     - name: Install nginx
@@ -62,6 +64,50 @@
         group: root
         mode: "0644"
       notify: reload nginx
+
+    # livecam-lan.conf proxies to a hostname (dockerhost1.internal...) that
+    # only OPNsense's Unbound can resolve, and nginx resolves proxy_pass
+    # hostnames once, at startup -- an unresolvable one fails the config
+    # test and nginx refuses to start at all, taking the ops dashboard and
+    # every other vhost on this host down with it.
+    #
+    # Found live in the 2026-11-09 power-outage recovery: service and
+    # opnsense boot in parallel from the same Proxmox host, service won the
+    # race, nginx hit "host not found in upstream" and systemd never tried
+    # again. The wait gives OPNsense up to ~5 minutes to start answering
+    # (then starts regardless, so nginx -t reports the real error if DNS is
+    # genuinely broken); Restart= covers anything that still slips through.
+    - name: Create the nginx systemd drop-in directory
+      file:
+        path: /etc/systemd/system/nginx.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Make nginx wait for internal DNS and retry on failure
+      copy:
+        dest: /etc/systemd/system/nginx.service.d/wait-for-internal-dns.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by ansible: roles/applications/livecam/lan_proxy.yml
+          [Unit]
+          Wants=network-online.target
+          After=network-online.target
+          StartLimitIntervalSec=0
+
+          [Service]
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do getent hosts {{ livecam_lan_upstream }} >/dev/null && exit 0; sleep 5; done; echo "internal DNS still not resolving {{ livecam_lan_upstream }}, starting anyway" >&2'
+          Restart=on-failure
+          RestartSec=15s
+      register: nginx_dns_dropin
+
+    - name: Reload systemd after changing the nginx drop-in
+      systemd:
+        daemon_reload: yes
+      when: nginx_dns_dropin.changed
 
     - name: Ensure nginx is enabled and running
       systemd:
