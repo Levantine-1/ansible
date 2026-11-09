@@ -5,7 +5,10 @@ supported_containers:
 
   portfolio:
     env_vars:
-      VIRTUAL_HOST: levantine.io
+      # www. included: DNS has always pointed it at the bastion, but without
+      # it here nginx-proxy had no vhost for it and answered 503 (found
+      # 2026-11-09).
+      VIRTUAL_HOST: levantine.io,www.levantine.io
 
   thisper:
     env_vars:

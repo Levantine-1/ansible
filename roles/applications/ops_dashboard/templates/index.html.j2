@@ -94,9 +94,14 @@
     { name: "Vault", desc: "Secrets management", path: "/vault/" },
   ];
 
+  // tls_port: nginx TLS front door (ops-dashboard.conf.j2). Used whenever the
+  // dashboard itself was loaded over HTTPS -- i.e. via service.levantine.io,
+  // the only name the wildcard cert matches. Plain-HTTP/direct-IP visits keep
+  // the app's own port, where a cert couldn't match anyway.
   const direct = [
-    { name: "Semaphore", desc: "Ansible job runner", port: 3000 },
-    { name: "Zammad", desc: "Ticketing", port: 8080 },
+{% for app in ops_dashboard_tls_direct_apps %}
+    { name: "{{ app.name }}", desc: "{{ app.desc }}", port: {{ app.port }}, tls_port: {{ app.tls_port }} },
+{% endfor %}
   ];
 
   function card(item, href) {
@@ -111,7 +116,9 @@
   proxied.forEach(item => proxiedEl.appendChild(card(item, item.path)));
 
   const directEl = document.getElementById("direct");
-  direct.forEach(item => directEl.appendChild(card(item, `http://${host}:${item.port}`)));
+  const secure = window.location.protocol === "https:";
+  direct.forEach(item => directEl.appendChild(card(item,
+    secure ? `https://${host}:${item.tls_port}` : `http://${host}:${item.port}`)));
 </script>
 </body>
 </html>
