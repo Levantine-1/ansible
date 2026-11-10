@@ -54,8 +54,10 @@ services:
   zammad-nginx:
     <<: *zammad-service
     command: ["zammad-nginx"]
+    # Loopback only: nginx on the host owns :8080 and answers it over both
+    # HTTP and HTTPS (ops_dashboard's ops-dashboard.conf.j2, upstream_port).
     ports:
-      - "8080:8080"
+      - "127.0.0.1:18080:8080"
     depends_on:
       zammad-railsserver:
         condition: service_healthy

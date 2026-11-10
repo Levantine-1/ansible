@@ -13,6 +13,9 @@ server {
 
     location / {
         try_files $uri $uri/ =404;
+        # Revalidate every load: the page holds the app links, and a stale
+        # cached copy kept sending browsers to old URLs (2026-11-09).
+        add_header Cache-Control "no-cache";
     }
 
     include /etc/nginx/snippets/ops-dashboard-locations.conf;
@@ -44,33 +47,64 @@ server {
 
     location / {
         try_files $uri $uri/ =404;
+        # Revalidate every load: the page holds the app links, and a stale
+        # cached copy kept sending browsers to old URLs (2026-11-09).
+        add_header Cache-Control "no-cache";
     }
 
     include /etc/nginx/snippets/ops-dashboard-locations.conf;
 }
 
-# TLS front doors for the dashboard's "direct" apps (index.html.j2's
-# `direct` list). Neither Zammad (zammad-nginx, :8080) nor Semaphore (:3000)
-# speaks TLS itself, and neither is happy under a sub-path, so instead of a
-# /zammad/ location each gets its own TLS port on the same hostname and
-# wildcard cert. The plain-HTTP ports stay as they were, so direct-IP access
-# and in-fleet callers (incident-agent posts to
-# http://service.internal.levantine.io:8080) are unaffected.
+# Zammad and Semaphore on their well-known ports, over HTTP *and* HTTPS.
 #
-# Why this exists: browsers in HTTPS-First/HTTPS-Only mode (Firefox's
-# behaviour for hostnames, not bare IPs) upgrade http://service.levantine.io:8080
-# to https://...:8080 and fail with SSL_ERROR_RX_RECORD_TOO_LONG -- found
-# 2026-11-09, once service.levantine.io was how people reached the
-# dashboard instead of a bare IP.
+# Neither app speaks TLS and neither is happy under a sub-path, so nginx
+# owns their public ports (8080, 3000) and the apps listen on loopback
+# only (ops_dashboard_tls_direct_apps' upstream_port; the zammad and
+# semaphore roles bind there). Each port is a TLS listener, and
+# `error_page 497` -- nginx's hook for "plain HTTP arrived on a TLS port"
+# -- proxies plain requests to the same upstream instead of rejecting
+# them. So https://service.levantine.io:8080 works for browsers, and
+# http://service.internal.levantine.io:8080 keeps working unchanged for
+# in-fleet callers (incident-agent, zammad-relay, blackbox, Semaphore's
+# bootstrap script) without any of them learning about certificates.
+#
+# Why: browsers reach these by hostname now, and https://...:8080 --
+# typed, bookmarked, autocompleted or HTTPS-upgraded -- failed with
+# SSL_ERROR_RX_RECORD_TOO_LONG (2026-11-09). A separate TLS port (the
+# first fix, 8443/3443) didn't help anyone whose browser already had the
+# old port; those ports are kept as aliases so links from then still work.
+#
+# Ordering: nginx can only bind 8080/3000 once the apps have moved off
+# them, so the zammad and semaphore roles must have run first on a host
+# where they still hold those ports (on a fresh host order doesn't matter;
+# nginx just answers 502 until the app is up).
 map $http_upgrade $ops_direct_connection_upgrade {
     default upgrade;
     ''      '';
 }
+{% macro direct_proxy(app, proto) %}
+        proxy_pass http://127.0.0.1:{{ app.upstream_port }};
+        proxy_http_version 1.1;
+        # $http_host keeps the port, so the app builds links (and checks
+        # Origin) against the address the browser actually used.
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto {{ proto }};
+        proxy_set_header X-Forwarded-Ssl {{ 'on' if proto == 'https' else 'off' }};
+        # Both apps push live updates over WebSockets (Zammad /ws, Semaphore /api/ws).
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $ops_direct_connection_upgrade;
+        proxy_read_timeout 300s;
+{% endmacro %}
 {% for app in ops_dashboard_tls_direct_apps %}
 
-# {{ app.name }}: https://service.levantine.io:{{ app.tls_port }} -> 127.0.0.1:{{ app.port }}
+# {{ app.name }}: :{{ app.port }} (and alias :{{ app.alias_port }}), HTTP or HTTPS -> 127.0.0.1:{{ app.upstream_port }}
+# The only server on these ports, so it also answers bare-IP and
+# *.internal hostnames.
 server {
-    listen {{ app.tls_port }} ssl;
+    listen {{ app.port }} ssl;
+    listen {{ app.alias_port }} ssl;
     server_name service.levantine.io;
 
     ssl_certificate     /etc/nginx/certs/levantine.io/fullchain.pem;
@@ -78,20 +112,14 @@ server {
 
     client_max_body_size 50m;
 
+    error_page 497 = @plain_http;
+
     location / {
-        proxy_pass http://127.0.0.1:{{ app.port }};
-        proxy_http_version 1.1;
-        # $http_host keeps the :{{ app.tls_port }}, so the app builds links
-        # (and checks Origin) against the address the browser actually used.
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-Ssl on;
-        # Both apps push live updates over WebSockets (Zammad /ws, Semaphore /api/ws).
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $ops_direct_connection_upgrade;
-        proxy_read_timeout 300s;
+{{ direct_proxy(app, 'https') }}
+    }
+
+    location @plain_http {
+{{ direct_proxy(app, 'http') }}
     }
 }
 {% endfor %}

@@ -24,11 +24,14 @@
     ops_dashboard_incident_agent_url: "http://incident-agent.internal.levantine.io:9098"
     ops_dashboard_timelapse_port: 5057
     # Apps linked directly (not proxied under a path) from the dashboard.
-    # port: the app's own plain-HTTP port; tls_port: nginx's TLS front door
-    # for it (ops-dashboard.conf.j2), used when the dashboard is on HTTPS.
+    # port: the public port, owned by nginx and answering HTTP and HTTPS
+    # (ops-dashboard.conf.j2). upstream_port: where the app itself listens,
+    # loopback only -- must match roles/applications/{semaphore,zammad}.
+    # alias_port: the interim TLS-only port from 2026-11-09, kept so links
+    # handed out then still work.
     ops_dashboard_tls_direct_apps:
-      - { name: "Semaphore", desc: "Ansible job runner", port: 3000, tls_port: 3443 }
-      - { name: "Zammad", desc: "Ticketing", port: 8080, tls_port: 8443 }
+      - { name: "Semaphore", desc: "Ansible job runner", port: 3000, upstream_port: 13000, alias_port: 3443 }
+      - { name: "Zammad", desc: "Ticketing", port: 8080, upstream_port: 18080, alias_port: 8443 }
 
   tasks:
     - name: Install nginx

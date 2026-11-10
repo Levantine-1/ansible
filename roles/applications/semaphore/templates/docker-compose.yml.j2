@@ -10,7 +10,10 @@ services:
     # the very first real template run.
     network_mode: host
     environment:
-      SEMAPHORE_PORT: "3000"
+      # Loopback only: nginx on the host owns :3000 and answers it over both
+      # HTTP and HTTPS (ops_dashboard's ops-dashboard.conf.j2, upstream_port).
+      SEMAPHORE_INTERFACE: "127.0.0.1"
+      SEMAPHORE_PORT: "13000"
       SEMAPHORE_DB_DIALECT: sqlite
       # SEMAPHORE_DB (not SEMAPHORE_DB_HOST) is not a real Semaphore env
       # var -- it silently fell back to its own default path
