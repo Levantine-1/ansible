@@ -61,6 +61,16 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
       GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
+      # Home-LAN visitors through the dashboard's /grafana/ are signed in
+      # as admin, no login (2026-11-10): nginx sets X-WEBAUTH-USER only
+      # for them (ops_dashboard's ops-dashboard.conf.j2, "No-login
+      # access"). The header is honoured only from 127.0.0.1, i.e. that
+      # nginx -- sent straight to :3001 from anywhere else, it's refused.
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "false"
+      GF_AUTH_PROXY_WHITELIST: 127.0.0.1
       GF_INSTALL_PLUGINS: ""
     volumes:
       - grafana-data:/var/lib/grafana

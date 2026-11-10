@@ -81,6 +81,12 @@ services:
   zammad-railsserver:
     <<: *zammad-service
     command: ["zammad-railsserver"]
+    # Loopback only, for one path: host nginx sends /auth/sso here with the
+    # X-Forwarded-User SSO header, which zammad-nginx deliberately blanks
+    # (ops_dashboard's ops-dashboard.conf.j2, sso_upstream_port). Anything
+    # local can log in as anyone through this port -- same trust as root.
+    ports:
+      - "127.0.0.1:18081:3000"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000"]
       interval: 30s

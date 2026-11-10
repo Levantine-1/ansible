@@ -82,8 +82,74 @@ map $http_upgrade $ops_direct_connection_upgrade {
     default upgrade;
     ''      '';
 }
+
+# No-login access for the home LAN (2026-11-10).
+#
+# Zammad, Semaphore and Grafana sign home-LAN visitors in automatically:
+# nginx supplies the credential (Zammad: its SSO header, on /auth/sso
+# only; Semaphore: an admin API token; Grafana: its auth-proxy header).
+# $ops_autologin decides when, and all three conditions must hold:
+#
+#   - the client is on the home LAN (ops_dashboard_autologin_networks) --
+#     not the fleet network, not the WireGuard bastion;
+#   - the Host is one of this host's own names -- otherwise a DNS-rebinding
+#     page (attacker's name resolving to 10.69.69.50) would get admin;
+#   - there is no Origin header, or it is one of those names -- otherwise
+#     any website open in a LAN browser could POST to Semaphore or open
+#     its websocket and ride the injected token.
+#
+# Anyone else gets each app's normal login. Client-supplied copies of the
+# injected headers never pass through: proxy_set_header replaces them, and
+# an empty value drops them.
+geo $ops_lan_client {
+    default 0;
+{% for net in ops_dashboard_autologin_networks %}
+    {{ net }} 1;
+{% endfor %}
+}
+
+map $host $ops_own_host {
+    default 0;
+{% for h in ops_dashboard_own_hosts %}
+    "{{ h }}" 1;
+{% endfor %}
+}
+
+map $http_origin $ops_own_origin {
+    ""      1;
+    "~^https?://({{ ops_dashboard_own_hosts | map('regex_escape') | join('|') }})(:[0-9]+)?$" 1;
+    default 0;
+}
+
+map "$ops_lan_client$ops_own_host$ops_own_origin" $ops_autologin {
+    "111"   1;
+    default 0;
+}
+
+# Used by /grafana/ in ops-dashboard-locations.conf. Grafana trusts the
+# header only from 127.0.0.1 (GF_AUTH_PROXY_WHITELIST), i.e. from here.
+map $ops_autologin $ops_grafana_user {
+    1       "{{ ops_dashboard_grafana_autologin_user }}";
+    default "";
+}
 {% macro direct_proxy(app, proto) %}
+{% if app.autologin | default('') == 'zammad_sso' %}
+        # A LAN visit to the bare app URL signs in via SSO first.
+        # /auth/sso redirects back to "/#", rewritten to "/?sso=1" so this
+        # doesn't loop -- and with no fragment of its own, the browser keeps
+        # the one it came with (#ticket/zoom/123 bookmarks survive).
+        if ($ops_zammad_sso_redirect) {
+            return 302 /auth/sso;
+        }
+        proxy_pass http://127.0.0.1:$ops_zammad_upstream;
+        proxy_set_header X-Forwarded-User $ops_zammad_sso_user;
+        proxy_redirect ~^(https?://[^/]+)?/#?$ /?sso=1;
+{% else %}
         proxy_pass http://127.0.0.1:{{ app.upstream_port }};
+{% endif %}
+{% if app.autologin | default('') == 'semaphore_token' %}
+        proxy_set_header Authorization $ops_semaphore_authorization;
+{% endif %}
         proxy_http_version 1.1;
         # $http_host keeps the port, so the app builds links (and checks
         # Origin) against the address the browser actually used.
@@ -98,6 +164,34 @@ map $http_upgrade $ops_direct_connection_upgrade {
         proxy_read_timeout 300s;
 {% endmacro %}
 {% for app in ops_dashboard_tls_direct_apps %}
+{% if app.autologin | default('') == 'zammad_sso' %}
+
+# Zammad SSO (setting auth_sso, enabled by roles/applications/zammad).
+# Only /auth/sso goes straight to the Rails server: Zammad's own nginx
+# blanks X-Forwarded-User, which is right for every other path.
+map $uri $ops_zammad_upstream {
+    /auth/sso {{ app.sso_upstream_port }};
+    default   {{ app.upstream_port }};
+}
+map $ops_autologin $ops_zammad_sso_user {
+    1       "{{ ops_dashboard_zammad_autologin_user }}";
+    default "";
+}
+map "$ops_autologin:$request_method:$uri:$args" $ops_zammad_sso_redirect {
+    "1:GET:/:" 1;
+    default    0;
+}
+{% elif app.autologin | default('') == 'semaphore_token' %}
+
+# Semaphore: the token comes from a root-only include (written by
+# install.yml); a client's own Authorization header always wins, so API
+# callers keep authenticating as themselves.
+include {{ ops_dashboard_semaphore_token_file }};
+map $http_authorization $ops_semaphore_authorization {
+    ""      $ops_semaphore_token;
+    default $http_authorization;
+}
+{% endif %}
 
 # {{ app.name }}: :{{ app.port }} (and alias :{{ app.alias_port }}), HTTP or HTTPS -> 127.0.0.1:{{ app.upstream_port }}
 # The only server on these ports, so it also answers bare-IP and
@@ -111,6 +205,9 @@ server {
     ssl_certificate_key /etc/nginx/certs/levantine.io/privkey.pem;
 
     client_max_body_size 50m;
+    # Relative Location headers: an absolute one built here could pick the
+    # wrong scheme for a plain-HTTP request on this TLS port.
+    absolute_redirect off;
 
     error_page 497 = @plain_http;
 

@@ -39,3 +39,22 @@
       command: docker compose up -d
       args:
         chdir: /opt/zammad
+
+    # Header SSO, so home-LAN browsers skip the login (2026-11-10): host
+    # nginx sends X-Forwarded-User on /auth/sso, and only for LAN clients
+    # (ops_dashboard's ops-dashboard.conf.j2, "No-login access"). Safe to
+    # enable here even before ops_dashboard runs: until then nothing sends
+    # that header, and zammad-nginx (the only published path besides
+    # loopback 18081) strips it.
+    - name: Enable Zammad header SSO (auth_sso)
+      command: >-
+        docker compose exec -T zammad-railsserver bundle exec rails r
+        'if Setting.get("auth_sso") then puts "auth_sso unchanged" else Setting.set("auth_sso", true); puts "auth_sso enabled" end'
+      args:
+        chdir: /opt/zammad
+      register: zammad_auth_sso
+      changed_when: "'auth_sso enabled' in zammad_auth_sso.stdout"
+      # The Rails server may still be booting right after `up -d`.
+      retries: 12
+      delay: 10
+      until: zammad_auth_sso.rc == 0

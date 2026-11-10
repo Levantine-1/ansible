@@ -29,9 +29,33 @@
     # loopback only -- must match roles/applications/{semaphore,zammad}.
     # alias_port: the interim TLS-only port from 2026-11-09, kept so links
     # handed out then still work.
+    # autologin: how home-LAN visitors skip the login (see "No-login access"
+    # in ops-dashboard.conf.j2). sso_upstream_port: Zammad's Rails server,
+    # published on loopback by roles/applications/zammad, used only for
+    # /auth/sso (Zammad's own nginx blanks the SSO header).
     ops_dashboard_tls_direct_apps:
-      - { name: "Semaphore", desc: "Ansible job runner", port: 3000, upstream_port: 13000, alias_port: 3443 }
-      - { name: "Zammad", desc: "Ticketing", port: 8080, upstream_port: 18080, alias_port: 8443 }
+      - { name: "Semaphore", desc: "Ansible job runner", port: 3000, upstream_port: 13000, alias_port: 3443, autologin: semaphore_token }
+      - { name: "Zammad", desc: "Ticketing", port: 8080, upstream_port: 18080, alias_port: 8443, autologin: zammad_sso, sso_upstream_port: 18081 }
+
+    # No-login access (2026-11-10): who is signed in automatically, as whom.
+    # Only the home LAN -- not the fleet network (192.168.1.0/24, where
+    # machine clients bring their own credentials) and not wg0 (the AWS
+    # bastion, 10.0.0.1), so a compromised bastion doesn't inherit admin on
+    # Semaphore, i.e. root across the fleet.
+    ops_dashboard_autologin_networks:
+      - 10.69.69.0/24
+    # Hostnames (and Origins) that count as this host. Anything else gets
+    # no credentials: that is what defeats DNS rebinding, where an
+    # attacker's own hostname resolves to 10.69.69.50.
+    ops_dashboard_own_hosts:
+      - service.levantine.io
+      - service.internal.levantine.io
+      - service
+      - 10.69.69.50
+    ops_dashboard_zammad_autologin_user: human-admin@levantine.io
+    ops_dashboard_semaphore_autologin_user: admin
+    ops_dashboard_grafana_autologin_user: admin
+    ops_dashboard_semaphore_token_file: /etc/nginx/ops-secrets/semaphore-token.conf
 
   tasks:
     - name: Install nginx
@@ -91,6 +115,105 @@
         group: root
         mode: "0644"
       notify: reload nginx
+
+    # Semaphore has no trusted-header login, so LAN no-login access works by
+    # nginx attaching an API token for the admin user. The token lives only
+    # in this root-only include file; it is minted (and re-minted if it stops
+    # working) from the admin password in Vault. Best-effort: if Semaphore is
+    # down (e.g. mid-DR) the play carries on and LAN visitors simply see
+    # Semaphore's normal login until the next run.
+    - name: Create the nginx secrets directory
+      file:
+        path: /etc/nginx/ops-secrets
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Read the current Semaphore autologin token
+      slurp:
+        src: "{{ ops_dashboard_semaphore_token_file }}"
+      register: semaphore_token_file
+      failed_when: false
+      no_log: true
+
+    - name: Extract the current Semaphore autologin token
+      set_fact:
+        semaphore_autologin_token: >-
+          {{ ((semaphore_token_file.content | default('') | b64decode)
+              | regex_search('Bearer ([^"]+)"', '\1') or ['']) | first }}
+      no_log: true
+
+    - name: Mint a Semaphore autologin token if there is none or it stopped working
+      block:
+        - name: Check the current Semaphore autologin token
+          uri:
+            url: http://127.0.0.1:13000/api/user
+            headers:
+              Authorization: "Bearer {{ semaphore_autologin_token }}"
+            status_code: [200, 401]
+          register: semaphore_token_check
+          when: semaphore_autologin_token != ''
+          no_log: true
+
+        - name: Retrieve Semaphore admin credentials from HashiCorp Vault
+          set_fact:
+            semaphore_secrets: "{{ lookup('hashi_vault', 'secret=kv/data/semaphore/admin token={{ hashicorp_vault_token }} url={{ hashicorp.vault.address }}') }}"
+          when: semaphore_autologin_token == '' or semaphore_token_check.status != 200
+          no_log: true
+
+        - name: Log in to Semaphore as the autologin user
+          uri:
+            url: http://127.0.0.1:13000/api/auth/login
+            method: POST
+            body_format: json
+            body:
+              auth: "{{ ops_dashboard_semaphore_autologin_user }}"
+              password: "{{ semaphore_secrets.admin_password }}"
+            status_code: [200, 204]
+          register: semaphore_login
+          when: semaphore_secrets is defined
+          no_log: true
+
+        - name: Create a Semaphore API token
+          uri:
+            url: http://127.0.0.1:13000/api/user/tokens
+            method: POST
+            headers:
+              Cookie: "{{ semaphore_login.cookies_string }}"
+            status_code: [200, 201]
+          register: semaphore_new_token
+          when: semaphore_secrets is defined
+          no_log: true
+
+        - name: Use the new Semaphore token
+          set_fact:
+            semaphore_autologin_token: "{{ semaphore_new_token.json.id }}"
+          when: semaphore_secrets is defined
+          no_log: true
+      rescue:
+        - name: Warn that Semaphore autologin could not be set up
+          debug:
+            msg: >-
+              Could not validate or mint a Semaphore API token (is Semaphore up
+              on 127.0.0.1:13000?). Keeping whatever token was there; LAN
+              visitors get Semaphore's normal login until this play runs again.
+
+    - name: Write the Semaphore autologin token for nginx
+      copy:
+        dest: "{{ ops_dashboard_semaphore_token_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          # Managed by ansible: roles/applications/ops_dashboard/install.yml
+          # Defines $ops_semaphore_token for ops-dashboard.conf. Secret.
+          map $ops_autologin $ops_semaphore_token {
+              1       "{{ ('Bearer ' ~ semaphore_autologin_token) if semaphore_autologin_token else '' }}";
+              default "";
+          }
+      notify: reload nginx
+      no_log: true
 
     - name: Deploy ops-dashboard nginx site config
       template:
