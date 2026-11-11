@@ -1,0 +1,67 @@
+---
+# Arms Wake-on-LAN on both Proxmox hosts' home-LAN NIC (vmbr0's physical
+# port), so fleet-recovery on `service` can power a hypervisor back on with a
+# magic packet if it stays off after an outage (2026-11-11).
+#
+# The NICs support magic-packet wake ("Supports Wake-on: pumbg") but it was
+# off ("Wake-on: d"), and the setting doesn't survive a reboot -- hence a
+# boot-time unit rather than a one-off ethtool call.
+#
+# Software is only half of it: the BIOS must allow wake from soft-off
+# (often "Power On By PCI-E"/"Wake on LAN", with ErP/deep sleep disabled).
+# And after a complete AC power loss many boards only re-arm WoL once the OS
+# has run again, so the real fix for "stayed off after the outage" is the
+# BIOS's "Restore on AC power loss = Power On". WoL covers the case where a
+# host was shut down cleanly, or the BIOS setting didn't take.
+#
+# Standalone (ProxmoxHosts are never in all.yml's baseline).
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/os_configs/hypervisor_wol.yml
+- name: Arm Wake-on-LAN on the hypervisors
+  hosts: ProxmoxHosts
+  become: yes
+
+  tasks:
+    - name: Deploy the WoL arming unit
+      copy:
+        dest: /etc/systemd/system/wol-arm.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by ansible: roles/os_configs/hypervisor_wol.yml
+          [Unit]
+          Description=Arm Wake-on-LAN (magic packet) on vmbr0's physical ports
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/bin/sh -c 'for p in /sys/class/net/vmbr0/brif/*; do /usr/sbin/ethtool -s "$(basename "$p")" wol g; done'
+
+          [Install]
+          WantedBy=multi-user.target
+      register: wol_unit
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+      when: wol_unit.changed
+
+    - name: Enable and run it
+      systemd:
+        name: wol-arm.service
+        enabled: yes
+        state: "{{ 'restarted' if wol_unit.changed else 'started' }}"
+
+    - name: Check it took
+      shell: >-
+        for p in /sys/class/net/vmbr0/brif/*; do n=$(basename "$p");
+        printf '%s %s\n' "$n" "$(/usr/sbin/ethtool "$n" | sed -n 's/^\s*Wake-on: //p')"; done
+      register: wol_state
+      changed_when: false
+      failed_when: "' g' not in wol_state.stdout"
+
+    - name: Show WoL state
+      debug:
+        var: wol_state.stdout_lines

@@ -1,0 +1,176 @@
+---
+# fleet-recovery: brings the fleet back by itself after an outage
+# (2026-11-11, after the 2026-11-09 power outage needed a human for every
+# step of docs/disaster-recovery.md Scenario C). See files/fleet_recover.py's
+# header for what it does and doesn't do.
+#
+# Runs on `service`, the control plane -- it boots 4th on 3800XT (after
+# opnsense, pi-hole, vault; terraform/proxmox startup blocks) and is the
+# only VM that can reach both hypervisors and every guest. A boot-time timer
+# fires 2 minutes after boot, then every 15 minutes; on a healthy fleet each
+# run exits within seconds and opens nothing.
+#
+# Standalone, like monitoring/ and zammad/ (not imported by all.yml):
+# `service` is never rebuilt by rebuild_fleet.sh, so all.yml's soft-DR
+# reprovisioning never needs it.
+#
+# Needs no Vault at runtime -- that's the point, it has to work while Vault
+# is still sealed. Deploying it doesn't need Vault either.
+#
+# Usage:
+#   ansible-playbook -i inventories/production/production.ini \
+#     roles/applications/fleet_recovery/install.yml
+#
+# By hand on service:
+#   sudo fleet-recover --dry-run          # what would it do right now
+#   sudo fleet-recover --only galera      # just the Galera recovery
+#   sudo touch /etc/fleet-recovery/disabled   # switch it off
+#   journalctl -u fleet-recovery -f       # watch a run
+- name: Deploy fleet-recovery
+  hosts: service
+  become: yes
+
+  vars:
+    # Keep in sync with docs/disaster-recovery.md's home-LAN address table.
+    # MACs are each host's vmbr0 port, for Wake-on-LAN (armed by
+    # roles/os_configs/hypervisor_wol.yml; the BIOS has to allow it too).
+    fleet_recovery_hypervisors:
+      - { name: 3800xt, address: 10.69.69.40, mac: "a8:a1:59:37:7d:62" }
+      - { name: fx8200, address: 10.69.69.41, mac: "1c:fd:08:7c:3b:f4" }
+    # Jobs on this host that read Vault at run time. If one failed while
+    # Vault was sealed, it is re-run once Vault is unsealed.
+    fleet_recovery_vault_dependent_units:
+      - vault-secrets-backup.service
+      - opnsense-config-backup.service
+    fleet_recovery_config:
+      ssh_user: automation
+      ssh_key: /home/automation/.ssh/automation.pem
+      state_file: /var/lib/fleet-recovery/state.json
+      dns_probe_name: "{{ groups['PerconaCluster'][0] }}"
+      lan_iface: eth0
+      lan_ip: 10.69.69.50
+      hypervisors: "{{ fleet_recovery_hypervisors }}"
+      wol_broadcast: 10.69.69.255
+      # Only start a stopped onboot VM between 10 and 60 minutes after its
+      # host booted: before that Proxmox's ordered start-all may still be
+      # running; after that, a stopped VM was stopped on purpose.
+      vm_start_window: [600, 3600]
+      # galera_nodes: added from [PerconaCluster] by the first task below.
+      # User decision 2026-11-11: availability over waiting. After this
+      # long without every node, bootstrap from the best one that is there.
+      galera_wait_for_all_seconds: 900
+      kube_host: "{{ groups['DataGatewayK8Cluster'][0] }}"
+      datagateway_selector: app=datagateway
+      datagateway_probe_url: "http://{{ groups['DataGatewayK8Cluster'][0] }}:30080/mousey"
+      proxysql_host: "{{ groups['ProxySQL'][0] }}"
+      vault_url: "{{ hashicorp.vault.address | default('http://vault.internal.levantine.io:8200') }}"
+      vault_dependent_units: "{{ fleet_recovery_vault_dependent_units }}"
+      prometheus_url: http://localhost:9090/prometheus
+      alertmanager_url: http://localhost:9093/alertmanager
+      # Cameras aren't fleet: an unplugged camera must not hold a recovery
+      # ticket open (it has its own CameraOffline alert).
+      sweep_ignore_jobs: blackbox_cameras
+      zammad_env_file: /etc/zammad-relay.env
+      settle_seconds: 600
+      silence_minutes: 45
+
+  tasks:
+    - name: Build the Galera node list from the inventory
+      # bootstrap=yes is the inventory's preferred bootstrap node -- only a
+      # tie-breaker here; the most advanced node always wins.
+      set_fact:
+        fleet_recovery_galera_nodes_list: >-
+          {{ fleet_recovery_galera_nodes_list | default([]) + [{
+               'name': item.split('.')[0],
+               'address': item,
+               'bootstrap': (hostvars[item].bootstrap | default('no') | string | lower) in ['yes', 'true']
+             }] }}
+      loop: "{{ groups['PerconaCluster'] }}"
+
+    - name: Deploy the recovery script
+      copy:
+        src: files/fleet_recover.py
+        dest: /usr/local/bin/fleet-recover
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create the config and state directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /etc/fleet-recovery
+        - /var/lib/fleet-recovery
+
+    - name: Deploy the config
+      copy:
+        dest: /etc/fleet-recovery/config.json
+        owner: root
+        group: root
+        mode: "0644"
+        content: "{{ fleet_recovery_config | combine({'galera_nodes': fleet_recovery_galera_nodes_list}) | to_nice_json }}\n"
+
+    - name: Deploy the systemd service
+      copy:
+        dest: /etc/systemd/system/fleet-recovery.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by ansible: roles/applications/fleet_recovery/install.yml
+          [Unit]
+          Description=Fleet recovery after an outage (docs/disaster-recovery.md Scenario C)
+          Wants=network-online.target
+          After=network-online.target docker.service
+
+          [Service]
+          Type=oneshot
+          Environment=PYTHONUNBUFFERED=1
+          ExecStart=/usr/bin/python3 /usr/local/bin/fleet-recover
+          # A run can legitimately last forever: it waits for a human to
+          # unseal Vault. The timer won't start a second copy meanwhile.
+          TimeoutStartSec=infinity
+      register: fleet_recovery_unit
+
+    - name: Deploy the systemd timer
+      copy:
+        dest: /etc/systemd/system/fleet-recovery.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by ansible: roles/applications/fleet_recovery/install.yml
+          [Unit]
+          Description=Fleet recovery: at boot, then every 15 minutes
+
+          [Timer]
+          OnBootSec=2min
+          OnUnitInactiveSec=15min
+
+          [Install]
+          WantedBy=timers.target
+      register: fleet_recovery_timer
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+      when: fleet_recovery_unit.changed or fleet_recovery_timer.changed
+
+    - name: Enable and start the timer
+      systemd:
+        name: fleet-recovery.timer
+        enabled: yes
+        state: started
+
+    - name: Dry run against the live fleet
+      command: /usr/local/bin/fleet-recover --dry-run
+      register: fleet_recovery_dry_run
+      changed_when: false
+
+    - name: Show the dry run
+      debug:
+        var: fleet_recovery_dry_run.stdout_lines

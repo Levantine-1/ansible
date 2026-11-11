@@ -359,9 +359,58 @@ First run for real 2026-11-09. Timeline from that incident, for reference:
 FX8200 came back ~02:56 UTC, 3800XT not until ~04:27 UTC, so for 1.5h the
 database tier was up with no router, DNS or Vault.
 
-Every VM has `on_boot=1`, so they all start by themselves; there is **no
-startup ordering** between them, and the two hosts are independent, so
-expect everything to race. What does and does not survive that:
+### Automatic since 2026-11-11: `fleet-recovery`
+
+The steps below now run by themselves. `fleet-recovery` on `service`
+(`roles/applications/fleet_recovery/`) starts 2 minutes after `service`
+boots, and again every 15 minutes. It does steps 0–4 below, then waits for
+Vault:
+
+- **What you do:** unseal Vault (step 1 below) when the Zammad ticket
+  **`[fleet-recovery] Recovery run …`** says *"Waiting for you: unseal
+  Vault"*. That's all. Recovery notices within 30 seconds, re-runs any
+  Vault-dependent job that failed meanwhile, checks Prometheus is clean,
+  and closes the ticket with a timeline.
+- **Watch it:** that ticket, or `journalctl -u fleet-recovery -f` on
+  `service`. `sudo fleet-recover --dry-run` shows what it would do right
+  now.
+- **Stop it:** `sudo touch /etc/fleet-recovery/disabled` (remove the file to
+  re-enable). Do this before any deliberate maintenance where you *want*
+  Galera or a VM to stay down for more than 15 minutes.
+- **What it decides by itself:**
+  - **Galera:** bootstraps from the most advanced node (highest recovered
+    seqno, majority cluster UUID). If a node is missing, it waits 15 minutes,
+    then bootstraps without it, unless that node still answers on 4567/3306
+    (split-brain guard). Data loss is accepted (user decision, 2026-11-11:
+    nothing revenue-bearing or sensitive).
+  - **VMs:** starts `onboot` VMs that are still stopped 10–60 minutes after
+    their host booted.
+  - **Hypervisors:** sends Wake-on-LAN to a hypervisor that doesn't answer.
+  - **DataGateway:** kicks it, then proxysql if that wasn't enough.
+  - **Alerts:** silences them for at most 45 minutes, and lifts that as soon
+    as everything not waiting on Vault is healthy.
+
+Boot order within each host is now set too (`terraform/proxmox`, `startup`
+blocks):
+- **3800XT:** opnsense → pi-hole → vault → service → the rest.
+- **FX8200:** pxdbc1-3 → proxysql → kube-c-00 → the rest.
+
+The manual steps below are the **fallback** if `fleet-recovery` itself is
+broken, and the reference for what it does. `sudo fleet-recover --only
+<phase>` runs one phase by hand: `galera`, `datagateway`, `hypervisors`,
+`nginx` or `vault`.
+
+**One thing software can't do:** start a hypervisor that stays off. Both
+hosts' BIOS should have **"Restore on AC power loss = Power On"**; 3800XT
+coming back 1.5h late on 11-09 suggests it doesn't. Wake-on-LAN
+(`roles/os_configs/hypervisor_wol.yml`) is armed as a backstop, but after a
+full AC loss many boards can't wake until the OS has run once.
+
+### Manual procedure (fallback)
+
+Every VM has `on_boot=1`, so they all start by themselves. The two hosts are
+independent, so expect the hosts themselves to race. What does and does not
+survive that:
 
 | Comes back by itself | Needs a human |
 |---|---|
@@ -502,17 +551,22 @@ explained. Also `POST https://thisper.levantine.io/analytics` with
 
 ## Known gaps (not solved by either scenario)
 
-- **No VM startup ordering.** All VMs are `on_boot` with no `startup`
-  order/delay, and the two hosts are independent, so after an outage
-  everything races OPNsense/DNS and Vault. The nginx case is now handled
-  defensively, but anything else that resolves an internal name only once
-  at startup has the same failure mode. A Proxmox `startup` order
-  (opnsense → pi-hole → vault → service → everything else) in
-  `terraform/proxmox/` would narrow it, though it can't help across hosts.
-- **Galera never auto-recovers from a full-cluster crash**, by design
-  (`pc.recovery` aside, Galera won't elect a primary when every node died
-  uncleanly). Scenario C step 3 is the manual procedure; there's no
-  automation and there shouldn't casually be one.
+- **No VM startup ordering across hosts.** Within each host there is now a
+  Proxmox `startup` order (opnsense → pi-hole → vault → service → rest;
+  pxdbc → proxysql → kube-c-00 → rest), but the two hosts still boot
+  independently. `fleet-recovery` covers the consequences (it waits for
+  DNS, retries Galera and DataGateway). Anything else that resolves an
+  internal name only once at startup has the nginx failure mode.
+- **Galera recovery is automatic and accepts data loss.** `fleet-recovery`
+  bootstraps from the most advanced node, and after 15 minutes without a
+  node, from the best one present. That's right for this fleet (user
+  decision 2026-11-11), but **revisit it if the cluster ever holds data
+  that matters**: then the 15-minute fallback should become "wait for a
+  human".
+- **Cold-start recovery is unrehearsed.** It's unit-tested against a fake
+  fleet and dry-runs clean against the real one, but a Galera-only
+  rehearsal (`qm stop` all three pxdbc VMs) and a full both-hosts cold
+  start are still to do.
 
 - **Percona and Kubernetes have no data backup/restore at all.** Both
   scenarios above wipe and recreate them from empty. If the actual data in
