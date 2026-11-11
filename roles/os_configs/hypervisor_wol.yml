@@ -37,7 +37,10 @@
           [Service]
           Type=oneshot
           RemainAfterExit=yes
-          ExecStart=/bin/sh -c 'for p in /sys/class/net/vmbr0/brif/*; do /usr/sbin/ethtool -s "$(basename "$p")" wol g; done'
+          # Physical ports only (they have a `device` link): on 3800XT the
+          # bridge also carries VMs' tap interfaces, which reject WoL and
+          # failed the unit. $$ is systemd's escape for a literal $.
+          ExecStart=/bin/sh -c 'for p in /sys/class/net/vmbr0/brif/*; do n=$${p##*/}; [ -e /sys/class/net/$$n/device ] || continue; /usr/sbin/ethtool -s $$n wol g; done'
 
           [Install]
           WantedBy=multi-user.target
@@ -57,6 +60,7 @@
     - name: Check it took
       shell: >-
         for p in /sys/class/net/vmbr0/brif/*; do n=$(basename "$p");
+        [ -e "/sys/class/net/$n/device" ] || continue;
         printf '%s %s\n' "$n" "$(/usr/sbin/ethtool "$n" | sed -n 's/^\s*Wake-on: //p')"; done
       register: wol_state
       changed_when: false
