@@ -1,0 +1,8 @@
+# The hypervisors are in the inventory by raw IP (no DNS dependency for the
+# SSH connection itself -- see production.ini), so `service`'s ~/.ssh/config,
+# which maps the automation key onto *.internal.levantine.io names only,
+# never applies to them: every playbook against this group failed with
+# "Permission denied (publickey)" unless --private-key was passed by hand
+# (found 2026-11-11 deploying roles/os_configs/hypervisor_wol.yml). Same fix
+# as BastionHosts' inline ansible_ssh_private_key_file.
+ansible_ssh_private_key_file: /home/automation/.ssh/automation.pem
