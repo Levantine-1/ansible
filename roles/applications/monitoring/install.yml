@@ -140,6 +140,14 @@
       command: docker restart alertmanager
       when: alertmanager_config.changed
 
+    - name: Restart the blackbox exporter if blackbox.yml changed
+      # Same bind-mount-inode issue. Found 2026-11-10: the new tcp_connect
+      # module (camera probes) shipped, Prometheus restarted, and every
+      # camera probe read "400 Bad Request" -- unknown module -- because the
+      # exporter, up 46h, was still reading the old file.
+      command: docker restart blackbox-exporter
+      when: static_configs.results | selectattr('item', 'eq', 'blackbox.yml') | selectattr('changed') | list | length > 0
+
     - name: Restart Grafana if its datasource/dashboard config changed
       # Same bind-mount-inode issue as Prometheus/Alertmanager above --
       # datasource provisioning in particular is only read at Grafana's
