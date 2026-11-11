@@ -127,12 +127,32 @@ groups:
 
       # See InstanceDown's comment above -- same revert, same reason.
       - alert: ProbeFailed
-        expr: probe_success == 0
+        expr: probe_success{job!="blackbox_cameras"} == 0
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: "Uptime probe failing for {{ $labels.instance }}"
+
+      # 2026-11-10: baby-ptz dropped off the network for ~17h unnoticed.
+      # Its own alert rather than ProbeFailed: a camera off the network is
+      # almost always physical (power strip, unplugged, Wi-Fi) -- nothing
+      # on the fleet to restart -- so it shouldn't page as critical, and
+      # the ticket can name the camera. 10m rides out a camera's own
+      # reboot (~1-2 min) and brief Wi-Fi drops.
+      - alert: CameraOffline
+        expr: probe_success{job="blackbox_cameras"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Camera {{ $labels.camera }} ({{ $labels.instance }}) is not reachable"
+          description: >-
+            The camera's RTSP port has not answered for 10 minutes, so Frigate,
+            livecam and the timelapse have no picture from it. Usually physical:
+            check its power (the strip it shares with the AC has tripped before)
+            and network, then power-cycle it. It gets its address from a DD-WRT
+            static lease, so it comes back on the same IP.
 
       # 2026-10-25: dockerhost1's wildcard cert expired unnoticed -- the weekly
       # renewal never deployed it there -- and the only signal was ProbeFailed

@@ -442,6 +442,9 @@ machine by jumping through 3800XT, which has a leg on `vmbr1`
    | `10.69.69.40` | 3800XT (`vmbr0`) | static in `/etc/network/interfaces` (+ DD-WRT lease, documentation only) |
    | `10.69.69.41` | FX8200 (`vmbr0`) | static in `/etc/network/interfaces` (+ DD-WRT lease, documentation only) |
    | `10.69.69.50` | `service` `eth0` | DD-WRT static lease, MAC `bc:24:11:52:91:25` |
+   | `10.69.69.60` | camera `the-boiz` | DD-WRT static lease, MAC `a0:60:32:09:23:01` |
+   | `10.69.69.61` | camera `the-gurlz` | DD-WRT static lease, MAC `a0:60:32:09:2c:2e` |
+   | `10.69.69.62` | camera `baby-ptz` (PTZ) | DD-WRT static lease, MAC `34:46:63:20:8c:d2` |
 
    This is new as of 2026-11-09. Before that, `service`'s `eth0` was a
    floating lease, and the outage moved it `.133` → `.134`, which silently
@@ -468,11 +471,25 @@ machine by jumping through 3800XT, which has a leg on `vmbr1`
    UI (Services → DHCP Server). The `.10`/`.20`/`.30`/`.31`/`.2` entries are
    ESXi-era VMware MACs and are left as they were.
 
-   Cameras on the home LAN still use floating leases. `baby-ptz` dropping out
-   on 2026-11-09 was a tripped power strip (the AC overloading it), not
-   addressing, but its `10.69.69.144` in
-   `roles/applications/livecam/files/cameras.yml` is inside the pool and
-   could move the same way.
+   **Editing them from a script** (the web UI's Administration → Commands
+   console, or `apply.cgi`): the console strips double quotes and expands
+   `$` before running anything, so `nvram set static_leases="$(nvram get
+   static_leases) ..."` word-splits and silently truncates the list to its
+   first entry (this happened on 2026-11-09). Write a script with `printf`
+   using `\042` for `"` and `\044` for `$`, `cat` it to check, then
+   `nvram get static_leases > /tmp/static_leases.bak; sh` it, `nvram
+   commit`, and `stopservice dnsmasq; startservice dnsmasq`. Confirm with
+   `grep dhcp-host /tmp/dnsmasq.conf`.
+
+   Cameras got static leases on 2026-11-10 (they were floating at
+   `.107`/`.143`/`.144`, inside the pool). Their IPs are used in
+   `group_vars/Frigate` (which also feeds the timelapse captures and
+   monitoring's `blackbox_cameras` probes) and, for `baby-ptz`'s PTZ/talk,
+   `roles/applications/livecam/files/cameras.yml`. After an outage, a camera
+   that's down is almost always physical: `baby-ptz` dropped out on
+   2026-11-09 because the power strip it shares with the AC tripped, and
+   again on 2026-11-10 for ~17h before anyone noticed (`CameraOffline` now
+   alerts on it). Power-cycle it; the lease brings it back on its address.
 
 ### Verification
 

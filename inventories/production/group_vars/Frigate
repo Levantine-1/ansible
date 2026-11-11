@@ -13,16 +13,23 @@
 # (/media/frigate/recordings/<date>/<hour>/<name>/). Keep it a slug.
 # `friendly_name` is what Frigate displays; livecam derives the same label
 # by title-casing the slug, so there is no second list to drift.
+#
+# `ip` is a DD-WRT static DHCP lease per camera MAC (2026-11-10), outside
+# the router's 100-149 pool -- see docs/disaster-recovery.md's home-LAN
+# address table. Moving a camera means changing its lease there too. This
+# list also feeds the timelapse captures and monitoring's camera probes;
+# livecam's PTZ wiring (roles/applications/livecam/files/cameras.yml) has
+# its own copy of baby-ptz's IP.
 cameras:
     - name: the-boiz
       friendly_name: "The Boiz"
-      ip: 10.69.69.107
+      ip: 10.69.69.60
       channel: 1
     - name: the-gurlz
       friendly_name: "The Gurlz"
-      ip: 10.69.69.143
+      ip: 10.69.69.61
       channel: 1
     - name: baby-ptz
       friendly_name: "Baby PTZ"
-      ip: 10.69.69.144
+      ip: 10.69.69.62
       channel: 1

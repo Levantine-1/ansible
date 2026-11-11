@@ -119,3 +119,26 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: localhost:9115
+
+  # Camera reachability (2026-11-10): baby-ptz was off the network ~17h
+  # before anyone noticed -- nothing watched the cameras themselves, only
+  # Frigate's API. Straight to each camera's RTSP port from `service`
+  # (which sits on the home LAN), from the same list Frigate and the
+  # timelapse use, so a new camera is probed with no edit here.
+  - job_name: blackbox_cameras
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+{% for cam in hostvars[groups['Frigate'][0]]['cameras'] %}
+      - targets: ["{{ cam.ip }}:554"]
+        labels:
+          camera: {{ cam.name }}
+{% endfor %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
